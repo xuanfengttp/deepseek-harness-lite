@@ -223,6 +223,12 @@ async fn async_main() -> ExitCode {
         log::info!("Starting interactive web server at http://{}", config.server.listen);
         log::info!("Active sessions: {} (cached: {})", session_mgr.len(), session_mgr.cached_len());
 
+        println!("\n========================================");
+        println!("  DeepSeek Harness Lite v{}", env!("CARGO_PKG_VERSION"));
+        println!("  Web GUI: http://{}", config.server.listen);
+        println!("  Press Ctrl+C to exit");
+        println!("========================================\n");
+
         let state = std::sync::Arc::new(server::ServerState {
             session_mgr: std::sync::Arc::new(tokio::sync::Mutex::new(session_mgr)),
             skills,
@@ -232,6 +238,15 @@ async fn async_main() -> ExitCode {
 
         if let Err(e) = server::run(&config.server.listen, state).await {
             log::error!("Server error: {e}");
+            eprintln!("\n========================================");
+            eprintln!("  Server failed to start: {e}");
+            eprintln!("  Likely cause: port {} is already in use.", config.server.listen);
+            eprintln!("  Please close the other process and try again.");
+            eprintln!("========================================\n");
+            eprintln!("Press Enter to exit...");
+            let mut _buf = String::new();
+            let _ = std::io::stdin().read_line(&mut _buf);
+            return ExitCode::FAILURE;
         }
     }
 
