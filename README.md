@@ -1,4 +1,6 @@
-﻿# DeepSeek Harness Lite
+# DeepSeek Harness Lite
+
+[English](README.md) | [中文](README.zh-CN.md)
 
 A lightweight, embeddable agent harness rewritten in Rust, derived from the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) architecture.
 
@@ -97,7 +99,7 @@ Tools run through a 3-stage pipeline: **check** (permission + validation) → **
 
 | Metric | Value |
 |---|---|
-| Runtime RSS (P2) | ~6 MB |
+| Runtime RSS (P4) | ~6 MB |
 | Binary size | ~1.5 MB |
 | Target | < 10 MB RSS |
 
@@ -125,15 +127,17 @@ Agent loop (plan/todo):
 | Module | Responsibility | Mirrors dsh |
 |---|---|---|
 | `types` | Core type definitions | session + agent + llm types |
-| `session` | Append-only event log + message derivation | core/session |
+| `session` | Append-only event log + message derivation + flash checkpoint | core/session |
 | `llm` | HTTP streaming client (OpenAI-compatible) | llm/llm |
 | `prompt` | System prompt assembly | core/system-prompt |
 | `tools` | Tool registry + 3-stage execution pipeline | core/tools |
 | `policy` | Allow/deny permission checks | sandbox-policy |
 | `skill` | Declarative skill loading (YAML + MD) | skill/skill + skill-filesystem |
 | `agent` | Turn/step driver (plan mode) | core/agent-loop |
-| `workflow` | Deterministic SOP step execution | (new) |
-| `dispatcher` | Tri-mode routing | (new) |
+| `expr` | Condition expression evaluator + variable interpolation | (new) |
+| `memory` | Long-term KV store (flash-backed, LRU) | (new) |
+| `compaction` | Rolling context summary (independent context) | (new) |
+| `dispatcher` | Tri-mode routing (workflow/todo/plan) | (new) |
 
 ## Build
 
@@ -187,16 +191,16 @@ The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming).
 
 ## Project status
 
-Currently at **P2** (tri-mode dispatch). See [DESIGN-lite.md](DESIGN-lite.md) for the full design document and roadmap.
+Currently at **P4** (memory + compaction + persistence). See [DESIGN-lite.md](DESIGN-lite.md) for the full design document and roadmap.
 
 | Phase | Status |
 |---|---|
 | P0 — Scaffold + cross-compilation | ✅ Done |
 | P1 — Core agent loop (plan mode) | ✅ Done |
 | P2 — Tri-mode dispatch (workflow/todo/plan) | ✅ Done |
-| P3 — Skill system completion | 🔄 Next |
-| P4 — Memory + compaction + persistence | Planned |
-| P5 — Session management (multi-session + offloading) | Planned |
+| P3 — Skill system completion | ✅ Done |
+| P4 — Memory + compaction + persistence | ✅ Done |
+| P5 — Session management (multi-session + offloading) | 🔄 Next |
 | P6 — Web client + HTTP server | Planned |
 | P7 — SSH client | Planned |
 | P8 — Size + memory optimization | Planned |
