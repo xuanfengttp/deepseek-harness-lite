@@ -67,11 +67,8 @@ async fn async_main() -> ExitCode {
     log::info!("DeepSeek Harness Lite v{} — P6 web client + HTTP server", env!("CARGO_PKG_VERSION"));
     log::info!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
 
-    // Load configuration.
-    let config = load_config().unwrap_or_else(|e| {
-        log::error!("Config load failed: {e}, using defaults");
-        default_config()
-    });
+    // Load configuration — auto-generate a default config file if none exists.
+    let config = load_or_init_config();
 
     log::info!("Model: {} at {}", config.model.model, config.model.base_url);
     log::info!("Server: {}", config.server.listen);
@@ -243,34 +240,34 @@ async fn async_main() -> ExitCode {
 /// Priority:
 /// 1. `DSH_LITE_CONFIG` env var (highest)
 /// 2. `<exe_dir>/.dsh-lite-path` file contents (user-set via settings)
-/// 3. `<exe_dir>/config.toml` (default, next to the binary)
-/// 4. `config/default.toml` (fallback for dev/legacy)
+/// 3. `<exe_dir>/config.toml` (default, next to the binary — auto-generated on first run)
+/// 4. `config/default.toml` (last-resort fallback for dev/legacy)
 pub fn resolve_config_path() -> String {
     if let Ok(p) = env::var("DSH_LITE_CONFIG") {
         return p;
     }
+
     let exe_dir = std::env::current_exe()
         .ok()
-        .and_then(|e| e.parent().map(|p| p.to_path_buf()))
-        .map(|p| p.join(".dsh-lite-path"));
-    if let Some(path_file) = &exe_dir {
-        if let Ok(content) = std::fs::read_to_string(path_file) {
+        .and_then(|e| e.parent().map(|p| p.to_path_buf()));
+
+    // Check user-set path marker
+    if let Some(dir) = &exe_dir {
+        let path_file = dir.join(".dsh-lite-path");
+        if let Ok(content) = std::fs::read_to_string(&path_file) {
             let trimmed = content.trim();
             if !trimmed.is_empty() && std::path::Path::new(trimmed).exists() {
                 return trimmed.to_string();
             }
         }
     }
-    // Default: config.toml next to the exe
-    if let Some(exe_dir) = exe_dir.as_ref().and_then(|_| {
-        std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf()))
-    }) {
-        let default = exe_dir.join("config.toml");
-        if default.exists() {
-            return default.to_string_lossy().to_string();
-        }
+
+    // Default: config.toml next to the exe (may not exist yet — will be auto-generated)
+    if let Some(dir) = exe_dir {
+        return dir.join("config.toml").to_string_lossy().to_string();
     }
-    // Fallback for dev mode
+
+    // Last-resort fallback (dev mode without exe resolution)
     "config/default.toml".to_string()
 }
 
@@ -281,6 +278,47 @@ fn load_config() -> Result<Config, String> {
         .map_err(|e| format!("read {path}: {e}"))?;
     toml::from_str(&content)
         .map_err(|e| format!("parse {path}: {e}"))
+}
+
+/// Load config, or generate a default config file on first run.
+///
+/// If the resolved config file does not exist, write a fresh default to
+/// `<exe_dir>/config.toml` (or the configured path) and load from it.
+/// This ensures the settings panel always has something to show.
+fn load_or_init_config() -> Config {
+    let path = resolve_config_path();
+
+    // If the file exists and parses, just use it.
+    if std::path::Path::new(&path).exists() {
+        return load_config().unwrap_or_else(|e| {
+            log::error!("Config parse error in {path}: {e}, using defaults");
+            default_config()
+        });
+    }
+
+    // File doesn't exist — generate one from the compiled-in default.
+    log::info!("Config file not found at {path}, generating default...");
+    let default_content = include_str!("../config/default.toml");
+
+    // Try to write it. If the path has a parent dir that doesn't exist,
+    // create it. If writing fails (e.g. read-only), fall back to defaults.
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    match std::fs::write(&path, default_content) {
+        Ok(()) => {
+            log::info!("Generated config file: {path}");
+            load_config().unwrap_or_else(|e| {
+                log::error!("Generated config failed to parse: {e}");
+                default_config()
+            })
+        }
+        Err(e) => {
+            log::warn!("Cannot write config to {path}: {e}, using in-memory defaults");
+            default_config()
+        }
+    }
 }
 
 /// Fallback default config if file loading fails.

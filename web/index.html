@@ -296,6 +296,7 @@ body {
 }
 .nav-item:hover { background: var(--bg-hover); }
 .nav-item.active { background: var(--bg-platform); font-weight: 500; }
+.nav-icon { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex-shrink: 0; color: var(--label-secondary); }
 .modal-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .modal-header {
   height: 54px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between;
@@ -392,33 +393,36 @@ body {
       <span class="ver">v0.1</span>
     </div>
     <div class="session-list" id="session-list"></div>
-    <button class="btn-new" onclick="createSession()">＋ New Session</button>
+    <button class="btn-new" onclick="createSession()" id="btn-new-session">＋ <span data-i18n="new_session">新建会话</span></button>
     <div class="sidebar-footer">
-      <button class="btn-settings" onclick="openSettings()">⚙ Settings</button>
+      <button class="btn-settings" onclick="openSettings()">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><g><path d="M14.0861 5.51366C13.8717 5.0575 13.588 4.58542 13.2889 4.18108C13.208 4.07172 13.1596 4.04373 13.0243 4.03054C12.4277 3.97255 11.8245 4.05527 11.2269 3.9972C10.7224 3.94816 10.3133 3.71661 10.0115 3.30919C9.66986 2.84777 9.43973 2.31343 9.09824 1.85234C9.01771 1.74365 8.96805 1.71589 8.83354 1.70282C8.29432 1.65044 7.70402 1.65061 7.16656 1.70282C7.03205 1.71589 6.98239 1.74365 6.90186 1.85234C6.56067 2.31303 6.33025 2.84774 5.98855 3.30919C5.68681 3.71661 5.27774 3.94816 4.77317 3.9972C4.17564 4.05527 3.57239 3.97255 2.97585 4.03054C2.84046 4.04373 2.79208 4.07172 2.71115 4.18108C2.41212 4.58542 2.12835 5.0575 1.91403 5.51366C1.85299 5.64359 1.85286 5.7018 1.91403 5.8319C2.14865 6.33077 2.49748 6.76892 2.73237 7.26854C2.9594 7.7515 2.96041 8.24717 2.73338 8.73044C2.49837 9.23061 2.14891 9.66837 1.91403 10.1681C1.85291 10.2982 1.85299 10.3564 1.91403 10.4863C2.12856 10.9429 2.41185 11.4142 2.71115 11.8189C2.79208 11.9283 2.84046 11.9563 2.97585 11.9694C3.57239 12.0274 4.17564 11.9447 4.77317 12.0028C5.27774 12.0518 5.68681 12.2834 5.98855 12.6908C6.33024 13.1522 6.56037 13.6866 6.90186 14.1476C6.98239 14.2563 7.03205 14.2841 7.16656 14.2972C7.70402 14.3494 8.29432 14.3495 8.83354 14.2972C8.96805 14.2841 9.01771 14.2563 9.09824 14.1476C9.43944 13.687 9.66985 13.1522 10.0115 12.6908C10.3133 12.2834 10.7224 12.0518 11.2269 12.0028C11.8244 11.9447 12.4271 12.0275 13.0243 11.9694C13.1596 11.9563 13.208 11.9283 13.2889 11.8189C13.5891 11.4131 13.872 10.942 14.0861 10.4863C14.1471 10.3564 14.1472 10.2982 14.0861 10.1681C13.8513 9.66861 13.5017 9.23061 13.2667 8.73044C13.0397 8.24717 13.0407 7.7515 13.2677 7.26854C13.5026 6.7689 13.8513 6.33106 14.0861 5.8319C14.1472 5.7018 14.1471 5.64359 14.0861 5.51366ZM15.3035 6.40373C15.0685 6.90359 14.7188 7.34119 14.4841 7.84037C14.4231 7.97025 14.423 8.02855 14.4841 8.15861C14.7189 8.65833 15.0685 9.09611 15.3035 9.59626C15.5308 10.0801 15.5308 10.5744 15.3035 11.0582C15.052 11.5933 14.7225 12.1426 14.37 12.6191C14.0685 13.0272 13.6822 13.3248 13.1919 13.3736C12.5463 13.4376 11.8905 13.3615 11.2452 13.4254C10.7447 13.4744 10.3724 13.6972 10.0618 14.1059C9.72928 14.5448 9.48526 15.0788 9.15532 15.5191C9.07379 15.6283 9.02613 15.6548 8.89068 15.6679C8.35146 15.7201 7.71121 15.721 7.17482 15.6679C7.03937 15.6548 6.99171 15.6283 6.91018 15.5191C6.57842 15.0786 6.33422 14.5447 6.0037 14.1059C5.69312 13.6972 5.32083 13.4744 4.82031 13.4254C4.17501 13.3615 3.51924 13.4376 2.8736 13.3736C2.38327 13.3248 1.99699 13.0272 1.69549 12.6191C1.34297 12.1426 1.01349 11.5933 0.762024 11.0582C0.534711 10.5744 0.534711 10.0801 0.762024 9.59626C0.997023 9.09641 1.34669 8.65881 1.58136 8.15861C1.64248 8.02873 1.64258 7.97045 1.58136 7.84037C1.34655 7.34065 0.997023 6.90287 0.762024 6.40373C0.534642 5.91982 0.534642 5.42553 0.762024 4.94171C1.01356 4.40666 1.34301 3.8573 1.69549 3.38079C1.99704 2.97267 2.3833 2.67506 2.8736 2.62625C3.51924 2.56223 4.17501 2.63839 4.82031 2.57446C5.32083 2.52549 5.69312 2.30266 6.0037 1.89397C6.33621 1.45508 6.58023 0.92114 6.91018 0.48075C6.99171 0.37156 7.03937 0.34506 7.17482 0.33195C7.71404 0.27977 8.35429 0.27886 8.89068 0.33195C9.02613 0.34506 9.07379 0.37156 9.15532 0.48075C9.48708 0.92124 9.73128 1.45511 10.0618 1.89397C10.3724 2.30266 10.7447 2.52549 11.2452 2.57446C11.8905 2.63839 12.5463 2.56223 13.1919 2.62625C13.6822 2.67506 14.0685 2.97267 14.37 3.38079C14.7225 3.8573 15.052 4.40666 15.3035 4.94171C15.5308 5.42553 15.5308 5.91982 15.3035 6.40373Z" fill="currentColor"/><path d="M9.13764 7.99999C9.13764 7.3715 8.62855 6.8624 8.00005 6.8624C7.37155 6.8624 6.86246 7.3715 6.86246 7.99999C6.86246 8.62849 7.37155 9.13759 8.00005 9.13759C8.62855 9.13759 9.13764 8.62849 9.13764 7.99999ZM10.4834 7.99999C10.4834 9.37126 9.37132 10.4833 8.00005 10.4833C6.62878 10.4833 5.51674 9.37126 5.51674 7.99999C5.51674 6.62873 6.62878 5.51669 8.00005 5.51669C9.37132 5.51669 10.4834 6.62873 10.4834 7.99999Z" fill="currentColor"/></g></svg>
+        <span data-i18n="settings">设置</span>
+      </button>
     </div>
   </div>
 
   <!-- Main -->
   <div class="main">
     <div class="header">
-      <div class="header-title">Skill: <span class="skill-name" id="active-skill-name">—</span></div>
+      <div class="header-title"><span data-i18n="skill">技能</span>: <span class="skill-name" id="active-skill-name">—</span></div>
       <div class="header-controls">
         <select class="skill-select" id="skill-select" onchange="switchSkill()"></select>
-        <label class="toggle-label"><input type="checkbox" id="show-trajectory"> Trajectory</label>
+        <label class="toggle-label"><input type="checkbox" id="show-trajectory"> <span data-i18n="trajectory">轨迹</span></label>
       </div>
     </div>
     <div class="chat-area" id="chat-area">
       <div class="chat-inner">
         <div class="hero" id="hero">
           <svg width="64" height="64" viewBox="0 0 50 50" fill="none" style="margin-bottom:16px;opacity:0.4"><path d="M48.8354 10.0479C48.3232 9.79199 48.1025 10.2798 47.8032 10.5278C47.7007 10.6079 47.6143 10.7119 47.5273 10.8076C46.7793 11.624 45.9048 12.1597 44.7622 12.0957C43.0923 12 41.666 12.5356 40.4058 13.8398C40.1377 12.2319 39.2476 11.272 37.8926 10.6558C37.1836 10.3359 36.4668 10.0156 35.9702 9.31982C35.6235 8.82373 35.5293 8.27197 35.356 7.72754C35.2456 7.3999 35.1353 7.06396 34.7651 7.00781C34.3633 6.94385 34.2056 7.2876 34.0479 7.57568C33.418 8.75195 33.1733 10.0479 33.1973 11.3599C33.2524 14.312 34.4736 16.6641 36.8999 18.3359C37.1758 18.5278 37.2466 18.7197 37.1597 19C36.9946 19.5757 36.7974 20.1357 36.624 20.7119C36.5137 21.0801 36.3486 21.1597 35.9624 21C34.6309 20.4321 33.481 19.5918 32.4644 18.5757C30.7393 16.8721 29.1792 14.9917 27.2334 13.52C26.7764 13.1758 26.3193 12.856 25.8467 12.5518C23.8618 10.584 26.1069 8.96777 26.627 8.77588C27.1704 8.57568 26.8159 7.8877 25.0591 7.896C23.3022 7.90381 21.6953 8.50391 19.647 9.30371C19.3477 9.42383 19.0322 9.51172 18.7095 9.58398C16.8501 9.22363 14.9199 9.14355 12.9033 9.37598C9.10596 9.80762 6.07275 11.6396 3.84326 14.7681C1.16455 18.5278 0.53418 22.7998 1.30664 27.2559C2.11768 31.9521 4.46582 35.8398 8.07373 38.8799C11.8159 42.0322 16.1255 43.5762 21.041 43.2803C24.0269 43.104 27.3516 42.6963 31.1016 39.4561C32.0469 39.936 33.0396 40.1279 34.686 40.272C35.9546 40.3921 37.1758 40.208 38.1211 40.0078C39.6021 39.688 39.4995 38.2881 38.9639 38.0322C34.623 35.9678 35.5762 36.8081 34.71 36.1279C36.9155 33.4639 40.2402 30.6958 41.54 21.728C41.6426 21.0161 41.5557 20.5679 41.54 19.9917C41.5322 19.6396 41.6108 19.5039 42.0049 19.4639C43.0923 19.3359 44.1479 19.0317 45.1167 18.4878C47.9292 16.9199 49.064 14.3438 49.3315 11.2559C49.3711 10.7837 49.3237 10.2959 48.8354 10.0479ZM24.3262 37.8398C20.1196 34.4639 18.0791 33.3521 17.2358 33.3999C16.4482 33.4482 16.5898 34.3682 16.7632 34.9678C16.9443 35.5601 17.1812 35.9683 17.5117 36.4878C17.7402 36.832 17.8979 37.3442 17.2832 37.728C15.9282 38.584 13.5728 37.4399 13.4624 37.3838C10.7207 35.7358 8.42822 33.5601 6.81348 30.584C5.25342 27.7197 4.34766 24.6479 4.19775 21.3677C4.1582 20.5757 4.38672 20.2959 5.15869 20.1519C6.17529 19.96 7.22314 19.9199 8.23926 20.0718C12.5327 20.7119 16.1885 22.6719 19.2529 25.7759C21.002 27.5439 22.3252 29.6558 23.6885 31.7202C25.1377 33.9121 26.6978 36 28.6831 37.7119C29.3843 38.312 29.9434 38.7681 30.479 39.104C28.8643 39.2881 26.1699 39.3281 24.3262 37.8398ZM26.3433 24.6001C26.3433 24.248 26.6191 23.9678 26.9658 23.9678C27.0444 23.9678 27.1152 23.9839 27.1782 24.0078C27.2651 24.04 27.3438 24.0879 27.4067 24.1602C27.5171 24.272 27.5801 24.4321 27.5801 24.6001C27.5801 24.9521 27.3042 25.2319 26.9575 25.2319C26.6108 25.2319 26.3433 24.9521 26.3433 24.6001ZM32.6064 27.8799C32.2046 28.0479 31.8027 28.1919 31.4165 28.208C30.8179 28.2397 30.1641 27.9922 29.8096 27.688C29.2583 27.2158 28.8643 26.9521 28.6987 26.1279C28.6279 25.7759 28.6675 25.2319 28.7305 24.9199C28.8721 24.248 28.7144 23.8159 28.2495 23.4238C27.8716 23.104 27.3911 23.0161 26.8633 23.0161C26.666 23.0161 26.4849 22.9277 26.3511 22.856C26.1304 22.7441 25.9492 22.4639 26.1226 22.1201C26.1777 22.0078 26.4458 21.7358 26.5088 21.688C27.2256 21.272 28.0527 21.4077 28.8169 21.7197C29.5259 22.0161 30.0615 22.5601 30.834 23.3281C31.6216 24.2559 31.7632 24.5117 32.2124 25.208C32.5669 25.752 32.8901 26.312 33.1104 26.9521C33.2446 27.3521 33.0713 27.6802 32.6064 27.8799Z" fill="currentColor" fill-rule="nonzero"/></svg>
-          <h2>Ready</h2>
-          <p>Send a message to start a conversation.</p>
+          <h2 data-i18n="ready">就绪</h2>
+          <p data-i18n="send_to_start">发送消息开始对话。</p>
         </div>
       </div>
     </div>
     <div class="input-area">
       <div class="input-bar">
-        <textarea id="input" placeholder="Send a message..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <textarea id="input" data-i18n-placeholder="input_placeholder" placeholder="发送消息..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
         <button id="send-btn" onclick="sendMessage()">↑</button>
       </div>
     </div>
@@ -429,15 +433,31 @@ body {
 <div class="modal-overlay hidden" id="settings-modal">
   <div class="modal">
     <div class="modal-nav">
-      <h3>Settings</h3>
-      <div class="nav-item active" data-section="appearance" onclick="switchSection('appearance')">🎨 Appearance</div>
-      <div class="nav-item" data-section="model" onclick="switchSection('model')">🤖 Model</div>
-      <div class="nav-item" data-section="tools" onclick="switchSection('tools')">🔧 Tools</div>
-      <div class="nav-item" data-section="config" onclick="switchSection('config')">📄 Config File</div>
+      <h3 data-i18n="settings_title">设置</h3>
+      <div class="nav-item active" data-section="appearance" onclick="switchSection('appearance')">
+        <span class="nav-icon" id="ico-appearance"></span>
+        <span data-i18n="appearance">外观</span>
+      </div>
+      <div class="nav-item" data-section="model" onclick="switchSection('model')">
+        <span class="nav-icon" id="ico-model"></span>
+        <span data-i18n="model_section">模型</span>
+      </div>
+      <div class="nav-item" data-section="tools" onclick="switchSection('tools')">
+        <span class="nav-icon" id="ico-tools"></span>
+        <span data-i18n="tools">工具</span>
+      </div>
+      <div class="nav-item" data-section="config" onclick="switchSection('config')">
+        <span class="nav-icon" id="ico-config"></span>
+        <span data-i18n="config_file">配置文件</span>
+      </div>
+      <div class="nav-item" data-section="language" onclick="switchSection('language')">
+        <span class="nav-icon" id="ico-language">🌐</span>
+        <span data-i18n="language">语言</span>
+      </div>
     </div>
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="section-title">Appearance</h2>
+        <h2 id="section-title">外观</h2>
         <button class="modal-close" onclick="closeSettings()">✕</button>
       </div>
       <div class="modal-body">
@@ -445,17 +465,20 @@ body {
         <!-- Appearance -->
         <div id="section-appearance">
           <div class="setting-row">
-            <div class="setting-label">Theme</div>
-            <div class="setting-hint">Choose how dsh-lite looks to you.</div>
+            <div class="setting-label" data-i18n="theme">主题</div>
+            <div class="setting-hint" data-i18n="theme_hint">选择 dsh-lite 的外观。</div>
             <div class="theme-cubes" id="theme-cubes">
               <div class="theme-cube" data-theme="light" onclick="setTheme('light')">
-                <span class="icon">☀️</span><span class="name">Light</span>
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M11.3496 8C11.3496 6.14985 9.85015 4.65039 8 4.65039C6.14985 4.65039 4.65039 6.14985 4.65039 8C4.65039 9.85015 6.14985 11.3496 8 11.3496C9.85015 11.3496 11.3496 9.85015 11.3496 8ZM12.6504 8C12.6504 10.5681 10.5681 12.6504 8 12.6504C5.43188 12.6504 3.34961 10.5681 3.34961 8C3.34961 5.43188 5.43188 3.34961 8 3.34961C10.5681 3.34961 12.6504 5.43188 12.6504 8Z" fill="currentColor"/><path d="M8.65039 0.5V2.5H7.34961V0.5H8.65039Z" fill="currentColor"/><path d="M8.65039 13.5V15.5H7.34961V13.5H8.65039Z" fill="currentColor"/><path d="M3.15808 2.24035L4.57229 3.65456L3.6525 4.57435L2.23829 3.16014L3.15808 2.24035Z" fill="currentColor"/><path d="M12.3505 11.4327L13.7647 12.8469L12.8449 13.7667L11.4307 12.3525L12.3505 11.4327Z" fill="currentColor"/><path d="M2.24537 12.8469L3.65958 11.4327L4.57937 12.3525L3.16516 13.7667L2.24537 12.8469Z" fill="currentColor"/><path d="M11.4377 3.65455L12.852 2.24033L13.7718 3.16012L12.3575 4.57434L11.4377 3.65455Z" fill="currentColor"/><path d="M0.5 7.35461H2.5V8.6554H0.5L0.5 7.35461Z" fill="currentColor"/><path d="M13.5 7.35461H15.5V8.6554H13.5V8.6554Z" fill="currentColor"/></svg>
+                <span class="name" data-i18n="light">浅色</span>
               </div>
               <div class="theme-cube" data-theme="dark" onclick="setTheme('dark')">
-                <span class="icon">🌙</span><span class="name">Dark</span>
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M13.2764 9.52324C12.5607 9.97754 11.7177 10.242 10.7812 10.242C8.11386 10.2419 5.95042 8.07997 5.9502 5.41289C5.9502 4.48128 6.21453 3.61071 6.67188 2.87285C4.30332 3.4658 2.54992 5.60845 2.5498 8.16093C2.5498 11.1712 4.99103 13.6102 8 13.6102C10.5383 13.6102 12.6709 11.8724 13.2764 9.52324Z" fill="currentColor"/></svg>
+                <span class="name" data-i18n="dark">深色</span>
               </div>
               <div class="theme-cube selected" data-theme="system" onclick="setTheme('system')">
-                <span class="icon">💻</span><span class="name">System</span>
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M12.1665 13.5811V14.7803H3.66651V13.5811H12.1665Z" fill="currentColor"/><path d="M13.4453 7.02379C13.4453 6.04702 13.4452 5.3616 13.3887 4.83434C13.3333 4.31828 13.2302 4.02378 13.0723 3.80309C12.9446 3.62475 12.7877 3.46883 12.6094 3.34117C12.3887 3.18328 12.0942 3.08007 11.5781 3.02477C11.0508 2.96829 10.3655 2.96715 9.38867 2.96715H6.61035C5.63359 2.96715 4.94816 2.96827 4.4209 3.02477C3.90486 3.0801 3.61034 3.18321 3.38965 3.34117C3.21143 3.46878 3.05534 3.62487 2.92774 3.80309C2.76977 4.02377 2.66667 4.3183 2.61133 4.83434C2.55483 5.3616 2.55371 6.04702 2.55371 7.02379C2.55371 8.0006 2.55485 8.68596 2.61133 9.21324C2.66663 9.72936 2.76983 10.0238 2.92774 10.2445C3.0554 10.4228 3.21131 10.5797 3.38965 10.7074C3.61034 10.8654 3.90484 10.9685 4.4209 11.0238C4.94816 11.0803 5.63359 11.0804 6.61035 11.0804H9.38867C10.3654 11.0804 11.0508 11.0803 11.5781 11.0238C12.0941 10.9685 12.3887 10.8652 12.6094 10.7074C12.7877 10.5797 12.9446 10.4229 13.0723 10.2445C13.2301 10.0238 13.3334 9.72927 13.3887 9.21324C13.4452 8.68596 13.4453 8.00058 13.4453 7.02379Z" fill="currentColor"/></svg>
+                <span class="name" data-i18n="system">跟随系统</span>
               </div>
             </div>
           </div>
@@ -464,93 +487,111 @@ body {
         <!-- Model -->
         <div id="section-model" class="hidden">
           <div class="setting-row">
-            <div class="setting-label">Base URL</div>
-            <div class="setting-hint">OpenAI-compatible endpoint (e.g. http://127.0.0.1:8080/v1)</div>
+            <div class="setting-label" data-i18n="base_url">Base URL</div>
+            <div class="setting-hint" data-i18n="base_url_hint">OpenAI 兼容端点（例如 http://127.0.0.1:8080/v1）</div>
             <input class="setting-input mono" id="cfg-base-url" placeholder="http://127.0.0.1:8080/v1">
           </div>
           <div class="setting-row">
-            <div class="setting-label">API Key</div>
-            <div class="setting-hint">Leave empty for local inference without auth.</div>
+            <div class="setting-label" data-i18n="api_key">API Key</div>
+            <div class="setting-hint" data-i18n="api_key_hint">本地推理无需鉴权时留空即可。</div>
             <input class="setting-input mono" id="cfg-api-key" type="password" placeholder="sk-...">
           </div>
           <div class="setting-row">
-            <div class="setting-label">Model</div>
-            <div class="setting-hint">Model name to send to the endpoint. Click "Fetch" to auto-detect from the endpoint.</div>
+            <div class="setting-label" data-i18n="model_name">模型名称</div>
+            <div class="setting-hint" data-i18n="model_name_hint">发送给端点的模型名。点击"获取"可自动检测。</div>
             <div style="display:flex;gap:8px;align-items:center">
               <input class="setting-input mono" id="cfg-model" placeholder="deepseek-v4-lite" style="flex:1">
               <select class="setting-input mono" id="cfg-model-list" style="flex:1;display:none"></select>
-              <button class="btn btn-secondary" style="height:36px;white-space:nowrap" onclick="fetchModels()" id="btn-fetch-models">↻ Fetch</button>
+              <button class="btn btn-secondary" style="height:36px;white-space:nowrap" onclick="fetchModels()" id="btn-fetch-models"><span data-i18n="fetch">获取</span></button>
             </div>
           </div>
           <div class="setting-row">
-            <div class="setting-label">Context Window</div>
-            <div class="setting-hint">Max tokens the model can accept (drives compaction).</div>
+            <div class="setting-label" data-i18n="context_window">上下文窗口</div>
+            <div class="setting-hint" data-i18n="context_window_hint">模型可接受的最大 token 数（驱动压缩）。</div>
             <input class="setting-input" id="cfg-context-window" type="number" placeholder="8192">
           </div>
           <div class="setting-row">
-            <div class="setting-label">Max Tokens</div>
-            <div class="setting-hint">Max output tokens per request.</div>
+            <div class="setting-label" data-i18n="max_tokens">最大输出 Token</div>
+            <div class="setting-hint" data-i18n="max_tokens_hint">每次请求的最大输出 token 数。</div>
             <input class="setting-input" id="cfg-max-tokens" type="number" placeholder="2048">
           </div>
           <div class="setting-row">
-            <div class="setting-label">Temperature</div>
-            <div class="setting-hint">0 = deterministic, higher = creative.</div>
+            <div class="setting-label" data-i18n="temperature">温度</div>
+            <div class="setting-hint" data-i18n="temperature_hint">0 = 确定性，越高越有创造力。</div>
             <input class="setting-input" id="cfg-temperature" type="number" step="0.1" min="0" max="2" placeholder="0.0">
           </div>
           <div class="btn-row">
-            <button class="btn btn-primary" onclick="saveModelConfig()">Save</button>
-            <button class="btn btn-secondary" onclick="loadModelConfig()">Reset</button>
+            <button class="btn btn-primary" onclick="saveModelConfig()" data-i18n="save">保存</button>
+            <button class="btn btn-secondary" onclick="loadModelConfig()" data-i18n="reset">重置</button>
           </div>
         </div>
 
         <!-- Tools -->
         <div id="section-tools" class="hidden">
           <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
-            <div><div class="setting-label">Shell</div><div class="setting-hint">Execute shell commands</div></div>
+            <div><div class="setting-label">Shell</div><div class="setting-hint" data-i18n="tool_shell_hint">执行 Shell 命令</div></div>
             <div class="toggle-switch" id="toggle-shell" onclick="toggleTool('shell',this)"></div>
           </div>
           <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
-            <div><div class="setting-label">File Read</div><div class="setting-hint">Read file contents</div></div>
+            <div><div class="setting-label" data-i18n="tool_file_read">文件读取</div><div class="setting-hint" data-i18n="tool_file_read_hint">读取文件内容</div></div>
             <div class="toggle-switch" id="toggle-file_read" onclick="toggleTool('file_read',this)"></div>
           </div>
           <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
-            <div><div class="setting-label">File Write</div><div class="setting-hint">Write to files</div></div>
+            <div><div class="setting-label" data-i18n="tool_file_write">文件写入</div><div class="setting-hint" data-i18n="tool_file_write_hint">写入文件</div></div>
             <div class="toggle-switch" id="toggle-file_write" onclick="toggleTool('file_write',this)"></div>
           </div>
           <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
-            <div><div class="setting-label">File Search</div><div class="setting-hint">Glob-pattern file search</div></div>
+            <div><div class="setting-label" data-i18n="tool_file_search">文件搜索</div><div class="setting-hint" data-i18n="tool_file_search_hint">Glob 模式文件搜索</div></div>
             <div class="toggle-switch" id="toggle-file_search" onclick="toggleTool('file_search',this)"></div>
           </div>
           <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
-            <div><div class="setting-label">Memory</div><div class="setting-hint">Long-term KV store (read/write/recall)</div></div>
+            <div><div class="setting-label" data-i18n="tool_memory">记忆</div><div class="setting-hint" data-i18n="tool_memory_hint">长期 KV 存储（读/写/检索）</div></div>
             <div class="toggle-switch" id="toggle-memory" onclick="toggleTool('memory',this)"></div>
           </div>
           <div class="btn-row">
-            <button class="btn btn-primary" onclick="saveToolConfig()">Save</button>
+            <button class="btn btn-primary" onclick="saveToolConfig()" data-i18n="save">保存</button>
           </div>
         </div>
 
         <!-- Config File -->
         <div id="section-config" class="hidden">
           <div class="setting-row">
-            <div class="setting-label">Config File Path</div>
-            <div class="setting-hint">Where the config file is loaded from. Default: next to the executable. Changes apply after restart.</div>
+            <div class="setting-label" data-i18n="config_path">配置文件路径</div>
+            <div class="setting-hint" data-i18n="config_path_hint">配置文件的加载位置。默认在可执行文件旁。修改后重启生效。</div>
             <div style="display:flex;gap:8px;align-items:center">
-              <input class="setting-input mono" id="cfg-file-path" placeholder="(default)" style="flex:1" readonly>
-              <button class="btn btn-secondary" style="height:36px;white-space:nowrap" onclick="chooseConfigPath()">✎ Change</button>
+              <input class="setting-input mono" id="cfg-file-path" placeholder="(默认)" style="flex:1" readonly>
+              <button class="btn btn-secondary" style="height:36px;white-space:nowrap" onclick="chooseConfigPath()"><span data-i18n="change">修改</span></button>
             </div>
             <div id="cfg-path-hint" style="font-size:12px;color:var(--label-tertiary);margin-top:6px"></div>
           </div>
           <div class="setting-row">
-            <div class="section-title">Raw Configuration</div>
-            <div class="section-desc">Edit the TOML config file directly. Changes apply after save + restart.</div>
+            <div class="section-title" data-i18n="raw_config">原始配置</div>
+            <div class="section-desc" data-i18n="raw_config_hint">直接编辑 TOML 配置文件。保存后重启生效。</div>
             <div class="config-editor">
               <textarea id="config-editor-text" spellcheck="false"></textarea>
             </div>
             <div class="config-status" id="config-status"></div>
             <div class="btn-row">
-              <button class="btn btn-primary" onclick="saveConfigFile()">Save to file</button>
-              <button class="btn btn-secondary" onclick="loadConfigFile()">Reload</button>
+              <button class="btn btn-primary" onclick="saveConfigFile()" data-i18n="save_to_file">保存到文件</button>
+              <button class="btn btn-secondary" onclick="loadConfigFile()" data-i18n="reload">重新加载</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Language -->
+        <div id="section-language" class="hidden">
+          <div class="setting-row">
+            <div class="setting-label" data-i18n="language">语言</div>
+            <div class="setting-hint" data-i18n="language_hint">选择界面语言。</div>
+            <div class="theme-cubes">
+              <div class="theme-cube selected" data-lang="zh" onclick="setLanguage('zh')">
+                <span style="font-size:24px">中</span>
+                <span class="name">简体中文</span>
+              </div>
+              <div class="theme-cube" data-lang="en" onclick="setLanguage('en')">
+                <span style="font-size:24px">En</span>
+                <span class="name">English</span>
+              </div>
             </div>
           </div>
         </div>
@@ -759,8 +800,8 @@ function switchSection(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.section === name));
   document.querySelectorAll('[id^="section-"]').forEach(s => s.classList.add('hidden'));
   document.getElementById(`section-${name}`).classList.remove('hidden');
-  const titles = {appearance:'Appearance', model:'Model', tools:'Tools', config:'Config File'};
-  document.getElementById('section-title').textContent = titles[name];
+  const titleKeys = {appearance:'appearance', model:'model_section', tools:'tools', config:'config_file', language:'language'};
+  document.getElementById('section-title').textContent = t(titleKeys[name] || name);
 }
 
 // ─── Config API ────────────────────────────────────────────────────────
@@ -919,8 +960,102 @@ async function chooseConfigPath() {
   } catch(e) { showConfigStatus('Save failed: ' + e.message, 'err'); }
 }
 
+// ─── i18n ──────────────────────────────────────────────────────────────
+const I18N = {
+  zh: {
+    new_session:'新建会话', settings:'设置', settings_title:'设置',
+    skill:'技能', trajectory:'轨迹', ready:'就绪', send_to_start:'发送消息开始对话。',
+    input_placeholder:'发送消息...',
+    appearance:'外观', model_section:'模型', tools:'工具', config_file:'配置文件', language:'语言',
+    theme:'主题', theme_hint:'选择 dsh-lite 的外观。',
+    light:'浅色', dark:'深色', system:'跟随系统',
+    base_url:'Base URL', base_url_hint:'OpenAI 兼容端点（例如 http://127.0.0.1:8080/v1）',
+    api_key:'API Key', api_key_hint:'本地推理无需鉴权时留空即可。',
+    model_name:'模型名称', model_name_hint:'发送给端点的模型名。点击"获取"可自动检测。',
+    fetch:'获取',
+    context_window:'上下文窗口', context_window_hint:'模型可接受的最大 token 数（驱动压缩）。',
+    max_tokens:'最大输出 Token', max_tokens_hint:'每次请求的最大输出 token 数。',
+    temperature:'温度', temperature_hint:'0 = 确定性，越高越有创造力。',
+    save:'保存', reset:'重置',
+    tool_shell_hint:'执行 Shell 命令',
+    tool_file_read:'文件读取', tool_file_read_hint:'读取文件内容',
+    tool_file_write:'文件写入', tool_file_write_hint:'写入文件',
+    tool_file_search:'文件搜索', tool_file_search_hint:'Glob 模式文件搜索',
+    tool_memory:'记忆', tool_memory_hint:'长期 KV 存储（读/写/检索）',
+    config_path:'配置文件路径', config_path_hint:'配置文件的加载位置。默认在可执行文件旁。修改后重启生效。',
+    change:'修改',
+    raw_config:'原始配置', raw_config_hint:'直接编辑 TOML 配置文件。保存后重启生效。',
+    save_to_file:'保存到文件', reload:'重新加载',
+    language_hint:'选择界面语言。',
+  },
+  en: {
+    new_session:'New Session', settings:'Settings', settings_title:'Settings',
+    skill:'Skill', trajectory:'Trajectory', ready:'Ready', send_to_start:'Send a message to start a conversation.',
+    input_placeholder:'Send a message...',
+    appearance:'Appearance', model_section:'Model', tools:'Tools', config_file:'Config File', language:'Language',
+    theme:'Theme', theme_hint:'Choose how dsh-lite looks to you.',
+    light:'Light', dark:'Dark', system:'System',
+    base_url:'Base URL', base_url_hint:'OpenAI-compatible endpoint (e.g. http://127.0.0.1:8080/v1)',
+    api_key:'API Key', api_key_hint:'Leave empty for local inference without auth.',
+    model_name:'Model', model_name_hint:'Model name to send to the endpoint. Click "Fetch" to auto-detect.',
+    fetch:'Fetch',
+    context_window:'Context Window', context_window_hint:'Max tokens the model can accept (drives compaction).',
+    max_tokens:'Max Tokens', max_tokens_hint:'Max output tokens per request.',
+    temperature:'Temperature', temperature_hint:'0 = deterministic, higher = creative.',
+    save:'Save', reset:'Reset',
+    tool_shell_hint:'Execute shell commands',
+    tool_file_read:'File Read', tool_file_read_hint:'Read file contents',
+    tool_file_write:'File Write', tool_file_write_hint:'Write to files',
+    tool_file_search:'File Search', tool_file_search_hint:'Glob-pattern file search',
+    tool_memory:'Memory', tool_memory_hint:'Long-term KV store (read/write/recall)',
+    config_path:'Config File Path', config_path_hint:'Where the config file is loaded from. Default: next to the executable. Changes apply after restart.',
+    change:'Change',
+    raw_config:'Raw Configuration', raw_config_hint:'Edit the TOML config file directly. Changes apply after save + restart.',
+    save_to_file:'Save to file', reload:'Reload',
+    language_hint:'Choose the interface language.',
+  }
+};
+let currentLang = 'zh';
+function t(key) { return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key]) || key; }
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+}
+function initLanguage() {
+  currentLang = localStorage.getItem('dsh-lang') || 'zh';
+  applyI18n();
+  document.querySelectorAll('.theme-cube[data-lang]').forEach(c => {
+    c.classList.toggle('selected', c.dataset.lang === currentLang);
+  });
+}
+function setLanguage(lang) {
+  currentLang = lang;
+  localStorage.setItem('dsh-lang', lang);
+  applyI18n();
+  document.querySelectorAll('.theme-cube[data-lang]').forEach(c => {
+    c.classList.toggle('selected', c.dataset.lang === lang);
+  });
+}
+
+// ─── Icons (from dsh ui-primitives) ────────────────────────────────────
+const ICONS = {
+  appearance: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11.3496 8C11.3496 6.14985 9.85015 4.65039 8 4.65039C6.14985 4.65039 4.65039 6.14985 4.65039 8C4.65039 9.85015 6.14985 11.3496 8 11.3496C9.85015 11.3496 11.3496 9.85015 11.3496 8ZM12.6504 8C12.6504 10.5681 10.5681 12.6504 8 12.6504C5.43188 12.6504 3.34961 10.5681 3.34961 8C3.34961 5.43188 5.43188 3.34961 8 3.34961C10.5681 3.34961 12.6504 5.43188 12.6504 8Z" fill="currentColor"/><path d="M8.65039 0.5V2.5H7.34961V0.5H8.65039Z" fill="currentColor"/><path d="M8.65039 13.5V15.5H7.34961V13.5H8.65039Z" fill="currentColor"/><path d="M3.15808 2.24035L4.57229 3.65456L3.6525 4.57435L2.23829 3.16014L3.15808 2.24035Z" fill="currentColor"/><path d="M12.3505 11.4327L13.7647 12.8469L12.8449 13.7667L11.4307 12.3525L12.3505 11.4327Z" fill="currentColor"/><path d="M2.24537 12.8469L3.65958 11.4327L4.57937 12.3525L3.16516 13.7667L2.24537 12.8469Z" fill="currentColor"/><path d="M11.4377 3.65455L12.852 2.24033L13.7718 3.16012L12.3575 4.57434L11.4377 3.65455Z" fill="currentColor"/><path d="M0.5 7.35461H2.5V8.6554H0.5L0.5 7.35461Z" fill="currentColor"/><path d="M13.5 7.35461H15.5V8.6554H13.5V8.6554Z" fill="currentColor"/></svg>',
+  model: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M7.51205 0.790627C9.19055 0.790649 10.7401 1.0691 11.892 1.54364C12.4664 1.78029 12.9719 2.07885 13.3436 2.4408C13.7171 2.80467 13.9916 3.27253 13.9918 3.82384C13.9916 4.37521 13.7171 4.84353 13.3436 5.20739C12.9719 5.56938 12.4664 5.86794 11.892 6.10379C10.7401 6.57836 9.19055 6.85682 7.51205 6.85682C5.83355 6.85682 4.28404 6.57836 3.13216 6.10379C2.55771 5.86794 2.05224 5.56938 1.68053 5.20739C1.30702 4.84353 1.03252 4.37521 1.03235 3.82384C1.03252 3.27253 1.30702 2.80467 1.68053 2.4408C2.05224 2.07885 2.55771 1.78029 3.13216 1.54364C4.28404 1.0691 5.83355 0.790627 7.51205 0.790627ZM2.27121 5.66454C2.53164 5.8291 2.82215 5.97593 3.13309 6.10405C4.285 6.57852 5.8337 6.85703 7.51205 6.85706C9.19071 6.85706 10.74 6.57865 11.892 6.10405C12.2028 5.97601 12.4928 5.82898 12.7529 5.66454V7.4135C12.7529 7.52848 12.6988 7.69591 12.4797 7.90944C12.2584 8.12499 11.9051 8.34743 11.4192 8.5476C10.4505 8.94665 9.06942 9.20888 7.51205 9.20888C5.95467 9.20888 4.5736 8.94665 3.60486 8.5476C3.11927 8.34743 2.76667 8.12499 2.5454 7.90944C2.32624 7.69591 2.27121 7.52848 2.27121 7.4135V5.66454Z" fill="currentColor"/></svg>',
+  tools: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14.0861 5.51366C13.8717 5.0575 13.588 4.58542 13.2889 4.18108C13.208 4.07172 13.1596 4.04373 13.0243 4.03054C12.4277 3.97255 11.8245 4.05527 11.2269 3.9972C10.7224 3.94816 10.3133 3.71661 10.0115 3.30919C9.66986 2.84777 9.43973 2.31343 9.09824 1.85234C9.01771 1.74365 8.96805 1.71589 8.83354 1.70282C8.29432 1.65044 7.70402 1.65061 7.16656 1.70282C7.03205 1.71589 6.98239 1.74365 6.90186 1.85234C6.56067 2.31303 6.33025 2.84774 5.98855 3.30919C5.68681 3.71661 5.27774 3.94816 4.77317 3.9972C4.17564 4.05527 3.57239 3.97255 2.97585 4.03054C2.84046 4.04373 2.79208 4.07172 2.71115 4.18108C2.41212 4.58542 2.12835 5.0575 1.91403 5.51366C1.85299 5.64359 1.85286 5.7018 1.91403 5.8319C2.14865 6.33077 2.49748 6.76892 2.73237 7.26854C2.9594 7.7515 2.96041 8.24717 2.73338 8.73044C2.49837 9.23061 2.14891 9.66837 1.91403 10.1681C1.85291 10.2982 1.85299 10.3564 1.91403 10.4863C2.12856 10.9429 2.41185 11.4142 2.71115 11.8189C2.79208 11.9283 2.84046 11.9563 2.97585 11.9694C3.57239 12.0274 4.17564 11.9447 4.77317 12.0028C5.27774 12.0518 5.68681 12.2834 5.98855 12.6908C6.33024 13.1522 6.56037 13.6866 6.90186 14.1476C6.98239 14.2563 7.03205 14.2841 7.16656 14.2972C7.70402 14.3494 8.29432 14.3495 8.83354 14.2972C8.96805 14.2841 9.01771 14.2563 9.09824 14.1476C9.43944 13.687 9.66985 13.1522 10.0115 12.6908C10.3133 12.2834 10.7224 12.0518 11.2269 12.0028C11.8244 11.9447 12.4271 12.0275 13.0243 11.9694C13.1596 11.9563 13.208 11.9283 13.2889 11.8189C13.5891 11.4131 13.872 10.942 14.0861 10.4863C14.1471 10.3564 14.1472 10.2982 14.0861 10.1681C13.8513 9.66861 13.5017 9.23061 13.2667 8.73044C13.0397 8.24717 13.0407 7.7515 13.2677 7.26854C13.5026 6.7689 13.8513 6.33106 14.0861 5.8319C14.1472 5.7018 14.1471 5.64359 14.0861 5.51366ZM9.13764 7.99999C9.13764 7.3715 8.62855 6.8624 8.00005 6.8624C7.37155 6.8624 6.86246 7.3715 6.86246 7.99999C6.86246 8.62849 7.37155 9.13759 8.00005 9.13759C8.62855 9.13759 9.13764 8.62849 9.13764 7.99999ZM10.4834 7.99999C10.4834 9.37126 9.37132 10.4833 8.00005 10.4833C6.62878 10.4833 5.51674 9.37126 5.51674 7.99999C5.51674 6.62873 6.62878 5.51669 8.00005 5.51669C9.37132 5.51669 10.4834 6.62873 10.4834 7.99999Z" fill="currentColor"/></svg>',
+  config: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 1.5C2 0.671573 2.67157 0 3.5 0H10.5C11.3284 0 12 0.671573 12 1.5V3H10.5V1.5H3.5V14.5H10.5V13H12V14.5C12 15.3284 11.3284 16 10.5 16H3.5C2.67157 16 2 15.3284 2 14.5V1.5Z" fill="currentColor"/><path d="M6 4H8V5.5H6V4Z" fill="currentColor"/><path d="M6 7H8V8.5H6V7Z" fill="currentColor"/><path d="M6 10H8V11.5H6V10Z" fill="currentColor"/><path d="M10 6L15.5 6V10L10 10V6Z" fill="currentColor" fill-opacity="0.3"/></svg>',
+};
+function injectIcons() {
+  ['appearance','model','tools','config'].forEach(name => {
+    const el = document.getElementById('ico-' + name);
+    if (el) el.innerHTML = ICONS[name];
+  });
+}
+
 // ─── Init ──────────────────────────────────────────────────────────────
 initTheme();
+initLanguage();
+injectIcons();
 loadSessions();
 loadSkills();
 </script>
