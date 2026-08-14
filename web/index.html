@@ -162,6 +162,15 @@ body {
 .sidebar.collapsed .sidebar-header .brand { cursor: pointer; }
 .sidebar.collapsed .btn-new { margin: 0 0 12px; width: 36px; height: 36px; padding: 0; gap: 0; border-color: transparent; background: transparent; align-self: center; }
 .sidebar.collapsed .btn-new:hover { background: var(--bg-hover); }
+.btn-search-rail { display: none; }
+.sidebar.collapsed .btn-search-rail {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; margin: 0 0 12px; padding: 0; gap: 0;
+  border: none; background: transparent; color: var(--label-primary);
+  cursor: pointer; border-radius: 12px; align-self: center; flex-shrink: 0;
+  transition: background-color var(--dur) var(--ease);
+}
+.sidebar.collapsed .btn-search-rail:hover { background: var(--bg-hover); }
 .sidebar.collapsed .btn-settings { justify-content: center; padding: 0; width: 36px; height: 36px; gap: 0; align-self: center; }
 .sidebar.collapsed .btn-settings span { display: none; }
 .sidebar.collapsed .session-item { padding: 8px 4px; }
@@ -293,16 +302,23 @@ body {
 
 /* ─── Input bar ─────────────────────────────────────────────────────── */
 .input-area { position: sticky; bottom: 0; background: var(--bg-base); padding: 6px 16px 10px; }
-.input-bar { max-width: 748px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px; }
-.input-bar textarea {
-  flex: 1; background: var(--bg-input); color: var(--label-primary);
-  border: 1px solid var(--border-l2); border-radius: 22px; padding: 10px 16px;
-  font-size: 15px; font-family: var(--font); line-height: 24px; resize: none; overflow: hidden;
-  height: 44px; max-height: 200px; box-shadow: var(--shadow-l2);
-  transition: border-color var(--dur) var(--ease);
+.input-card {
+  max-width: 748px; margin: 0 auto; position: relative;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 10px 12px 6px;
+  border: 1px solid var(--border-l2); border-radius: 22px;
+  background: var(--bg-input); box-shadow: var(--shadow-l2);
+  font-size: 16px; line-height: 24px;
 }
-.input-bar textarea:focus { outline: none; border-color: var(--accent); }
-.input-bar textarea::placeholder { color: var(--label-caption); user-select: none; }
+.input-card textarea {
+  width: 100%; box-sizing: border-box;
+  background: transparent; color: var(--label-primary);
+  border: none; outline: none; resize: none; overflow: hidden;
+  font-size: inherit; font-family: var(--font); line-height: inherit;
+  padding: 0 4px; min-height: 24px; max-height: 200px;
+}
+.input-card textarea::placeholder { color: var(--label-caption); user-select: none; }
+.input-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 4px 2px; }
 .model-select {
   border: none; border-radius: 8px; outline: none;
   background-color: transparent; color: var(--label-secondary);
@@ -311,18 +327,16 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 2px center; background-size: 12px;
   padding: 0 18px 0 8px; height: 28px; max-width: 160px; white-space: nowrap; flex-shrink: 0;
-  transform: translateY(-2px);
   transition: background-color var(--dur) var(--ease);
 }
 .model-select:hover:not(:disabled) { background-color: var(--bg-hover); }
 .model-select.hidden { display: none; }
-.context-ring { color: var(--label-tertiary); display: flex; align-items: center; cursor: default; flex-shrink: 0; transform: translateY(-2px); }
+.context-ring { color: var(--label-tertiary); display: flex; align-items: center; cursor: default; flex-shrink: 0; }
 .send-btn {
   width: 34px; height: 34px; border: none; border-radius: 999px;
   background: var(--info-fill); color: #fff; cursor: pointer;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   transition: background-color 100ms var(--ease);
-  transform: translateY(-2px);
 }
 .send-btn:hover:not(:disabled) { background: var(--info-hover); }
 .send-btn:disabled { opacity: 0.4; cursor: default; }
@@ -482,6 +496,9 @@ body {
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><path d="M8.00003 0.3237C3.76075 0.3237 0.32373 3.76072 0.32373 8C0.32373 9.17603 0.589121 10.2922 1.0632 11.2901L1.35291 11.8989L2.5705 11.3205L2.28079 10.7117C1.89079 9.89074 1.67301 8.97167 1.67301 8C1.67301 4.50546 4.50549 1.67298 8.00003 1.67298C11.4946 1.67298 14.3271 4.50546 14.3271 8C14.3271 11.4945 11.4946 14.327 8.00003 14.327C7.28473 14.327 6.76077 14.277 6.29621 14.1487C5.83857 14.0224 5.40441 13.8109 4.88514 13.4488C4.12569 12.919 3.03778 12.7316 2.141 13.2978L2.12682 13.307L2.11264 13.3171L1.34886 13.854L1.79659 15.188L2.86122 14.4384C3.19068 14.2305 3.68325 14.2542 4.11326 14.5539C4.72789 14.9826 5.30042 15.2724 5.93762 15.4484C6.56803 15.6224 7.22776 15.6763 8.00003 15.6763C12.2393 15.6763 15.6763 12.2393 15.6763 8C15.6763 3.76072 12.2393 0.3237 8.00003 0.3237ZM7.32033 4.82535V7.32536H4.82538V8.67464H7.32033V11.1747H8.6696V8.67464H11.1747V7.32536H8.6696V4.82535H7.32033Z" fill="currentColor"/></svg>
       <span class="wide-only" data-i18n="new_session">新建会话</span>
     </button>
+    <button class="btn-search-rail" onclick="expandSidebarAndFocusSearch()" aria-label="搜索会话" title="搜索会话">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><path d="M11.894845 6.647401C11.894845 3.725463 9.534486 1.356779 6.623219 1.35657C3.711786 1.35657 1.351635 3.725338 1.351635 6.647401C1.351843 9.569296 3.711911 11.938273 6.623219 11.938273C9.534361 11.938064 11.894637 9.569171 11.894845 6.647401ZM13.245462 6.647401C13.245254 10.317935 10.280401 13.293613 6.623219 13.293821C2.965871 13.293821 0.000204 10.31806 0 6.647401C0 2.976574 2.965746 0 6.623219 0C10.280526 0.000205 13.245462 2.9767 13.245462 6.647401Z" fill="currentColor"/><path d="M16.000417 15.041079L15.044449 16.000433L11.530434 12.473588L12.486298 11.514234L16.000417 15.041079Z" fill="currentColor"/></svg>
+    </button>
     <div class="search-box wide-only">
       <input type="text" id="session-search" data-i18n-placeholder="search_sessions" placeholder="搜索会话..." oninput="filterSessions()">
     </div>
@@ -518,17 +535,19 @@ body {
       <div class="traj-inner hidden" id="traj-inner"></div>
     </div>
     <div class="input-area">
-      <div class="input-bar">
-        <select id="model-preset" class="model-select hidden" title="Model preset"></select>
-        <div class="context-ring" id="context-ring" title="上下文占用">
-          <svg viewBox="0 0 14 14" width="14" height="14">
-            <circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="2" opacity="0.2"/>
-            <circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--info-fill)" stroke-width="2"
-              stroke-dasharray="0 34.56" stroke-linecap="round" transform="rotate(-90 7 7)" id="ring-fill"/>
-          </svg>
-        </div>
+      <div class="input-card">
         <textarea id="input" data-i18n-placeholder="input_placeholder" placeholder="发送消息..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-        <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>
+        <div class="input-row">
+          <select id="model-preset" class="model-select hidden" title="Model preset"></select>
+          <div class="context-ring" id="context-ring" title="上下文占用">
+            <svg viewBox="0 0 14 14" width="14" height="14">
+              <circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="2" opacity="0.2"/>
+              <circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--info-fill)" stroke-width="2"
+                stroke-dasharray="0 34.56" stroke-linecap="round" transform="rotate(-90 7 7)" id="ring-fill"/>
+            </svg>
+          </div>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>
+        </div>
       </div>
       <div class="stats-bar" id="stats-bar"><span id="stats-text"></span></div>
     </div>
@@ -924,7 +943,7 @@ function switchSkill() {
 
 // ─── Chat ──────────────────────────────────────────────────────────────
 function handleKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
-function autoResize(el) { el.style.height='44px'; el.style.height=Math.min(el.scrollHeight,200)+'px'; }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,200)+'px'; }
 
 async function sendMessage() {
   const input = document.getElementById('input');
@@ -1011,6 +1030,14 @@ function toggleSidebar() {
   const sb = document.getElementById('sidebar');
   sb.classList.toggle('collapsed');
   localStorage.setItem('dsh-sidebar', sb.classList.contains('collapsed') ? 'collapsed' : 'expanded');
+}
+function expandSidebarAndFocusSearch() {
+  const sb = document.getElementById('sidebar');
+  if (sb.classList.contains('collapsed')) {
+    sb.classList.remove('collapsed');
+    localStorage.setItem('dsh-sidebar', 'expanded');
+  }
+  setTimeout(() => document.getElementById('session-search')?.focus(), 200);
 }
 function filterSessions() {
   const q = (document.getElementById('session-search')?.value || '').toLowerCase();
