@@ -245,9 +245,7 @@ body {
 /* ─── Chat ──────────────────────────────────────────────────────────── */
 .chat-area { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; }
 .chat-inner { max-width: 748px; margin: 0 auto; padding: 20px 16px 100px; }
-.traj-inner { max-width: 748px; margin: 0 auto; padding: 20px 16px 100px; }
-.traj-inner .trajectory-event { font-size: 12px; color: var(--label-secondary); padding: 4px 0; border-bottom: 1px solid var(--border-l1); }
-.traj-inner .trajectory-event:first-child { padding-top: 0; }
+.traj-inner { max-width: 748px; margin: 0 auto; padding: 8px 16px 100px; }
 
 .message { margin-bottom: 16px; }
 .message.user { text-align: right; }
@@ -276,19 +274,63 @@ body {
 .bubble strong { font-weight: 600; }
 .bubble a { color: var(--accent); }
 
-/* Tool / trajectory events */
-.tool-event {
-  font-size: 12px; color: var(--label-secondary); padding: 6px 12px; margin-bottom: 6px;
-  border-left: 3px solid var(--border-l3); border-radius: 0 6px 6px 0;
-  background: var(--bg-platform);
+/* Tool / trajectory events — card-style rows matching original dsh */
+.traj-cell {
+  display: flex; align-items: center; box-sizing: border-box;
+  min-height: 38px; padding: 0 8px 0 20px; gap: 24px;
+  border-radius: 8px; border: 1px solid var(--border-l2);
+  background: var(--bg-platform); margin-bottom: 4px;
 }
-.tool-event.error { border-left-color: var(--red); color: var(--red); }
-.tool-event .label { font-weight: 600; color: var(--label-primary); }
-.tool-event pre {
+.traj-cell.error { border-color: var(--red); }
+.traj-cell .tc-index { flex: none; width: 24px; font-size: 13px; color: var(--label-tertiary); text-align: right; }
+.traj-cell .tc-tag { flex: none; width: 80px; }
+.traj-cell .tc-tag span {
+  display: inline-flex; align-items: center; height: 22px; max-width: 100%;
+  padding: 0 6px; border-radius: 6px; font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.traj-cell .tc-tag .tag-user { color: var(--green); background: var(--bg-bubble); }
+.traj-cell .tc-tag .tag-tool { color: var(--amber); background: rgba(245,158,11,0.12); }
+.traj-cell .tc-tag .tag-system { color: var(--label-secondary); background: var(--bg-platform); }
+.traj-cell .tc-tag .tag-error { color: var(--red); background: rgba(220,50,50,0.1); }
+.traj-cell .tc-tag .tag-message { color: var(--accent); background: rgba(100,120,255,0.08); }
+.traj-cell .tc-text {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 13px; color: var(--label-primary);
+}
+.traj-cell .tc-text pre {
   margin: 4px 0; white-space: pre-wrap; font-size: 11px; font-family: var(--font-code);
-  color: var(--label-tertiary); max-height: 200px; overflow-y: auto;
+  color: var(--label-tertiary); max-height: 200px; overflow-y: auto; white-space: pre-wrap;
 }
-.trajectory-event { font-size: 11px; color: var(--label-caption); padding: 2px 12px; margin-bottom: 4px; }
+.traj-cell .tc-time { flex: none; width: 60px; text-align: right; font-size: 12px; color: var(--label-tertiary); }
+.traj-turn-header {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--bg-base); padding: 8px 20px; margin: 8px 0 4px;
+  font-size: 13px; font-weight: 600; color: var(--label-secondary);
+  border-bottom: 1px solid var(--border-l1);
+}
+/* Collapsible tool call in chat view */
+.chat-tool-call {
+  margin: 8px 0; font-size: 12px; border: 1px solid var(--border-l2);
+  border-radius: 8px; overflow: hidden; background: var(--bg-platform);
+}
+.chat-tool-call .ctc-header {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer;
+  font-weight: 600; color: var(--label-primary); user-select: none;
+}
+.chat-tool-call .ctc-header:hover { background: var(--bg-bubble); }
+.chat-tool-call .ctc-chevron { font-size: 10px; color: var(--label-tertiary); transition: transform 0.15s; }
+.chat-tool-call.expanded .ctc-chevron { transform: rotate(90deg); }
+.chat-tool-call .ctc-tag {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 6px;
+  border-radius: 5px; font-size: 11px; font-weight: 600; color: var(--amber); background: rgba(245,158,11,0.12);
+}
+.chat-tool-call.error .ctc-tag { color: var(--red); background: rgba(220,50,50,0.1); }
+.chat-tool-call .ctc-body { display: none; padding: 8px 12px; border-top: 1px solid var(--border-l1); }
+.chat-tool-call.expanded .ctc-body { display: block; }
+.chat-tool-call .ctc-body pre {
+  margin: 4px 0; white-space: pre-wrap; font-size: 11px; font-family: var(--font-code);
+  color: var(--label-tertiary); max-height: 300px; overflow-y: auto;
+}
 .typing { display: inline-block; animation: blink 1s infinite; color: var(--accent); }
 @keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
 
@@ -788,6 +830,7 @@ async function createSession() {
     // Clear chat area and show hero
     document.querySelector('.chat-inner').innerHTML = heroTemplate;
     document.getElementById('traj-inner').innerHTML = '';
+    trajCellIndex = 0; currentToolCallEl = null;
     setView('chat');
     applyI18n();
     currentAssistantEl = null;
@@ -805,6 +848,7 @@ async function switchSession(id) {
     // Clear chat area
     document.querySelector('.chat-inner').innerHTML = '';
     document.getElementById('traj-inner').innerHTML = '';
+    trajCellIndex = 0; currentToolCallEl = null;
     setView('chat');
     currentAssistantEl = null;
     currentAssistantText = '';
@@ -864,6 +908,7 @@ async function deleteSession(id) {
       // No sessions left — show hero.
       document.querySelector('.chat-inner').innerHTML = heroTemplate;
       document.getElementById('traj-inner').innerHTML = '';
+      trajCellIndex = 0; currentToolCallEl = null;
       setView('chat');
       applyI18n();
       currentAssistantEl = null;
@@ -1125,8 +1170,11 @@ function toggleStats(el) {
   updateStatsBar();
 }
 
+// ── Trajectory state ──
+let trajCellIndex = 0;
+let trajTurnStartTime = 0;
+
 function handleEvent(event, showTraj) {
-  const chat = document.querySelector('.chat-inner');
   switch (event.type) {
     case 'delta':
       if (!currentAssistantEl) { currentAssistantEl = addMessage('assistant',''); currentAssistantText=''; }
@@ -1137,32 +1185,49 @@ function handleEvent(event, showTraj) {
     case 'assistant_message':
       if (!currentAssistantEl) currentAssistantEl = addMessage('assistant','');
       if (event.content) { currentAssistantText = event.content; currentAssistantEl.querySelector('.bubble').innerHTML = renderMd(event.content); }
-      if (event.tool_calls) event.tool_calls.forEach(tc => addToolEvent(`Tool: ${tc.name}`, JSON.stringify(tc.arguments,null,2), false, showTraj));
+      if (event.tool_calls) event.tool_calls.forEach(tc => {
+        addTrajCell('message', 'Message', tc.name, '');
+        addChatToolCall(tc.name, JSON.stringify(tc.arguments,null,2), false);
+      });
       document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
       break;
-    case 'tool_call': addToolEvent(`Executing: ${event.name}`, JSON.stringify(event.arguments,null,2), false, showTraj); break;
-    case 'tool_result': addToolEvent('Result', event.content, event.is_error, showTraj); break;
+    case 'tool_call':
+      addTrajCell('tool', 'Tool', event.name, JSON.stringify(event.arguments,null,2));
+      addChatToolCall(event.name, JSON.stringify(event.arguments,null,2), false);
+      break;
+    case 'tool_result':
+      addTrajCell('tool', event.is_error ? 'Error' : 'Result', '', event.content, event.is_error);
+      if (currentToolCallEl) {
+        const body = currentToolCallEl.querySelector('.ctc-body');
+        if (body) body.innerHTML = `<pre>${esc(event.content)}</pre>`;
+        if (event.is_error) currentToolCallEl.classList.add('error');
+        currentToolCallEl = null;
+      }
+      break;
     case 'turn_start':
       sessionStats.turns++;
       if (!sessionStats.startTime) sessionStats.startTime = Date.now();
       updateStatsBar();
       currentAssistantEl=null; currentAssistantText='';
-      if(showTraj) addTraj(`── Turn ${event.turn} ──`);
+      trajTurnStartTime = Date.now();
+      addTrajTurnHeader(event.turn);
       break;
     case 'step_start':
       sessionStats.steps++;
       updateStatsBar();
-      if(showTraj) addTraj(`  Step ${event.turn}.${event.step}`);
       break;
-    case 'step_end': if(showTraj) addTraj(`  Step ${event.turn}.${event.step} done`); break;
-    case 'turn_end': if(showTraj) addTraj(`── Turn end: ${event.reason} ──`); currentAssistantEl=null; break;
+    case 'step_end': break;
+    case 'turn_end': currentAssistantEl=null; break;
     case 'usage':
       sessionStats.inputTokens += event.prompt_tokens || 0;
       sessionStats.outputTokens += event.completion_tokens || 0;
       updateStatsBar();
       updateContextRing(sessionStats.inputTokens + sessionStats.outputTokens, 8192);
       break;
-    case 'error': addToolEvent('Error', event.message, true, true); break;
+    case 'error':
+      addTrajCell('error', 'Error', '', event.message, true);
+      addChatToolCall('Error', event.message, true);
+      break;
   }
 }
 
@@ -1177,25 +1242,45 @@ function addMessage(role, content) {
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
   return el;
 }
-function addToolEvent(label, content, isError, showTraj) {
-  if (!showTraj && !isError) return;
+
+// ── Trajectory card cells (matching original dsh style) ──
+function addTrajCell(kind, tagLabel, text, detail, isError) {
   const traj = document.getElementById('traj-inner');
   if (!traj) return;
+  trajCellIndex++;
+  const elapsed = trajTurnStartTime ? ((Date.now() - trajTurnStartTime) / 1000).toFixed(1) + 's' : '';
+  const tagClass = kind === 'tool' ? 'tag-tool' : kind === 'error' ? 'tag-error' : kind === 'message' ? 'tag-message' : 'tag-system';
   const el = document.createElement('div');
-  el.className = 'tool-event' + (isError?' error':'');
-  el.innerHTML = `<span class="label">${esc(label)}</span>${content?'<pre>'+esc(content)+'</pre>':''}`;
+  el.className = 'traj-cell' + (isError ? ' error' : '');
+  const textHtml = detail
+    ? `<div class="tc-text" style="white-space:normal"><div>${esc(text || tagLabel)}</div><pre>${esc(detail)}</pre></div>`
+    : `<div class="tc-text">${esc(text || tagLabel)}</div>`;
+  el.innerHTML = `<span class="tc-index">#${trajCellIndex}</span><span class="tc-tag"><span class="${tagClass}">${esc(tagLabel)}</span></span>${textHtml}<span class="tc-time">${elapsed}</span>`;
   traj.appendChild(el);
-  document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
-}
-function addTraj(text) {
-  const traj = document.getElementById('traj-inner');
-  if (!traj) return;
-  const el = document.createElement('div');
-  el.className = 'trajectory-event'; el.textContent = text;
-  traj.appendChild(el);
-  // Auto-scroll the chat area to show new trajectory events
   const area = document.getElementById('chat-area');
   if (area) area.scrollTop = area.scrollHeight;
+}
+
+function addTrajTurnHeader(turn) {
+  const traj = document.getElementById('traj-inner');
+  if (!traj) return;
+  const el = document.createElement('div');
+  el.className = 'traj-turn-header';
+  el.textContent = `Turn ${turn}`;
+  traj.appendChild(el);
+}
+
+// ── Collapsible tool calls in chat view ──
+let currentToolCallEl = null;
+function addChatToolCall(name, args, isError) {
+  const chat = document.querySelector('.chat-inner');
+  if (!chat) return;
+  const el = document.createElement('div');
+  el.className = 'chat-tool-call' + (isError ? ' error' : '');
+  el.innerHTML = `<div class="ctc-header" onclick="this.parentElement.classList.toggle('expanded')"><span class="ctc-chevron">▶</span><span class="ctc-tag">${esc(isError ? 'Error' : 'Tool')}</span><span>${esc(name)}</span></div><div class="ctc-body">${args ? '<pre>' + esc(args) + '</pre>' : ''}</div>`;
+  chat.appendChild(el);
+  currentToolCallEl = el;
+  document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
 }
 
 // ─── Markdown ──────────────────────────────────────────────────────────
