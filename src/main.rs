@@ -238,9 +238,45 @@ async fn async_main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Load configuration from the default path, then optional override.
+/// Resolve the config file path.
+///
+/// Priority:
+/// 1. `DSH_LITE_CONFIG` env var (highest)
+/// 2. `<exe_dir>/.dsh-lite-path` file contents (user-set via settings)
+/// 3. `<exe_dir>/config.toml` (default, next to the binary)
+/// 4. `config/default.toml` (fallback for dev/legacy)
+pub fn resolve_config_path() -> String {
+    if let Ok(p) = env::var("DSH_LITE_CONFIG") {
+        return p;
+    }
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+        .map(|p| p.join(".dsh-lite-path"));
+    if let Some(path_file) = &exe_dir {
+        if let Ok(content) = std::fs::read_to_string(path_file) {
+            let trimmed = content.trim();
+            if !trimmed.is_empty() && std::path::Path::new(trimmed).exists() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    // Default: config.toml next to the exe
+    if let Some(exe_dir) = exe_dir.as_ref().and_then(|_| {
+        std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.to_path_buf()))
+    }) {
+        let default = exe_dir.join("config.toml");
+        if default.exists() {
+            return default.to_string_lossy().to_string();
+        }
+    }
+    // Fallback for dev mode
+    "config/default.toml".to_string()
+}
+
+/// Load configuration from the resolved path.
 fn load_config() -> Result<Config, String> {
-    let path = env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+    let path = resolve_config_path();
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("read {path}: {e}"))?;
     toml::from_str(&content)
@@ -290,7 +326,7 @@ fn print_help() {
          USAGE:\n    dsh-lite [PROMPT] [OPTIONS]\n\n\
          ARGS:\n    <PROMPT>    Run one turn with this prompt\n\n\
          OPTIONS:\n    -V, --version       Print version\n    -h, --help          Print this help\n    --skill <NAME>      Select skill by name\n\n\
-         ENV:\n    DSH_LITE_CONFIG    Path to config file (default: config/default.toml)\n    RUST_LOG           Log level (default: info)",
+         ENV:\n    DSH_LITE_CONFIG    Path to config file (override; default: exe-dir/config.toml)\n    RUST_LOG           Log level (default: info)",
         env!("CARGO_PKG_VERSION")
     );
 }

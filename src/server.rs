@@ -11,6 +11,13 @@
 //! - POST /api/sessions/switch → switch active session
 //! - GET  /api/skills   → list loaded skills
 //! - GET  /api/health   → health check
+//! - GET  /api/models   → fetch model list from LLM endpoint
+//! - GET  /api/config   → get config (JSON)
+//! - POST /api/config   → merge-save config (JSON → TOML)
+//! - GET  /api/config/raw → get raw TOML config file
+//! - POST /api/config/raw → save raw TOML config file
+//! - GET  /api/config/path → get current config file path
+//! - POST /api/config/path → set config file path (applies on restart)
 
 use crate::types::*;
 use crate::agent::LoopEvent;
@@ -143,9 +150,47 @@ async fn handle_request(
             handle_chat(req, state).await
         }
 
+        // Fetch available models from the LLM endpoint (OpenAI-compatible /v1/models)
+        (Method::GET, "/api/models") => {
+            handle_fetch_models(state).await
+        }
+
+        // Get config path info
+        (Method::GET, "/api/config/path") => {
+            let path = crate::resolve_config_path();
+            serve_json(&format!(r#"{{"path":{:?}}}"#, path))
+        }
+
+        // Set config path (written to <exe_dir>/.dsh-lite-path, applied on restart)
+        (Method::POST, "/api/config/path") => {
+            let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+            match serde_json::from_slice::<serde_json::Value>(&body) {
+                Ok(v) => {
+                    if let Some(new_path) = v.get("path").and_then(|p| p.as_str()) {
+                        let exe_dir = std::env::current_exe()
+                            .ok()
+                            .and_then(|e| e.parent().map(|p| p.to_path_buf()));
+                        if let Some(dir) = exe_dir {
+                            let marker = dir.join(".dsh-lite-path");
+                            if std::fs::write(&marker, new_path).is_ok() {
+                                serve_json(r#"{"ok":true,"message":"Config path saved. Restart to apply."}"#)
+                            } else {
+                                serve_json(r#"{"ok":false,"error":"Failed to write path file"}"#)
+                            }
+                        } else {
+                            serve_json(r#"{"ok":false,"error":"Cannot determine exe directory"}"#)
+                        }
+                    } else {
+                        serve_json(r#"{"ok":false,"error":"Missing 'path' field"}"#)
+                    }
+                }
+                Err(_) => serve_json(r#"{"ok":false,"error":"Invalid JSON"}"#),
+            }
+        }
+
         // Get config (JSON)
         (Method::GET, "/api/config") => {
-            let config_path = std::env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+            let config_path = crate::resolve_config_path();
             match std::fs::read_to_string(&config_path) {
                 Ok(content) => {
                     match toml::from_str::<serde_json::Value>(&content) {
@@ -160,7 +205,7 @@ async fn handle_request(
         // Save config (JSON merge into TOML file)
         (Method::POST, "/api/config") => {
             let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
-            let config_path = std::env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+            let config_path = crate::resolve_config_path();
 
             // Read current config, parse the incoming JSON as TOML-compatible,
             // merge, and write back.
@@ -182,7 +227,7 @@ async fn handle_request(
 
         // Get raw config file
         (Method::GET, "/api/config/raw") => {
-            let config_path = std::env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+            let config_path = crate::resolve_config_path();
             match std::fs::read_to_string(&config_path) {
                 Ok(content) => {
                     let mut response = Response::new(BoxBody::new(Full::new(Bytes::from(content)).map_err(|e| match e {})));
@@ -201,7 +246,7 @@ async fn handle_request(
         // Save raw config file
         (Method::POST, "/api/config/raw") => {
             let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
-            let config_path = std::env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+            let config_path = crate::resolve_config_path();
             let content = String::from_utf8_lossy(&body).to_string();
 
             // Validate it's parseable TOML before saving.
@@ -418,6 +463,71 @@ fn serve_json(json: &str) -> Response<BoxBody<Bytes, Infallible>> {
 
 fn empty_body() -> BoxBody<Bytes, Infallible> {
     BoxBody::new(Full::new(Bytes::new()).map_err(|e| match e {}))
+}
+
+/// Handle GET /api/models — fetches model list from the configured LLM endpoint.
+///
+/// Calls `<base_url>/v1/models` (OpenAI-compatible).
+async fn handle_fetch_models(state: Arc<ServerState>) -> Response<BoxBody<Bytes, Infallible>> {
+    let base_url = state.config.model.base_url.trim_end_matches('/').to_string();
+    let models_url = if base_url.ends_with("/v1") {
+        format!("{base_url}/models")
+    } else {
+        format!("{base_url}/v1/models")
+    };
+
+    log::info!("Fetching models from {models_url}");
+
+    match fetch_models_blocking(&models_url, &state.config.model.api_key).await {
+        Ok(body) => serve_json(&body),
+        Err(e) => {
+            log::warn!("Failed to fetch models: {e}");
+            serve_json(&format!(r#"{{"error":"{}"}}"#, e.replace('"', "\\\"")))
+        }
+    }
+}
+
+/// Fetch the /models endpoint via hyper client.
+async fn fetch_models_blocking(url: &str, api_key: &str) -> Result<String, String> {
+    let no_scheme = url.strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
+        .unwrap_or(url);
+    let (host_port, path) = match no_scheme.find('/') {
+        Some(i) => (&no_scheme[..i], &no_scheme[i..]),
+        None => (no_scheme, "/"),
+    };
+    let (host, port) = match host_port.rsplit_once(':') {
+        Some((h, p)) => (h, p.parse::<u16>().unwrap_or(80)),
+        None => (host_port, 80),
+    };
+
+    let addr = format!("{host}:{port}");
+    let stream = tokio::net::TcpStream::connect(&addr)
+        .await
+        .map_err(|e| format!("connect {addr}: {e}"))?;
+
+    let io = TokioIo::new(stream);
+    let mut req_builder = Request::builder()
+        .method(Method::GET)
+        .uri(path)
+        .header(hyper::header::HOST, host);
+    if !api_key.is_empty() {
+        req_builder = req_builder.header(hyper::header::AUTHORIZATION, format!("Bearer {api_key}"));
+    }
+    let req = req_builder
+        .body(empty_body())
+        .map_err(|e| format!("build request: {e}"))?;
+
+    let (mut sender, conn) = hyper::client::conn::http1::handshake::<_, BoxBody<Bytes, Infallible>>(io)
+        .await
+        .map_err(|e| format!("handshake: {e}"))?;
+    tokio::spawn(async move { let _ = conn.await; });
+
+    let res = sender.send_request(req).await.map_err(|e| format!("send: {e}"))?;
+    let body = res.into_body().collect().await
+        .map_err(|e| format!("read body: {e}"))?
+        .to_bytes();
+    String::from_utf8(body.to_vec()).map_err(|e| format!("utf8: {e}"))
 }
 
 /// Recursively merge JSON values (incoming overrides current).
