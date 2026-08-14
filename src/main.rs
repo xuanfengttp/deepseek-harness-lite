@@ -15,6 +15,7 @@ mod agent;
 mod expr;
 mod memory;
 mod compaction;
+mod server;
 mod dispatcher;
 mod tools;
 
@@ -63,7 +64,7 @@ fn main() -> ExitCode {
 }
 
 async fn async_main() -> ExitCode {
-    log::info!("DeepSeek Harness Lite v{} — P5 session management", env!("CARGO_PKG_VERSION"));
+    log::info!("DeepSeek Harness Lite v{} — P6 web client + HTTP server", env!("CARGO_PKG_VERSION"));
     log::info!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
 
     // Load configuration.
@@ -218,10 +219,20 @@ async fn async_main() -> ExitCode {
         session_mgr.checkpoint_active();
         log::info!("Session checkpointed: {} ({} events)", session_id, session_mgr.active().map(|s| s.len()).unwrap_or(0));
     } else {
-        // No CLI prompt — interactive server arrives in P6.
-        log::info!("No prompt provided. Use: dsh-lite \"your question here\"");
+        // No CLI prompt — start the interactive web server.
+        log::info!("Starting interactive web server at http://{}", config.server.listen);
         log::info!("Active sessions: {} (cached: {})", session_mgr.len(), session_mgr.cached_len());
-        log::info!("Interactive web client arrives in P6. For now, pass a prompt as CLI argument.");
+
+        let state = std::sync::Arc::new(server::ServerState {
+            session_mgr: std::sync::Arc::new(tokio::sync::Mutex::new(session_mgr)),
+            skills,
+            active_skill_name: std::sync::Arc::new(tokio::sync::Mutex::new(active_skill.name.clone())),
+            config: config.clone(),
+        });
+
+        if let Err(e) = server::run(&config.server.listen, state).await {
+            log::error!("Server error: {e}");
+        }
     }
 
     ExitCode::SUCCESS
