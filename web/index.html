@@ -892,10 +892,20 @@ function showConfigStatus(msg, type) {
 async function fetchModels() {
   const btn = document.getElementById('btn-fetch-models');
   const oldText = btn.textContent;
-  btn.textContent = '⏳ Fetching...';
+  btn.textContent = '⏳';
   btn.disabled = true;
   try {
-    const res = await fetch('/api/models');
+    // Send the current form values so the backend uses what the user typed,
+    // not the stale startup config.
+    const payload = {
+      base_url: document.getElementById('cfg-base-url').value,
+      api_key: document.getElementById('cfg-api-key').value,
+    };
+    const res = await fetch('/api/models', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
     const data = await res.json();
     let models = [];
     if (Array.isArray(data.data)) {

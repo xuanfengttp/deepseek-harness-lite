@@ -151,8 +151,11 @@ async fn handle_request(
         }
 
         // Fetch available models from the LLM endpoint (OpenAI-compatible /v1/models)
-        (Method::GET, "/api/models") => {
-            handle_fetch_models(state).await
+        // Accepts {base_url, api_key} from the request body so it always uses
+        // the values the user just typed in the settings panel — not the
+        // stale config loaded at startup.
+        (Method::POST, "/api/models") => {
+            handle_fetch_models(req, state).await
         }
 
         // Get config path info
@@ -468,8 +471,23 @@ fn empty_body() -> BoxBody<Bytes, Infallible> {
 /// Handle GET /api/models — fetches model list from the configured LLM endpoint.
 ///
 /// Calls `<base_url>/v1/models` (OpenAI-compatible).
-async fn handle_fetch_models(state: Arc<ServerState>) -> Response<BoxBody<Bytes, Infallible>> {
-    let base_url = state.config.model.base_url.trim_end_matches('/').to_string();
+async fn handle_fetch_models(
+    req: Request<Incoming>,
+    state: Arc<ServerState>,
+) -> Response<BoxBody<Bytes, Infallible>> {
+    // Parse {base_url, api_key} from the request body.  Fall back to the
+    // startup config if the body is missing or malformed.
+    let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+    let (base_url, api_key) = serde_json::from_slice::<serde_json::Value>(&body)
+        .ok()
+        .map(|v| {
+            let bu = v.get("base_url").and_then(|b| b.as_str()).unwrap_or("");
+            let ak = v.get("api_key").and_then(|a| a.as_str()).unwrap_or("");
+            (bu.to_string(), ak.to_string())
+        })
+        .unwrap_or_else(|| (state.config.model.base_url.clone(), state.config.model.api_key.clone()));
+
+    let base_url = base_url.trim_end_matches('/').to_string();
     let models_url = if base_url.ends_with("/v1") {
         format!("{base_url}/models")
     } else {
@@ -478,7 +496,7 @@ async fn handle_fetch_models(state: Arc<ServerState>) -> Response<BoxBody<Bytes,
 
     log::info!("Fetching models from {models_url}");
 
-    match fetch_models_blocking(&models_url, &state.config.model.api_key).await {
+    match fetch_models_blocking(&models_url, &api_key).await {
         Ok(body) => serve_json(&body),
         Err(e) => {
             log::warn!("Failed to fetch models: {e}");
