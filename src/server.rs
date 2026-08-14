@@ -372,7 +372,7 @@ async fn handle_request(
             match toml::from_str::<serde_json::Value>(&content) {
                 Ok(_) => {
                     if std::fs::write(&config_path, &content).is_ok() {
-                        serve_json(r#"{"ok":true,"message":"Config file saved. Restart to apply."}"#)
+                        serve_json(r#"{"ok":true,"message":"Config file saved. Applied on next chat request (hot-reload)."}"#)
                     } else {
                         serve_json(r#"{"ok":false,"error":"Failed to write file"}"#)
                     }

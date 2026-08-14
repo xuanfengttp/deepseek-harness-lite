@@ -1325,24 +1325,34 @@ function autoSaveToolConfig() {
 async function loadConfigFile() {
   try {
     const res = await fetch('/api/config/raw');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
     document.getElementById('config-editor-text').value = text;
     showConfigStatus('', '');
-  } catch(e) { showConfigStatus('Load failed: '+e.message, 'err'); }
+  } catch(e) { showConfigStatus('✗ 加载失败: ' + e.message, 'err'); }
 }
 
 async function saveConfigFile() {
   const text = document.getElementById('config-editor-text').value;
   try {
-    await fetch('/api/config/raw', {method:'POST',headers:{'Content-Type':'text/plain'},body:text});
-    showConfigStatus('Config file saved. Restart to apply.', 'ok');
-  } catch(e) { showConfigStatus('Save failed: '+e.message, 'err'); }
+    const res = await fetch('/api/config/raw', {method:'POST',headers:{'Content-Type':'text/plain'},body:text});
+    const data = await res.json();
+    if (data.ok) {
+      showConfigStatus('✓ 已保存，即时生效', 'ok');
+      // Refresh the model/tools form so it reflects the new config.
+      await loadConfig();
+    } else {
+      showConfigStatus('✗ 保存失败: ' + (data.error || '未知错误'), 'err');
+    }
+  } catch(e) { showConfigStatus('✗ 保存失败: ' + e.message, 'err'); }
 }
 
 function showConfigStatus(msg, type) {
   const el = document.getElementById('config-status');
+  if (!el) return;
   el.textContent = msg;
-  el.className = 'config-status ' + (type || '');
+  el.className = 'config-status ' + (type === 'ok' ? 'ok' : type === 'err' ? 'err' : '');
+  if (type === 'ok' && msg) setTimeout(() => { if (el.textContent === msg) { el.textContent = ''; el.className = 'config-status'; } }, 3000);
 }
 
 // ─── Model auto-fetch ──────────────────────────────────────────────────
