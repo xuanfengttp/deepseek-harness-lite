@@ -162,11 +162,17 @@ async fn async_main() -> ExitCode {
     }
 
     // Determine active skill: CLI `--skill <name>` overrides config `skill.active`.
+    // If neither is set, use the built-in default (general-purpose assistant)
+    // instead of auto-selecting the first skill file (which may be platform-specific).
     let cli_skill_name: Option<String> = parse_cli_skill();
     let skill_name = cli_skill_name.as_deref().or(config.skill.active.as_deref());
-    let active_skill = skill::select_by_name(&skills, skill_name)
-        .cloned()
-        .unwrap_or_else(default_skill);
+    let active_skill = if skill_name.is_some() {
+        skill::select_by_name(&skills, skill_name)
+            .cloned()
+            .unwrap_or_else(default_skill)
+    } else {
+        default_skill()
+    };
     log::info!("Active skill: {} (mode: {:?}, think: {})", active_skill.name, active_skill.mode, active_skill.think);
 
     // Create session manager (multi-session + offloading + double-page cache).
@@ -435,7 +441,7 @@ fn ensure_skills_dir(dir: &str) {
     // Write default skill files.
     let health_check = r#"---
 name: health-check
-description: Run a deterministic health check SOP on the device — CPU, memory, interface, service status
+description: Run a deterministic health check SOP on the device — CPU, memory, interface, service status (auto-detects Windows/Linux)
 whenToUse: For routine inspection or when asked to check device health
 mode: workflow
 think: false
@@ -445,19 +451,19 @@ steps:
   - id: cpu_mem
     tool: shell
     args:
-      command: "top -bn1 | head -5"
+      command: "uname -a 2>/dev/null || ver"
   - id: disk_usage
     tool: shell
     args:
-      command: "df -h /"
+      command: "df -h / 2>/dev/null || wmic logicaldisk get caption,freespace,size"
   - id: interface_status
     tool: shell
     args:
-      command: "ip link show"
+      command: "ip link show 2>/dev/null || ipconfig"
   - id: service_status
     tool: shell
     args:
-      command: "systemctl is-active sshd"
+      command: "systemctl is-active sshd 2>/dev/null || sc query sshd 2>/dev/null || echo service-check-skipped"
   - id: summarize
     llm_judge: "Summarize the health check results. Flag any anomalies. Return a concise status report."
     input: "{{steps.cpu_mem.result}}\n{{steps.disk_usage.result}}\n{{steps.interface_status.result}}\n{{steps.service_status.result}}"
@@ -466,6 +472,7 @@ steps:
 # Health Check SOP
 
 This skill runs a fixed sequence of diagnostic commands and summarizes the results.
+Commands auto-detect the platform: Linux commands first, Windows fallbacks if they fail.
 No exploration needed — the steps are deterministic.
 "#;
 

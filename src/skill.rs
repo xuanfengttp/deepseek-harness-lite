@@ -154,9 +154,11 @@ pub fn select_by_name<'a>(skills: &'a [Skill], name: Option<&str>) -> Option<&'a
             log::info!("Selected skill by name: {name}");
             return Some(skill);
         }
-        log::warn!("Skill `{name}` not found; falling back to first skill");
+        log::warn!("Skill `{name}` not found; using default skill");
+        return None;  // Don't auto-select first — it may be platform-specific.
     }
-    skills.first()
+    // No name specified — return None so the caller uses the default skill.
+    None
 }
 
 /// Parse a single skill file (frontmatter + Markdown body).
