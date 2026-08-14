@@ -152,14 +152,37 @@ body {
 .sidebar {
   width: 240px; flex-shrink: 0; background: var(--bg-sidebar);
   border-right: 1px solid var(--border-l1); display: flex; flex-direction: column;
+  transition: width 150ms ease;
 }
+.sidebar.collapsed { width: 56px; }
+.sidebar.collapsed .wide-only { display: none !important; }
+.sidebar.collapsed .sidebar-header { padding: 0; justify-content: center; }
+.sidebar.collapsed .btn-new { margin: 4px; padding: 0; width: 36px; height: 36px; justify-content: center; }
+.sidebar.collapsed .btn-settings { justify-content: center; padding: 0; width: 36px; height: 36px; }
+.sidebar.collapsed .session-item { padding: 8px 4px; }
+.sidebar.collapsed .session-item .title, .sidebar.collapsed .session-item .meta { display: none; }
+.sidebar.collapsed .session-item .session-delete { display: none; }
+.sidebar.collapsed .session-list { padding: 4px; }
 .sidebar-header {
-  height: 60px; padding: 0 16px; display: flex; align-items: center; gap: 8px;
-  font-size: 15px; font-weight: 600; color: var(--label-primary);
+  height: 54px; padding: 0 12px; display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600; color: var(--label-primary);
 }
-.sidebar-header .logo { font-size: 18px; }
+.sidebar-header .brand { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .sidebar-header .logo-svg { color: var(--accent); flex-shrink: 0; }
 .sidebar-header .ver { font-size: 11px; font-weight: 400; color: var(--label-caption); }
+.toggle-btn {
+  width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent;
+  color: var(--label-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: background var(--dur) var(--ease);
+}
+.toggle-btn:hover { background: var(--bg-hover); }
+.search-box { padding: 0 8px 4px; }
+.search-box input {
+  width: 100%; background: var(--bg-platform); color: var(--label-primary);
+  border: 1px solid var(--border-l2); border-radius: 8px; padding: 6px 10px;
+  font-size: 12px; font-family: var(--font); outline: none;
+}
+.search-box input:focus { border-color: var(--accent); }
 .session-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
 .session-item {
   padding: 10px 12px; border-radius: 12px; cursor: pointer; margin-bottom: 2px;
@@ -170,8 +193,8 @@ body {
 .session-item .title { font-size: 13px; color: var(--label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .session-item .meta { font-size: 11px; color: var(--label-tertiary); margin-top: 2px; }
 .btn-new {
-  margin: 8px; height: 38px; border: 1px solid var(--border-l2); border-radius: 12px;
-  background: var(--bg-layer-1); color: var(--label-primary); font-size: 14px; font-weight: 500;
+  margin: 4px 8px 8px; height: 36px; border: 1px solid var(--border-l2); border-radius: 10px;
+  background: var(--bg-layer-1); color: var(--label-primary); font-size: 13px; font-weight: 500;
   cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
   transition: background var(--dur) var(--ease);
 }
@@ -390,14 +413,6 @@ body {
 .config-status.ok { color: var(--green); }
 .config-status.err { color: var(--red); }
 
-/* ─── Sidebar toggle ────────────────────────────────────────────────── */
-.app.sidebar-hidden .sidebar { width: 0; overflow: hidden; border-right: none; flex-shrink: 0; }
-.sidebar-toggle {
-  width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent;
-  color: var(--label-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
-}
-.sidebar-toggle:hover { background: var(--bg-hover); color: var(--label-primary); }
 .header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 
 /* ─── Session delete ────────────────────────────────────────────────── */
@@ -422,11 +437,13 @@ body {
 .view-tab.active { background: var(--bg-base); color: var(--label-primary); box-shadow: var(--shadow-l1); }
 
 /* ─── Model selector ────────────────────────────────────────────────── */
-.model-bar { max-width: 748px; margin: 0 auto; padding: 0 16px 4px; }
 .model-select {
   background: var(--bg-platform); color: var(--label-secondary); border: 1px solid var(--border-l2);
-  border-radius: 8px; padding: 3px 8px; font-size: 12px; font-family: var(--font); cursor: pointer; outline: none;
+  border-radius: 8px; padding: 4px 8px; font-size: 12px; font-family: var(--font); cursor: pointer; outline: none;
+  max-width: 130px;
 }
+.input-controls { display: flex; gap: 8px; align-items: center; flex-shrink: 0; transform: translateY(-2px); }
+.context-ring { color: var(--label-tertiary); display: flex; align-items: center; cursor: default; }
 
 /* ─── Stats bar ─────────────────────────────────────────────────────── */
 .stats-bar { max-width: 748px; margin: 0 auto; padding: 4px 16px 8px; font-size: 11px; color: var(--label-caption); display: flex; gap: 8px; }
@@ -439,14 +456,23 @@ body {
 <html data-theme="system">
 <div class="app">
   <!-- Sidebar -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <svg class="logo-svg" width="22" height="22" viewBox="0 0 50 50" fill="none"><path d="M48.8354 10.0479C48.3232 9.79199 48.1025 10.2798 47.8032 10.5278C47.7007 10.6079 47.6143 10.7119 47.5273 10.8076C46.7793 11.624 45.9048 12.1597 44.7622 12.0957C43.0923 12 41.666 12.5356 40.4058 13.8398C40.1377 12.2319 39.2476 11.272 37.8926 10.6558C37.1836 10.3359 36.4668 10.0156 35.9702 9.31982C35.6235 8.82373 35.5293 8.27197 35.356 7.72754C35.2456 7.3999 35.1353 7.06396 34.7651 7.00781C34.3633 6.94385 34.2056 7.2876 34.0479 7.57568C33.418 8.75195 33.1733 10.0479 33.1973 11.3599C33.2524 14.312 34.4736 16.6641 36.8999 18.3359C37.1758 18.5278 37.2466 18.7197 37.1597 19C36.9946 19.5757 36.7974 20.1357 36.624 20.7119C36.5137 21.0801 36.3486 21.1597 35.9624 21C34.6309 20.4321 33.481 19.5918 32.4644 18.5757C30.7393 16.8721 29.1792 14.9917 27.2334 13.52C26.7764 13.1758 26.3193 12.856 25.8467 12.5518C23.8618 10.584 26.1069 8.96777 26.627 8.77588C27.1704 8.57568 26.8159 7.8877 25.0591 7.896C23.3022 7.90381 21.6953 8.50391 19.647 9.30371C19.3477 9.42383 19.0322 9.51172 18.7095 9.58398C16.8501 9.22363 14.9199 9.14355 12.9033 9.37598C9.10596 9.80762 6.07275 11.6396 3.84326 14.7681C1.16455 18.5278 0.53418 22.7998 1.30664 27.2559C2.11768 31.9521 4.46582 35.8398 8.07373 38.8799C11.8159 42.0322 16.1255 43.5762 21.041 43.2803C24.0269 43.104 27.3516 42.6963 31.1016 39.4561C32.0469 39.936 33.0396 40.1279 34.686 40.272C35.9546 40.3921 37.1758 40.208 38.1211 40.0078C39.6021 39.688 39.4995 38.2881 38.9639 38.0322C34.623 35.9678 35.5762 36.8081 34.71 36.1279C36.9155 33.4639 40.2402 30.6958 41.54 21.728C41.6426 21.0161 41.5557 20.5679 41.54 19.9917C41.5322 19.6396 41.6108 19.5039 42.0049 19.4639C43.0923 19.3359 44.1479 19.0317 45.1167 18.4878C47.9292 16.9199 49.064 14.3438 49.3315 11.2559C49.3711 10.7837 49.3237 10.2959 48.8354 10.0479ZM24.3262 37.8398C20.1196 34.4639 18.0791 33.3521 17.2358 33.3999C16.4482 33.4482 16.5898 34.3682 16.7632 34.9678C16.9443 35.5601 17.1812 35.9683 17.5117 36.4878C17.7402 36.832 17.8979 37.3442 17.2832 37.728C15.9282 38.584 13.5728 37.4399 13.4624 37.3838C10.7207 35.7358 8.42822 33.5601 6.81348 30.584C5.25342 27.7197 4.34766 24.6479 4.19775 21.3677C4.1582 20.5757 4.38672 20.2959 5.15869 20.1519C6.17529 19.96 7.22314 19.9199 8.23926 20.0718C12.5327 20.7119 16.1885 22.6719 19.2529 25.7759C21.002 27.5439 22.3252 29.6558 23.6885 31.7202C25.1377 33.9121 26.6978 36 28.6831 37.7119C29.3843 38.312 29.9434 38.7681 30.479 39.104C28.8643 39.2881 26.1699 39.3281 24.3262 37.8398ZM26.3433 24.6001C26.3433 24.248 26.6191 23.9678 26.9658 23.9678C27.0444 23.9678 27.1152 23.9839 27.1782 24.0078C27.2651 24.04 27.3438 24.0879 27.4067 24.1602C27.5171 24.272 27.5801 24.4321 27.5801 24.6001C27.5801 24.9521 27.3042 25.2319 26.9575 25.2319C26.6108 25.2319 26.3433 24.9521 26.3433 24.6001ZM32.6064 27.8799C32.2046 28.0479 31.8027 28.1919 31.4165 28.208C30.8179 28.2397 30.1641 27.9922 29.8096 27.688C29.2583 27.2158 28.8643 26.9521 28.6987 26.1279C28.6279 25.7759 28.6675 25.2319 28.7305 24.9199C28.8721 24.248 28.7144 23.8159 28.2495 23.4238C27.8716 23.104 27.3911 23.0161 26.8633 23.0161C26.666 23.0161 26.4849 22.9277 26.3511 22.856C26.1304 22.7441 25.9492 22.4639 26.1226 22.1201C26.1777 22.0078 26.4458 21.7358 26.5088 21.688C27.2256 21.272 28.0527 21.4077 28.8169 21.7197C29.5259 22.0161 30.0615 22.5601 30.834 23.3281C31.6216 24.2559 31.7632 24.5117 32.2124 25.208C32.5669 25.752 32.8901 26.312 33.1104 26.9521C33.2446 27.3521 33.0713 27.6802 32.6064 27.8799Z" fill="currentColor" fill-rule="nonzero"/></svg>
-      <span>DeepSeek Harness Lite</span>
-      <span class="ver">v0.1</span>
+      <div class="brand wide-only">
+        <svg class="logo-svg" width="20" height="20" viewBox="0 0 50 50" fill="none"><path d="M48.8354 10.0479C48.3232 9.79199 48.1025 10.2798 47.8032 10.5278C47.7007 10.6079 47.6143 10.7119 47.5273 10.8076C46.7793 11.624 45.9048 12.1597 44.7622 12.0957C43.0923 12 41.666 12.5356 40.4058 13.8398C40.1377 12.2319 39.2476 11.272 37.8926 10.6558C37.1836 10.3359 36.4668 10.0156 35.9702 9.31982C35.6235 8.82373 35.5293 8.27197 35.356 7.72754C35.2456 7.3999 35.1353 7.06396 34.7651 7.00781C34.3633 6.94385 34.2056 7.2876 34.0479 7.57568C33.418 8.75195 33.1733 10.0479 33.1973 11.3599C33.2524 14.312 34.4736 16.6641 36.8999 18.3359C37.1758 18.5278 37.2466 18.7197 37.1597 19C36.9946 19.5757 36.7974 20.1357 36.624 20.7119C36.5137 21.0801 36.3486 21.1597 35.9624 21C34.6309 20.4321 33.481 19.5918 32.4644 18.5757C30.7393 16.8721 29.1792 14.9917 27.2334 13.52C26.7764 13.1758 26.3193 12.856 25.8467 12.5518C23.8618 10.584 26.1069 8.96777 26.627 8.77588C27.1704 8.57568 26.8159 7.8877 25.0591 7.896C23.3022 7.90381 21.6953 8.50391 19.647 9.30371C19.3477 9.42383 19.0322 9.51172 18.7095 9.58398C16.8501 9.22363 14.9199 9.14355 12.9033 9.37598C9.10596 9.80762 6.07275 11.6396 3.84326 14.7681C1.16455 18.5278 0.53418 22.7998 1.30664 27.2559C2.11768 31.9521 4.46582 35.8398 8.07373 38.8799C11.8159 42.0322 16.1255 43.5762 21.041 43.2803C24.0269 43.104 27.3516 42.6963 31.1016 39.4561C32.0469 39.936 33.0396 40.1279 34.686 40.272C35.9546 40.3921 37.1758 40.208 38.1211 40.0078C39.6021 39.688 39.4995 38.2881 38.9639 38.0322C34.623 35.9678 35.5762 36.8081 34.71 36.1279C36.9155 33.4639 40.2402 30.6958 41.54 21.728C41.6426 21.0161 41.5557 20.5679 41.54 19.9917C41.5322 19.6396 41.6108 19.5039 42.0049 19.4639C43.0923 19.3359 44.1479 19.0317 45.1167 18.4878C47.9292 16.9199 49.064 14.3438 49.3315 11.2559C49.3711 10.7837 49.3237 10.2959 48.8354 10.0479Z" fill="currentColor" fill-rule="nonzero"/></svg>
+        <span class="wide-only">DeepSeek Harness Lite</span>
+        <span class="ver wide-only">v0.1</span>
+      </div>
+      <button class="toggle-btn" onclick="toggleSidebar()" aria-label="toggle sidebar" title="Toggle sidebar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden><path d="M9.5 3.5L5 8L9.5 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <button class="btn-new" onclick="createSession()" id="btn-new-session">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><path d="M8 3.5V12.5M3.5 8H12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span class="wide-only" data-i18n="new_session">新建会话</span>
+    </button>
+    <div class="search-box wide-only">
+      <input type="text" id="session-search" data-i18n-placeholder="search_sessions" placeholder="搜索会话..." oninput="filterSessions()">
     </div>
     <div class="session-list" id="session-list"></div>
-    <button class="btn-new" onclick="createSession()" id="btn-new-session">＋ <span data-i18n="new_session">新建会话</span></button>
     <div class="sidebar-footer">
       <button class="btn-settings" onclick="openSettings()">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><g><path d="M14.0861 5.51366C13.8717 5.0575 13.588 4.58542 13.2889 4.18108C13.208 4.07172 13.1596 4.04373 13.0243 4.03054C12.4277 3.97255 11.8245 4.05527 11.2269 3.9972C10.7224 3.94816 10.3133 3.71661 10.0115 3.30919C9.66986 2.84777 9.43973 2.31343 9.09824 1.85234C9.01771 1.74365 8.96805 1.71589 8.83354 1.70282C8.29432 1.65044 7.70402 1.65061 7.16656 1.70282C7.03205 1.71589 6.98239 1.74365 6.90186 1.85234C6.56067 2.31303 6.33025 2.84774 5.98855 3.30919C5.68681 3.71661 5.27774 3.94816 4.77317 3.9972C4.17564 4.05527 3.57239 3.97255 2.97585 4.03054C2.84046 4.04373 2.79208 4.07172 2.71115 4.18108C2.41212 4.58542 2.12835 5.0575 1.91403 5.51366C1.85299 5.64359 1.85286 5.7018 1.91403 5.8319C2.14865 6.33077 2.49748 6.76892 2.73237 7.26854C2.9594 7.7515 2.96041 8.24717 2.73338 8.73044C2.49837 9.23061 2.14891 9.66837 1.91403 10.1681C1.85291 10.2982 1.85299 10.3564 1.91403 10.4863C2.12856 10.9429 2.41185 11.4142 2.71115 11.8189C2.79208 11.9283 2.84046 11.9563 2.97585 11.9694C3.57239 12.0274 4.17564 11.9447 4.77317 12.0028C5.27774 12.0518 5.68681 12.2834 5.98855 12.6908C6.33024 13.1522 6.56037 13.6866 6.90186 14.1476C6.98239 14.2563 7.03205 14.2841 7.16656 14.2972C7.70402 14.3494 8.29432 14.3495 8.83354 14.2972C8.96805 14.2841 9.01771 14.2563 9.09824 14.1476C9.43944 13.687 9.66985 13.1522 10.0115 12.6908C10.3133 12.2834 10.7224 12.0518 11.2269 12.0028C11.8244 11.9447 12.4271 12.0275 13.0243 11.9694C13.1596 11.9563 13.208 11.9283 13.2889 11.8189C13.5891 11.4131 13.872 10.942 14.0861 10.4863C14.1471 10.3564 14.1472 10.2982 14.0861 10.1681C13.8513 9.66861 13.5017 9.23061 13.2667 8.73044C13.0397 8.24717 13.0407 7.7515 13.2677 7.26854C13.5026 6.7689 13.8513 6.33106 14.0861 5.8319C14.1472 5.7018 14.1471 5.64359 14.0861 5.51366ZM15.3035 6.40373C15.0685 6.90359 14.7188 7.34119 14.4841 7.84037C14.4231 7.97025 14.423 8.02855 14.4841 8.15861C14.7189 8.65833 15.0685 9.09611 15.3035 9.59626C15.5308 10.0801 15.5308 10.5744 15.3035 11.0582C15.052 11.5933 14.7225 12.1426 14.37 12.6191C14.0685 13.0272 13.6822 13.3248 13.1919 13.3736C12.5463 13.4376 11.8905 13.3615 11.2452 13.4254C10.7447 13.4744 10.3724 13.6972 10.0618 14.1059C9.72928 14.5448 9.48526 15.0788 9.15532 15.5191C9.07379 15.6283 9.02613 15.6548 8.89068 15.6679C8.35146 15.7201 7.71121 15.721 7.17482 15.6679C7.03937 15.6548 6.99171 15.6283 6.91018 15.5191C6.57842 15.0786 6.33422 14.5447 6.0037 14.1059C5.69312 13.6972 5.32083 13.4744 4.82031 13.4254C4.17501 13.3615 3.51924 13.4376 2.8736 13.3736C2.38327 13.3248 1.99699 13.0272 1.69549 12.6191C1.34297 12.1426 1.01349 11.5933 0.762024 11.0582C0.534711 10.5744 0.534711 10.0801 0.762024 9.59626C0.997023 9.09641 1.34669 8.65881 1.58136 8.15861C1.64248 8.02873 1.64258 7.97045 1.58136 7.84037C1.34655 7.34065 0.997023 6.90287 0.762024 6.40373C0.534642 5.91982 0.534642 5.42553 0.762024 4.94171C1.01356 4.40666 1.34301 3.8573 1.69549 3.38079C1.99704 2.97267 2.3833 2.67506 2.8736 2.62625C3.51924 2.56223 4.17501 2.63839 4.82031 2.57446C5.32083 2.52549 5.69312 2.30266 6.0037 1.89397C6.33621 1.45508 6.58023 0.92114 6.91018 0.48075C6.99171 0.37156 7.03937 0.34506 7.17482 0.33195C7.71404 0.27977 8.35429 0.27886 8.89068 0.33195C9.02613 0.34506 9.07379 0.37156 9.15532 0.48075C9.48708 0.92124 9.73128 1.45511 10.0618 1.89397C10.3724 2.30266 10.7447 2.52549 11.2452 2.57446C11.8905 2.63839 12.5463 2.56223 13.1919 2.62625C13.6822 2.67506 14.0685 2.97267 14.37 3.38079C14.7225 3.8573 15.052 4.40666 15.3035 4.94171C15.5308 5.42553 15.5308 5.91982 15.3035 6.40373Z" fill="currentColor"/><path d="M9.13764 7.99999C9.13764 7.3715 8.62855 6.8624 8.00005 6.8624C7.37155 6.8624 6.86246 7.3715 6.86246 7.99999C6.86246 8.62849 7.37155 9.13759 8.00005 9.13759C8.62855 9.13759 9.13764 8.62849 9.13764 7.99999ZM10.4834 7.99999C10.4834 9.37126 9.37132 10.4833 8.00005 10.4833C6.62878 10.4833 5.51674 9.37126 5.51674 7.99999C5.51674 6.62873 6.62878 5.51669 8.00005 5.51669C9.37132 5.51669 10.4834 6.62873 10.4834 7.99999Z" fill="currentColor"/></g></svg>
@@ -459,7 +485,6 @@ body {
   <div class="main">
     <div class="header">
       <div class="header-left">
-        <button class="sidebar-toggle" onclick="toggleSidebar()" id="sidebar-toggle" aria-label="toggle sidebar" title="Toggle sidebar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden><path d="M2 3.5H14V5H2V3.5ZM2 7.25H14V8.75H2V7.25ZM2 11H14V12.5H2V11Z" fill="currentColor"/></svg></button>
         <div class="header-title"><span data-i18n="skill">技能</span>: <span class="skill-name" id="active-skill-name">—</span></div>
       </div>
       <div class="header-controls">
@@ -480,12 +505,19 @@ body {
       </div>
     </div>
     <div class="input-area">
-      <div class="model-bar">
-        <select id="model-preset" class="model-select" title="Model preset"></select>
-      </div>
       <div class="input-bar">
         <textarea id="input" data-i18n-placeholder="input_placeholder" placeholder="发送消息..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-        <button id="send-btn" onclick="sendMessage()" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>
+        <div class="input-controls">
+          <select id="model-preset" class="model-select" title="Model preset"></select>
+          <div class="context-ring" id="context-ring" title="上下文占用">
+            <svg viewBox="0 0 14 14" width="14" height="14">
+              <circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="2" opacity="0.2"/>
+              <circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--info-fill)" stroke-width="2"
+                stroke-dasharray="0 34.56" stroke-linecap="round" transform="rotate(-90 7 7)" id="ring-fill"/>
+            </svg>
+          </div>
+          <button id="send-btn" onclick="sendMessage()" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>
+        </div>
       </div>
       <div class="stats-bar" id="stats-bar"><span id="stats-text"></span></div>
     </div>
@@ -722,7 +754,7 @@ async function createSession() {
     const res = await fetch('/api/sessions/create', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New session'})});
     const data = await res.json();
     // Clear chat area and show hero
-    document.querySelector('.chat-inner').innerHTML = '<div class="hero" id="hero"><svg width="64" height="64" viewBox="0 0 50 50" fill="none" style="margin-bottom:16px;opacity:0.4"><path d="M48.8354 10.0479C48.3232 9.79199 48.1025 10.2798 47.8032 10.5278C47.7007 10.6079 47.6143 10.7119 47.5273 10.8076C46.7793 11.624 45.9048 12.1597 44.7622 12.0957C43.0923 12 41.666 12.5356 40.4058 13.8398C40.1377 12.2319 39.2476 11.272 37.8926 10.6558C37.1836 10.3359 36.4668 10.0156 35.9702 9.31982C35.6235 8.82373 35.5293 8.27197 35.356 7.72754C35.2456 7.3999 35.1353 7.06396 34.7651 7.00781C34.3633 6.94385 34.2056 7.2876 34.0479 7.57568C33.418 8.75195 33.1733 10.0479 33.1973 11.3599C33.2524 14.312 34.4736 16.6641 36.8999 18.3359C37.1758 18.5278 37.2466 18.7197 37.1597 19C36.9946 19.5757 36.7974 20.1357 36.624 20.7119C36.5137 21.0801 36.3486 21.1597 35.9624 21C34.6309 20.4321 33.481 19.5918 32.4644 18.5757C30.7393 16.8721 29.1792 14.9917 27.2334 13.52C26.7764 13.1758 26.3193 12.856 25.8467 12.5518C23.8618 10.584 26.1069 8.96777 26.627 8.77588C27.1704 8.57568 26.8159 7.8877 25.0591 7.896C23.3022 7.90381 21.6953 8.50391 19.647 9.30371C19.3477 9.42383 19.0322 9.51172 18.7095 9.58398C16.8501 9.22363 14.9199 9.14355 12.9033 9.37598C9.10596 9.80762 6.07275 11.6396 3.84326 14.7681C1.16455 18.5278 0.53418 22.7998 1.30664 27.2559C2.11768 31.9521 4.46582 35.8398 8.07373 38.8799C11.8159 42.0322 16.1255 43.5762 21.041 43.2803C24.0269 43.104 27.3516 42.6963 31.1016 39.4561C32.0469 39.936 33.0396 40.1279 34.686 40.272C35.9546 40.3921 37.1758 40.208 38.1211 40.0078C39.6021 39.688 39.4995 38.2881 38.9639 38.0322C34.623 35.9678 35.5762 36.8081 34.71 36.1279C36.9155 33.4639 40.2402 30.6958 41.54 21.728C41.6426 21.0161 41.5557 20.5679 41.54 19.9917C41.5322 19.6396 41.6108 19.5039 42.0049 19.4639C43.0923 19.3359 44.1479 19.0317 45.1167 18.4878C47.9292 16.9199 49.064 14.3438 49.3315 11.2559C49.3711 10.7837 49.3237 10.2959 48.8354 10.0479Z" fill="currentColor" fill-rule="nonzero"/></svg><h2 data-i18n="ready">就绪</h2><p data-i18n="send_to_start">发送消息开始对话。</p></div>';
+    document.querySelector('.chat-inner').innerHTML = heroTemplate;
     applyI18n();
     currentAssistantEl = null;
     currentAssistantText = '';
@@ -733,16 +765,46 @@ async function createSession() {
 async function switchSession(id) {
   try {
     await fetch('/api/sessions/switch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
-    // Clear chat area and show hero for the switched session
-    document.querySelector('.chat-inner').innerHTML = '<div class="hero" id="hero"><svg width="64" height="64" viewBox="0 0 50 50" fill="none" style="margin-bottom:16px;opacity:0.4"><path d="M48.8354 10.0479C48.3232 9.79199 48.1025 10.2798 47.8032 10.5278C47.7007 10.6079 47.6143 10.7119 47.5273 10.8076C46.7793 11.624 45.9048 12.1597 44.7622 12.0957C43.0923 12 41.666 12.5356 40.4058 13.8398C40.1377 12.2319 39.2476 11.272 37.8926 10.6558C37.1836 10.3359 36.4668 10.0156 35.9702 9.31982C35.6235 8.82373 35.5293 8.27197 35.356 7.72754C35.2456 7.3999 35.1353 7.06396 34.7651 7.00781C34.3633 6.94385 34.2056 7.2876 34.0479 7.57568C33.418 8.75195 33.1733 10.0479 33.1973 11.3599C33.2524 14.312 34.4736 16.6641 36.8999 18.3359C37.1758 18.5278 37.2466 18.7197 37.1597 19C36.9946 19.5757 36.7974 20.1357 36.624 20.7119C36.5137 21.0801 36.3486 21.1597 35.9624 21C34.6309 20.4321 33.481 19.5918 32.4644 18.5757C30.7393 16.8721 29.1792 14.9917 27.2334 13.52C26.7764 13.1758 26.3193 12.856 25.8467 12.5518C23.8618 10.584 26.1069 8.96777 26.627 8.77588C27.1704 8.57568 26.8159 7.8877 25.0591 7.896C23.3022 7.90381 21.6953 8.50391 19.647 9.30371C19.3477 9.42383 19.0322 9.51172 18.7095 9.58398C16.8501 9.22363 14.9199 9.14355 12.9033 9.37598C9.10596 9.80762 6.07275 11.6396 3.84326 14.7681C1.16455 18.5278 0.53418 22.7998 1.30664 27.2559C2.11768 31.9521 4.46582 35.8398 8.07373 38.8799C11.8159 42.0322 16.1255 43.5762 21.041 43.2803C24.0269 43.104 27.3516 42.6963 31.1016 39.4561C32.0469 39.936 33.0396 40.1279 34.686 40.272C35.9546 40.3921 37.1758 40.208 38.1211 40.0078C39.6021 39.688 39.4995 38.2881 38.9639 38.0322C34.623 35.9678 35.5762 36.8081 34.71 36.1279C36.9155 33.4639 40.2402 30.6958 41.54 21.728C41.6426 21.0161 41.5557 20.5679 41.54 19.9917C41.5322 19.6396 41.6108 19.5039 42.0049 19.4639C43.0923 19.3359 44.1479 19.0317 45.1167 18.4878C47.9292 16.9199 49.064 14.3438 49.3315 11.2559C49.3711 10.7837 49.3237 10.2959 48.8354 10.0479Z" fill="currentColor" fill-rule="nonzero"/></svg><h2 data-i18n="ready">就绪</h2><p data-i18n="send_to_start">发送消息开始对话。</p></div>';
-    applyI18n();
+    // Fetch and render the session's message history
+    const histRes = await fetch('/api/sessions/history?id=' + encodeURIComponent(id));
+    const histData = await histRes.json();
+    // Clear chat area
+    document.querySelector('.chat-inner').innerHTML = '';
     currentAssistantEl = null;
     currentAssistantText = '';
     resetSessionStats();
+    if (histData.messages && histData.messages.length > 0) {
+      histData.messages.forEach(msg => {
+        if (msg.role === 'user') addMessage('user', msg.content);
+        else if (msg.role === 'assistant' && msg.content) addMessage('assistant', msg.content);
+      });
+    } else {
+      document.querySelector('.chat-inner').innerHTML = heroTemplate;
+      applyI18n();
+    }
     await loadSessions();
   } catch(e) { console.error('switchSession', e); }
 }
 
+// Load active session history on page load (so user sees conversation after restart)
+async function loadActiveHistory() {
+  try {
+    const res = await fetch('/api/sessions');
+    const sessions = await res.json();
+    const active = sessions.find(s => s.is_active);
+    if (active && active.event_count > 0) {
+      const histRes = await fetch('/api/sessions/history?id=' + encodeURIComponent(active.id));
+      const histData = await histRes.json();
+      if (histData.messages && histData.messages.length > 0) {
+        document.querySelector('.chat-inner').innerHTML = '';
+        histData.messages.forEach(msg => {
+          if (msg.role === 'user') addMessage('user', msg.content);
+          else if (msg.role === 'assistant' && msg.content) addMessage('assistant', msg.content);
+        });
+      }
+    }
+  } catch(e) { console.error('loadActiveHistory', e); }
+}
 async function deleteSession(id) {
   if (!confirm(t('confirm_delete') || 'Delete this session?')) return;
   // Determine if the deleted session was the active one.
@@ -929,7 +991,16 @@ function stopChat() {
 
 // ─── Sidebar / view / model / stats helpers ────────────────────────────
 function toggleSidebar() {
-  document.querySelector('.app').classList.toggle('sidebar-hidden');
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('collapsed');
+  localStorage.setItem('dsh-sidebar', sb.classList.contains('collapsed') ? 'collapsed' : 'expanded');
+}
+function filterSessions() {
+  const q = (document.getElementById('session-search')?.value || '').toLowerCase();
+  document.querySelectorAll('.session-item').forEach(el => {
+    const title = el.querySelector('.title')?.textContent.toLowerCase() || '';
+    el.style.display = title.includes(q) ? '' : 'none';
+  });
 }
 function setView(view) {
   showTrajectory = (view === 'trajectory');
@@ -957,6 +1028,7 @@ async function loadModelPresets() {
 function resetSessionStats() {
   sessionStats = { turns: 0, steps: 0, inputTokens: 0, outputTokens: 0, startTime: 0 };
   updateStatsBar();
+  updateContextRing(0, 8192);
 }
 function updateStatsBar() {
   const bar = document.getElementById('stats-bar');
@@ -979,6 +1051,15 @@ function formatTokens(n) {
   if (n < 1000) return String(n);
   if (n < 1000000) return (n / 1000).toFixed(1) + 'K';
   return (n / 1000000).toFixed(1) + 'M';
+}
+function updateContextRing(used, total) {
+  const ring = document.getElementById('ring-fill');
+  if (!ring) return;
+  const circumference = 2 * Math.PI * 5.5;
+  const pct = Math.min(100, total > 0 ? Math.round(used / total * 100) : 0);
+  const dash = circumference * pct / 100;
+  ring.setAttribute('stroke-dasharray', dash + ' ' + circumference);
+  ring.setAttribute('stroke', pct > 80 ? 'var(--red)' : 'var(--info-fill)');
 }
 function toggleStats(el) {
   el.classList.toggle('on');
@@ -1022,6 +1103,7 @@ function handleEvent(event, showTraj) {
       sessionStats.inputTokens += event.prompt_tokens || 0;
       sessionStats.outputTokens += event.completion_tokens || 0;
       updateStatsBar();
+      updateContextRing(sessionStats.inputTokens + sessionStats.outputTokens, 8192);
       break;
     case 'error': addToolEvent('Error', event.message, true, true); break;
   }
@@ -1265,7 +1347,8 @@ async function chooseConfigPath() {
 const I18N = {
   zh: {
     new_session:'新建会话', settings:'设置', settings_title:'设置',
-    skill:'技能', trajectory:'轨迹', ready:'就绪', send_to_start:'发送消息开始对话。',
+    search_sessions:'搜索会话...',
+    skill:'技能', trajectory:'轨迹', chat:'对话', ready:'就绪', send_to_start:'发送消息开始对话。',
     input_placeholder:'发送消息...',
     appearance:'外观', model_section:'模型', tools:'工具', config_file:'配置文件', language:'语言',
     theme:'主题', theme_hint:'选择 dsh-lite 的外观。',
@@ -1295,7 +1378,8 @@ const I18N = {
   },
   en: {
     new_session:'New Session', settings:'Settings', settings_title:'Settings',
-    skill:'Skill', trajectory:'Trajectory', ready:'Ready', send_to_start:'Send a message to start a conversation.',
+    search_sessions:'Search sessions...',
+    skill:'Skill', trajectory:'Trajectory', chat:'Chat', ready:'Ready', send_to_start:'Send a message to start a conversation.',
     input_placeholder:'Send a message...',
     appearance:'Appearance', model_section:'Model', tools:'Tools', config_file:'Config File', language:'Language',
     theme:'Theme', theme_hint:'Choose how dsh-lite looks to you.',
@@ -1365,12 +1449,17 @@ function injectIcons() {
 initTheme();
 initLanguage();
 injectIcons();
+// Restore sidebar state
+if (localStorage.getItem('dsh-sidebar') === 'collapsed') {
+  document.getElementById('sidebar').classList.add('collapsed');
+}
 // Capture the hero markup (with i18n applied) for reuse by deleteSession.
 const _heroEl = document.getElementById('hero');
 heroTemplate = _heroEl ? _heroEl.outerHTML : '<div class="hero" id="hero"><h2 data-i18n="ready">就绪</h2><p data-i18n="send_to_start">发送消息开始对话。</p></div>';
 loadSessions();
 loadSkills();
 loadModelPresets();
+loadActiveHistory();
 updateStatsBar();
 </script>
 </body>

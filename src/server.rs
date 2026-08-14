@@ -192,6 +192,40 @@ async fn handle_request(
             serve_json(r#"{"ok":true}"#)
         }
 
+        // Get session history (messages for display)
+        (Method::GET, "/api/sessions/history") => {
+            // Parse id from query string
+            let uri = req.uri().to_string();
+            let id = uri.split("id=")
+                .nth(1)
+                .and_then(|s| s.split('&').next())
+                .unwrap_or("");
+            if id.is_empty() {
+                return Ok(serve_json(r#"{"messages":[]}"#));
+            }
+            let mut mgr = state.session_mgr.lock().await;
+            // Ensure the session is loaded (switch loads from flash if needed)
+            if !mgr.is_cached(id) {
+                mgr.switch(id);
+            }
+            let messages: Vec<serde_json::Value> = mgr.active_messages()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| match m {
+                    crate::types::Message::User { content } => serde_json::json!({
+                        "role": "user", "content": content
+                    }),
+                    crate::types::Message::Assistant { content, tool_calls } => serde_json::json!({
+                        "role": "assistant", "content": content, "tool_calls": tool_calls.len()
+                    }),
+                    crate::types::Message::Tool { call_id, content, .. } => serde_json::json!({
+                        "role": "tool", "call_id": call_id, "content": content
+                    }),
+                })
+                .collect();
+            serve_json(&serde_json::to_string(&serde_json::json!({"messages": messages})).unwrap_or_else(|_| r#"{"messages":[]}"#.into()))
+        }
+
         // List model presets (for hot-switch dropdown in chat UI)
         (Method::GET, "/api/models/presets") => {
             let config = crate::load_config_file().unwrap_or_else(|| state.config.clone());

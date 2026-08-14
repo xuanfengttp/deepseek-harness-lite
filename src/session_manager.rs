@@ -169,6 +169,17 @@ impl SessionManager {
         self.cache.get_mut(id)
     }
 
+    /// Check if a session is currently in the cache.
+    pub fn is_cached(&self, id: &str) -> bool {
+        self.cache.contains_key(id)
+    }
+
+    /// Get the active session's messages (for history display).
+    pub fn active_messages(&self) -> Option<Vec<crate::types::Message>> {
+        let id = self.active_id.as_ref()?;
+        self.cache.get(id).map(|log| log.derive_messages())
+    }
+
     /// Get the active session log (read-only).
     pub fn active(&self) -> Option<&SessionLog> {
         let id = self.active_id.as_ref()?;
