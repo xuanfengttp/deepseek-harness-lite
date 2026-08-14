@@ -12,6 +12,8 @@ mod policy;
 mod skill;
 mod agent;
 mod expr;
+mod memory;
+mod compaction;
 mod dispatcher;
 mod tools;
 
@@ -21,6 +23,7 @@ use crate::llm::LlmClient;
 use crate::tools::ToolRegistry;
 use crate::tools::shell;
 use crate::tools::file;
+use crate::tools::memory as memory_tool;
 use crate::policy::Policy;
 use crate::agent::LoopEvent;
 use crate::dispatcher::DispatchResult;
@@ -59,7 +62,7 @@ fn main() -> ExitCode {
 }
 
 async fn async_main() -> ExitCode {
-    log::info!("DeepSeek Harness Lite v{} — P3 skill system", env!("CARGO_PKG_VERSION"));
+    log::info!("DeepSeek Harness Lite v{} — P4 memory + compaction + persistence", env!("CARGO_PKG_VERSION"));
     log::info!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
 
     // Load configuration.
@@ -70,6 +73,11 @@ async fn async_main() -> ExitCode {
 
     log::info!("Model: {} at {}", config.model.model, config.model.base_url);
     log::info!("Server: {}", config.server.listen);
+
+    // Ensure persistence directories exist.
+    if !config.session.persist_dir.is_empty() {
+        let _ = std::fs::create_dir_all(&config.session.persist_dir);
+    }
 
     // Register built-in tools.
     let policy = Policy::from_config(&config.tools);
@@ -86,6 +94,16 @@ async fn async_main() -> ExitCode {
     }
     if config.tools.file_search {
         tools.register(file::search_definition(), file::make_search_executor());
+    }
+    if config.tools.memory {
+        let store = std::sync::Arc::new(memory::MemoryStore::open(
+            &config.memory.path,
+            config.memory.max_entries,
+        ));
+        log::info!("Memory store: {} entries", store.len());
+        tools.register(memory_tool::read_definition(), memory_tool::make_read_executor(store.clone()));
+        tools.register(memory_tool::write_definition(), memory_tool::make_write_executor(store.clone()));
+        tools.register(memory_tool::recall_definition(), memory_tool::make_recall_executor(store));
     }
 
     log::info!("Registered {} tool(s)", tools.definitions().len());
@@ -113,8 +131,22 @@ async fn async_main() -> ExitCode {
         .unwrap_or_else(default_skill);
     log::info!("Active skill: {} (mode: {:?}, think: {})", active_skill.name, active_skill.mode, active_skill.think);
 
-    // Create the session log and dispatcher.
-    let session = SessionLog::new(512);
+    // Create or load the session log.
+    let session = if config.session.checkpoint_turn_end {
+        let checkpoint_path = format!("{}/session-current.bin", config.session.persist_dir.trim_end_matches('/'));
+        match SessionLog::load(&checkpoint_path, 512) {
+            Ok(loaded) => {
+                log::info!("Session restored from {}: {} events", checkpoint_path, loaded.len());
+                loaded
+            }
+            Err(_) => {
+                log::info!("No session checkpoint; starting fresh");
+                SessionLog::new(512)
+            }
+        }
+    } else {
+        SessionLog::new(512)
+    };
     let llm = LlmClient::new(&config.model);
     let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model);
 

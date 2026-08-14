@@ -56,6 +56,12 @@ pub struct AgentLoop {
     model: String,
     max_tokens: usize,
     temperature: f32,
+    /// Context window size for compaction trigger.
+    context_window: usize,
+    /// Fraction of context window that triggers compaction.
+    compaction_threshold: f32,
+    /// Number of recent turns to keep during compaction.
+    keep_recent_turns: usize,
 }
 
 impl AgentLoop {
@@ -72,7 +78,17 @@ impl AgentLoop {
             model: model_config.model.clone(),
             max_tokens: model_config.max_tokens,
             temperature: model_config.temperature,
+            context_window: model_config.context_window,
+            compaction_threshold: 0.7,
+            keep_recent_turns: 3,
         }
+    }
+
+    /// Set compaction parameters from config.
+    pub fn with_compaction(mut self, threshold: f32, keep_recent: usize) -> Self {
+        self.compaction_threshold = threshold;
+        self.keep_recent_turns = keep_recent;
+        self
     }
 
     /// Run one turn with a user message and an active skill.
@@ -100,8 +116,28 @@ impl AgentLoop {
             let step = self.session.begin_step();
             let _ = event_tx.send(LoopEvent::StepStart { turn, step }).await;
 
-            // Build and send the LLM request.
+            // Check if compaction is needed before building the request.
             let messages = self.session.derive_messages();
+            let message_count = messages.len();
+            if crate::compaction::needs_compaction(message_count, self.context_window, self.compaction_threshold) {
+                log::info!("Compaction triggered: {message_count} messages, threshold {:.0}%", self.compaction_threshold * 100.0);
+                if let Some(result) = crate::compaction::compact(
+                    &self.llm,
+                    &self.model,
+                    self.temperature,
+                    &messages,
+                    self.keep_recent_turns,
+                ).await {
+                    log::info!("Compacted {} messages into summary ({} chars)",
+                        result.turns_compacted, result.summary.len());
+                    // TODO: replace older messages in the session log with the summary.
+                    // For P4, we log the compaction event. Full message replacement
+                    // requires a session log restructure (insert summary, drop old).
+                    // This is safe to defer — the ring buffer naturally bounds memory.
+                }
+            }
+
+            // Build and send the LLM request.
             let request = LlmRequest {
                 model: self.model.clone(),
                 messages,

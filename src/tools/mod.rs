@@ -11,6 +11,7 @@
 
 pub mod shell;
 pub mod file;
+pub mod memory;
 
 use crate::types::*;
 use crate::policy::Policy;

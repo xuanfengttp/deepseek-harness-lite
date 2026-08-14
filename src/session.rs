@@ -139,6 +139,58 @@ impl SessionLog {
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
     }
+
+    /// Serialize the session log to bytes (bincode) for flash persistence.
+    pub fn serialize(&self) -> Vec<u8> {
+        let snapshot = SessionSnapshot {
+            next_seq: self.next_seq,
+            events: self.events.iter().cloned().collect(),
+            current_turn: self.current_turn,
+            current_step: self.current_step,
+        };
+        bincode::serialize(&snapshot).unwrap_or_default()
+    }
+
+    /// Deserialize from bytes and restore a session log.
+    pub fn deserialize(data: &[u8], max_in_memory: usize) -> Option<Self> {
+        let snapshot: SessionSnapshot = bincode::deserialize(data).ok()?;
+        let mut events = VecDeque::with_capacity(snapshot.events.len().min(max_in_memory));
+        for e in snapshot.events {
+            events.push_back(e);
+            while events.len() > max_in_memory {
+                events.pop_front();
+            }
+        }
+        Some(Self {
+            next_seq: snapshot.next_seq,
+            events,
+            max_in_memory,
+            current_turn: snapshot.current_turn,
+            current_step: snapshot.current_step,
+        })
+    }
+
+    /// Checkpoint the session to a flash file.
+    pub fn checkpoint(&self, path: &str) -> Result<(), String> {
+        let data = self.serialize();
+        std::fs::write(path, &data).map_err(|e| format!("checkpoint write: {e}"))
+    }
+
+    /// Load a session from a flash file.
+    pub fn load(path: &str, max_in_memory: usize) -> Result<Self, String> {
+        let data = std::fs::read(path).map_err(|e| format!("checkpoint read: {e}"))?;
+        Self::deserialize(&data, max_in_memory)
+            .ok_or_else(|| "checkpoint deserialize failed".into())
+    }
+}
+
+/// Serializable snapshot of a session log for flash persistence.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SessionSnapshot {
+    next_seq: u64,
+    events: Vec<SessionEvent>,
+    current_turn: u64,
+    current_step: u64,
 }
 
 #[cfg(test)]
