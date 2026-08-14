@@ -143,6 +143,82 @@ async fn handle_request(
             handle_chat(req, state).await
         }
 
+        // Get config (JSON)
+        (Method::GET, "/api/config") => {
+            let config_path = std::env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+            match std::fs::read_to_string(&config_path) {
+                Ok(content) => {
+                    match toml::from_str::<serde_json::Value>(&content) {
+                        Ok(val) => serve_json(&serde_json::to_string(&val).unwrap_or_default()),
+                        Err(_) => serve_json("{}"),
+                    }
+                }
+                Err(_) => serve_json("{}"),
+            }
+        }
+
+        // Save config (JSON merge into TOML file)
+        (Method::POST, "/api/config") => {
+            let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+            let config_path = std::env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+
+            // Read current config, parse the incoming JSON as TOML-compatible,
+            // merge, and write back.
+            let current = std::fs::read_to_string(&config_path).unwrap_or_default();
+            let mut current_val: serde_json::Value = toml::from_str(&current).unwrap_or(serde_json::json!({}));
+
+            if let Ok(incoming) = serde_json::from_slice::<serde_json::Value>(&body) {
+                merge_json(&mut current_val, &incoming);
+                let new_toml = toml::to_string(&current_val).unwrap_or_default();
+                if std::fs::write(&config_path, new_toml).is_ok() {
+                    serve_json(r#"{"ok":true,"message":"Config saved. Restart to apply."}"#)
+                } else {
+                    serve_json(r#"{"ok":false,"error":"Failed to write config file"}"#)
+                }
+            } else {
+                serve_json(r#"{"ok":false,"error":"Invalid JSON"}"#)
+            }
+        }
+
+        // Get raw config file
+        (Method::GET, "/api/config/raw") => {
+            let config_path = std::env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+            match std::fs::read_to_string(&config_path) {
+                Ok(content) => {
+                    let mut response = Response::new(BoxBody::new(Full::new(Bytes::from(content)).map_err(|e| match e {})));
+                    response.headers_mut().insert(hyper::header::CONTENT_TYPE, hyper::header::HeaderValue::from_static("text/plain; charset=utf-8"));
+                    *response.status_mut() = StatusCode::OK;
+                    response
+                }
+                Err(_) => {
+                    let mut response = Response::new(BoxBody::new(Full::new(Bytes::from("# Config file not found")).map_err(|e| match e {})));
+                    *response.status_mut() = StatusCode::NOT_FOUND;
+                    response
+                }
+            }
+        }
+
+        // Save raw config file
+        (Method::POST, "/api/config/raw") => {
+            let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+            let config_path = std::env::var("DSH_LITE_CONFIG").unwrap_or_else(|_| "config/default.toml".to_string());
+            let content = String::from_utf8_lossy(&body).to_string();
+
+            // Validate it's parseable TOML before saving.
+            match toml::from_str::<serde_json::Value>(&content) {
+                Ok(_) => {
+                    if std::fs::write(&config_path, &content).is_ok() {
+                        serve_json(r#"{"ok":true,"message":"Config file saved. Restart to apply."}"#)
+                    } else {
+                        serve_json(r#"{"ok":false,"error":"Failed to write file"}"#)
+                    }
+                }
+                Err(e) => {
+                    serve_json(&format!(r#"{{"ok":false,"error":"Invalid TOML: {e}"}}"#))
+                }
+            }
+        }
+
         // 404
         _ => {
             let mut resp = Response::new(empty_body());
@@ -342,4 +418,20 @@ fn serve_json(json: &str) -> Response<BoxBody<Bytes, Infallible>> {
 
 fn empty_body() -> BoxBody<Bytes, Infallible> {
     BoxBody::new(Full::new(Bytes::new()).map_err(|e| match e {}))
+}
+
+/// Recursively merge JSON values (incoming overrides current).
+fn merge_json(current: &mut serde_json::Value, incoming: &serde_json::Value) {
+    match (current, incoming) {
+        (serde_json::Value::Object(cur_map), serde_json::Value::Object(inc_map)) => {
+            for (key, val) in inc_map {
+                if let Some(existing) = cur_map.get_mut(key) {
+                    merge_json(existing, val);
+                } else {
+                    cur_map.insert(key.clone(), val.clone());
+                }
+            }
+        }
+        (cur, inc) => { *cur = inc.clone(); }
+    }
 }
