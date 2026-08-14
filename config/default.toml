@@ -1,60 +1,67 @@
-# DeepSeek Harness Lite — Default Configuration
+# DeepSeek Harness Lite — Configuration
+#
+# This file is auto-generated on first run with empty defaults.
+# Fill in your model settings below, then save and send a message —
+# changes apply immediately (hot-reload, no restart needed).
+#
+# To add multiple LLM providers, add [[models]] entries below.
+# Each preset appears as a dropdown option in the chat input bar.
+#
+# Example:
+#   [[models]]
+#   name = "DeepSeek"
+#   base_url = "https://api.deepseek.com/v1"
+#   api_key = "sk-your-key"
+#   model = "deepseek-chat"
+#   context_window = 8192
+#   max_tokens = 2048
+#   temperature = 0.0
+#
+#   [[models]]
+#   name = "Local"
+#   base_url = "http://127.0.0.1:8080/v1"
+#   api_key = ""
+#   model = "qwen2.5-7b"
+#   context_window = 32768
+#   max_tokens = 4096
+#   temperature = 0.7
 
 [model]
-# Local inference service (OpenAI-compatible /v1/chat/completions)
-# The agent acts as an HTTP client to this endpoint.
-base_url = "http://127.0.0.1:8080/v1"
+base_url = ""
 api_key = ""
-model = "deepseek-v4-lite"
-# Context window in tokens (drives compaction threshold)
+model = ""
 context_window = 8192
-# Max output tokens per request
 max_tokens = 2048
-# Temperature (0 = deterministic, higher = creative)
 temperature = 0.0
 
 [server]
-# Built-in HTTP server + static web client
-# Default 3081 to avoid conflict with upstream dsh web GUI (3080)
 listen = "127.0.0.1:3081"
 
 [session]
-# Flash persistence directory for session checkpoints
 persist_dir = ".sessions"
-# Checkpoint frequency: save to flash every N events
 checkpoint_events = 50
-# Also checkpoint at turn boundaries
 checkpoint_turn_end = true
 
 [memory]
-# Long-term memory backend: flash (default) | custom
 backend = "flash"
-# Memory storage path
-path = ".sessions/memory.bin"
-# Maximum entries before LRU eviction
 max_entries = 256
+path = ".sessions/memory.bin"
 
 [compaction]
-# Trigger compaction when derived messages exceed this fraction of context_window
 threshold = 0.7
-# Keep recent K turns as raw, summarize older
 keep_recent_turns = 4
 
 [skill]
-# Directory to scan for skill files (YAML frontmatter + Markdown)
 dir = "skills"
 
 [trajectory]
-# Record full event trajectory (turn/step/chunk/tool timing).
-# Default off to save memory; enable to widen memory budget.
 enabled = false
 
 [tools]
-# Built-in tools enabled by default; skills may restrict via `tools.allow`
 shell = true
 file_read = true
 file_write = true
 file_search = true
-ssh_exec = false    # placeholder, enable after P7
 memory = true
+ssh_exec = false
 todo = true

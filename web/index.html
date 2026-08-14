@@ -692,8 +692,11 @@ body {
             <input class="setting-input" id="cfg-temperature" type="number" step="0.1" min="0" max="2" placeholder="0.0" onblur="autoSaveModelConfig()">
           </div>
           <div class="setting-row">
-            <div class="setting-label" data-i18n="model_presets">模型预设</div>
-            <div class="setting-hint" data-i18n="model_presets_hint">可在输入框上方的下拉菜单中快速切换模型预设。预设通过配置文件中的 [[models]] 段定义，请在"配置文件"中编辑后保存重启生效。</div>
+            <div class="setting-label" data-i18n="model_presets">LLM 提供商预设</div>
+            <div class="setting-hint" data-i18n="model_presets_hint">添加多个 LLM 提供商，可在输入框下拉菜单中快速切换。每个预设包含名称、端点、API Key 和模型名。</div>
+            <div id="preset-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px"></div>
+            <button class="btn btn-secondary" style="margin-top:8px" onclick="addPresetRow()" data-i18n="add_preset">+ 添加提供商</button>
+            <button class="btn btn-primary" style="margin-top:4px" onclick="savePresets()" data-i18n="save_presets">保存预设</button>
           </div>
           <div class="config-status" id="model-config-status"></div>
           <div class="btn-row">
@@ -1341,6 +1344,7 @@ async function loadConfig() {
         if (el) el.classList.toggle('on', !!cfg.tools[t]);
       });
     }
+    loadPresets(cfg);
   } catch(e) {
     console.error('loadConfig', e);
     showModelConfigStatus('⚠ 无法连接服务器: ' + e.message, 'err');
@@ -1387,6 +1391,61 @@ function showStatusMsg(elId, msg, type) {
 }
 function showModelConfigStatus(msg, type) {
   showStatusMsg('model-config-status', msg, type);
+}
+
+// ── LLM Provider Presets ──
+let presetsData = [];
+
+function loadPresets(cfg) {
+  presetsData = (cfg.models || []).map(p => ({...p}));
+  renderPresets();
+}
+
+function renderPresets() {
+  const list = document.getElementById('preset-list');
+  if (!list) return;
+  list.innerHTML = '';
+  presetsData.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'border:1px solid var(--border-l2);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px;background:var(--bg-platform)';
+    row.innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="setting-input mono" placeholder="预设名称" value="${esc(p.name||'')}" style="flex:1" oninput="presetsData[${i}].name=this.value">
+        <button class="btn btn-danger" style="height:32px;padding:0 8px" onclick="removePreset(${i})">✕</button>
+      </div>
+      <input class="setting-input mono" placeholder="Base URL (https://api.deepseek.com/v1)" value="${esc(p.base_url||'')}" style="width:100%" oninput="presetsData[${i}].base_url=this.value">
+      <div style="display:flex;gap:8px">
+        <input class="setting-input mono" placeholder="API Key" type="password" value="${esc(p.api_key||'')}" style="flex:1" oninput="presetsData[${i}].api_key=this.value">
+        <input class="setting-input mono" placeholder="模型名" value="${esc(p.model||'')}" style="flex:1" oninput="presetsData[${i}].model=this.value">
+      </div>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function addPresetRow() {
+  presetsData.push({name:'', base_url:'', api_key:'', model:'', context_window:8192, max_tokens:2048, temperature:0.0});
+  renderPresets();
+}
+
+function removePreset(idx) {
+  presetsData.splice(idx, 1);
+  renderPresets();
+}
+
+async function savePresets() {
+  // Send the models array as part of config — replace entirely.
+  const cfg = { models: presetsData.filter(p => p.name && p.base_url && p.model) };
+  try {
+    const res = await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
+    const data = await res.json();
+    if (data.ok) {
+      showModelConfigStatus('✓ 预设已保存，即时生效', 'ok');
+      await loadModelPresets();
+    } else {
+      showModelConfigStatus('✗ 保存失败: ' + (data.error||''), 'err');
+    }
+  } catch(e) { showModelConfigStatus('保存失败: ' + e.message, 'err'); }
 }
 
 async function saveToolConfig(silent) {
@@ -1562,7 +1621,7 @@ const I18N = {
     language_hint:'选择界面语言。',
     chat:'对话', delete:'删除', confirm_delete:'确定删除此会话？',
     stats_bar:'统计栏', stats_bar_hint:'在输入框下方显示 token 用量与时长。',
-    model_presets:'模型预设', model_presets_hint:'可在输入框上方的下拉菜单中快速切换模型预设。预设通过配置文件中的 [[models]] 段定义，请在"配置文件"中编辑后保存重启生效。',
+    model_presets:'LLM 提供商预设', model_presets_hint:'添加多个 LLM 提供商，可在输入框下拉菜单中快速切换。每个预设包含名称、端点、API Key 和模型名。', add_preset:'+ 添加提供商', save_presets:'保存预设',
   },
   en: {
     new_session:'New Session', settings:'Settings', settings_title:'Settings',
@@ -1593,7 +1652,7 @@ const I18N = {
     language_hint:'Choose the interface language.',
     chat:'Chat', delete:'Delete', confirm_delete:'Delete this session?',
     stats_bar:'Stats Bar', stats_bar_hint:'Show token usage and duration below the input box.',
-    model_presets:'Model Presets', model_presets_hint:'Switch model presets quickly from the dropdown above the input box. Presets are defined via the [[models]] sections in config.toml — edit them in "Config File" and restart to apply.',
+    model_presets:'LLM Provider Presets', model_presets_hint:'Add multiple LLM providers and switch between them from the input dropdown. Each preset has a name, endpoint, API key, and model name.', add_preset:'+ Add Provider', save_presets:'Save Presets',
   }
 };
 let currentLang = 'zh';
