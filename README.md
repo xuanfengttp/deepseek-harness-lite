@@ -166,13 +166,20 @@ Supported targets:
 ## Run
 
 ```sh
+# Interactive mode (web client)
+dsh-lite
+# → opens HTTP server at http://127.0.0.1:3081
+#   open in browser for chat + markdown + session sidebar + trajectory toggle
+
 # Single-turn mode (pass a prompt)
 dsh-lite "check interface status"
 
-# The agent loads config from config/default.toml,
-# scans skills/ for skill files, and dispatches
-# the request through the active skill's mode.
+# Select a specific skill
+dsh-lite --skill interface-diagnostics "eth0 is down"
 ```
+
+The agent loads config from `config/default.toml`, scans `skills/` for skill
+files, and dispatches requests through the active skill's mode.
 
 Configuration:
 
@@ -191,7 +198,7 @@ The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming).
 
 ## Project status
 
-Currently at **P5** (session management). See [DESIGN-lite.md](DESIGN-lite.md) for the full design document and roadmap.
+Currently at **P6** (web client + HTTP server). See [DESIGN-lite.md](DESIGN-lite.md) for the full design document and roadmap.
 
 | Phase | Status |
 |---|---|
@@ -201,8 +208,8 @@ Currently at **P5** (session management). See [DESIGN-lite.md](DESIGN-lite.md) f
 | P3 — Skill system completion | ✅ Done |
 | P4 — Memory + compaction + persistence | ✅ Done |
 | P5 — Session management (multi-session + offloading) | ✅ Done |
-| P6 — Web client + HTTP server | 🔄 Next |
-| P7 — SSH client | Planned |
+| P6 — Web client + HTTP server | ✅ Done |
+| P7 — SSH client | 🔄 Next |
 | P8 — Size + memory optimization | Planned |
 
 ## License

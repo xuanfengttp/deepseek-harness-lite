@@ -166,13 +166,20 @@ cargo zigbuild --release --target armv7-unknown-linux-musleabi
 ## 运行
 
 ```sh
+# 交互模式（Web 客户端）
+dsh-lite
+# → 在 http://127.0.0.1:3081 启动 HTTP 服务器
+#   浏览器打开即可使用：聊天 + Markdown 渲染 + 会话侧边栏 + 轨迹开关
+
 # 单轮模式（传入 prompt）
 dsh-lite "检查接口状态"
 
-# agent 从 config/default.toml 加载配置，
-# 扫描 skills/ 目录的 skill 文件，
-# 并通过激活 skill 的模式分发请求。
+# 选择特定 skill
+dsh-lite --skill interface-diagnostics "eth0 is down"
 ```
+
+agent 从 `config/default.toml` 加载配置，扫描 `skills/` 目录的 skill 文件，
+通过激活 skill 的模式分发请求。
 
 配置：
 
@@ -191,7 +198,7 @@ dir = "skills"
 
 ## 项目状态
 
-当前进度：**P5**（会话管理）。完整设计文档和路线图见 [DESIGN-lite.md](DESIGN-lite.md)。
+当前进度：**P6**（Web 客户端 + HTTP 服务器）。完整设计文档和路线图见 [DESIGN-lite.md](DESIGN-lite.md)。
 
 | 阶段 | 状态 |
 |---|---|
@@ -201,8 +208,8 @@ dir = "skills"
 | P3 — Skill 系统完善 | ✅ 完成 |
 | P4 — 记忆 + 压缩 + 持久化 | ✅ 完成 |
 | P5 — 会话管理（多会话 + offloading） | ✅ 完成 |
-| P6 — Web 客户端 + HTTP 服务器 | 🔄 下一步 |
-| P7 — SSH 客户端 | 计划中 |
+| P6 — Web 客户端 + HTTP 服务器 | ✅ 完成 |
+| P7 — SSH 客户端 | 🔄 下一步 |
 | P8 — 体积 + 内存优化 | 计划中 |
 
 ## 许可证
