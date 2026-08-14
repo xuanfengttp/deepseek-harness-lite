@@ -69,6 +69,96 @@ pub fn load_dir(dir: &str) -> Vec<Skill> {
     skills
 }
 
+/// Validate a skill definition. Returns a list of warnings (empty = valid).
+/// Checks: required fields, step references, mode/think consistency.
+pub fn validate(skill: &Skill, known_tools: &[String]) -> Vec<String> {
+    let mut warnings = Vec::new();
+
+    // Check tool allow-list references against known tools.
+    for tool_name in &skill.tools_allow {
+        if !known_tools.iter().any(|t| t == tool_name) {
+            warnings.push(format!("tool `{tool_name}` in allow-list is not registered"));
+        }
+    }
+
+    // Workflow/todo mode should have steps.
+    if (skill.mode == ExecMode::Workflow || skill.mode == ExecMode::Todo) && skill.steps.is_empty() {
+        warnings.push(format!("mode {:?} but no steps defined", skill.mode));
+    }
+
+    // Workflow mode with think=true is unusual (deterministic mode doesn't need reasoning).
+    if skill.mode == ExecMode::Workflow && skill.think {
+        warnings.push("workflow mode with think=true — reasoning will only apply to llm_judge steps".into());
+    }
+
+    // Check step references in `when` conditions and llm_judge inputs.
+    let step_ids: Vec<&str> = skill.steps.iter().map(|s| s.id.as_str()).collect();
+    for step in &skill.steps {
+        if let Some(when) = &step.when {
+            for ref_id in extract_step_refs(when) {
+                if !step_ids.contains(&ref_id.as_str()) {
+                    warnings.push(format!("step `{}` when-condition references unknown step `{}`", step.id, ref_id));
+                }
+            }
+        }
+        if let StepAction::LlmJudge { input, .. } = &step.action {
+            for ref_id in extract_step_refs(input) {
+                if !step_ids.contains(&ref_id.as_str()) {
+                    warnings.push(format!("step `{}` llm_judge input references unknown step `{}`", step.id, ref_id));
+                }
+            }
+        }
+    }
+
+    if warnings.is_empty() {
+        log::debug!("Skill `{}` validated OK", skill.name);
+    } else {
+        for w in &warnings {
+            log::warn!("Skill `{}`: {w}", skill.name);
+        }
+    }
+    warnings
+}
+
+/// Extract `steps.xxx` references from a string (for validation).
+fn extract_step_refs(text: &str) -> Vec<String> {
+    let mut refs = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("steps.") {
+        rest = &rest[start + 6..]; // skip "steps."
+        let id: String = rest.chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+            .collect();
+        let id_len = id.len();
+        if !id.is_empty() {
+            refs.push(id);
+        }
+        // Advance past the extracted id
+        if rest.len() > id_len {
+            rest = &rest[id_len..];
+        } else {
+            break;
+        }
+    }
+    refs
+}
+
+/// Select a skill by name from a list. Falls back to the first skill if the
+/// requested name is not found (with a warning).
+pub fn select_by_name<'a>(skills: &'a [Skill], name: Option<&str>) -> Option<&'a Skill> {
+    if skills.is_empty() {
+        return None;
+    }
+    if let Some(name) = name {
+        if let Some(skill) = skills.iter().find(|s| s.name == name) {
+            log::info!("Selected skill by name: {name}");
+            return Some(skill);
+        }
+        log::warn!("Skill `{name}` not found; falling back to first skill");
+    }
+    skills.first()
+}
+
 /// Parse a single skill file (frontmatter + Markdown body).
 pub fn parse_skill_file(path: &Path) -> Result<Skill, String> {
     let content = std::fs::read_to_string(path)

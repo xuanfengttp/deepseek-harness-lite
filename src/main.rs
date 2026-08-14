@@ -11,7 +11,7 @@ mod prompt;
 mod policy;
 mod skill;
 mod agent;
-mod workflow;
+mod expr;
 mod dispatcher;
 mod tools;
 
@@ -59,7 +59,7 @@ fn main() -> ExitCode {
 }
 
 async fn async_main() -> ExitCode {
-    log::info!("DeepSeek Harness Lite v{} — P2 tri-mode dispatch", env!("CARGO_PKG_VERSION"));
+    log::info!("DeepSeek Harness Lite v{} — P3 skill system", env!("CARGO_PKG_VERSION"));
     log::info!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
 
     // Load configuration.
@@ -95,7 +95,22 @@ async fn async_main() -> ExitCode {
     if skills.is_empty() {
         log::warn!("No skills loaded from {}; using default skill", config.skill.dir);
     }
-    let active_skill = skills.first().cloned().unwrap_or_else(default_skill);
+
+    // Validate skills against registered tools.
+    let known_tool_names: Vec<String> = tools.definitions().iter().map(|t| t.name.clone()).collect();
+    for skill in &skills {
+        let warnings = skill::validate(skill, &known_tool_names);
+        if warnings.is_empty() {
+            log::info!("Skill `{}` validated", skill.name);
+        }
+    }
+
+    // Determine active skill: CLI `--skill <name>` overrides config `skill.active`.
+    let cli_skill_name: Option<String> = parse_cli_skill();
+    let skill_name = cli_skill_name.as_deref().or(config.skill.active.as_deref());
+    let active_skill = skill::select_by_name(&skills, skill_name)
+        .cloned()
+        .unwrap_or_else(default_skill);
     log::info!("Active skill: {} (mode: {:?}, think: {})", active_skill.name, active_skill.mode, active_skill.think);
 
     // Create the session log and dispatcher.
@@ -185,6 +200,22 @@ fn default_config() -> Config {
         .expect("bundled default config must parse")
 }
 
+/// Parse `--skill <name>` from CLI args. Returns the skill name if found.
+fn parse_cli_skill() -> Option<String> {
+    let args: Vec<String> = env::args().collect();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--skill" && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+        if let Some(rest) = args[i].strip_prefix("--skill=") {
+            return Some(rest.to_string());
+        }
+        i += 1;
+    }
+    None
+}
+
 /// A minimal default skill when no skill files are found.
 fn default_skill() -> Skill {
     Skill {
@@ -205,7 +236,7 @@ fn print_help() {
         "dsh-lite {} — lightweight embedded agent for network element devices\n\n\
          USAGE:\n    dsh-lite [PROMPT] [OPTIONS]\n\n\
          ARGS:\n    <PROMPT>    Run one turn with this prompt\n\n\
-         OPTIONS:\n    -V, --version    Print version\n    -h, --help       Print this help\n\n\
+         OPTIONS:\n    -V, --version       Print version\n    -h, --help          Print this help\n    --skill <NAME>      Select skill by name\n\n\
          ENV:\n    DSH_LITE_CONFIG    Path to config file (default: config/default.toml)\n    RUST_LOG           Log level (default: info)",
         env!("CARGO_PKG_VERSION")
     );

@@ -172,6 +172,10 @@ pub struct CompactionConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SkillConfig {
     pub dir: String,
+    /// Active skill name (optional). If set, this skill is used by default.
+    /// Can be overridden by CLI `--skill <name>`.
+    #[serde(default)]
+    pub active: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -76,6 +76,29 @@ impl ToolRegistry {
             .collect()
     }
 
+    /// Check whether a tool name is in the allow-list.
+    /// Empty allow-list means no restriction (all tools allowed).
+    pub fn is_allowed(&self, tool_name: &str, allow: &[String]) -> bool {
+        if allow.is_empty() {
+            return true;
+        }
+        allow.iter().any(|n| n == tool_name)
+    }
+
+    /// Execute a tool call with an additional skill allow-list check.
+    /// If the tool is not in the allow-list, returns an error immediately
+    /// without executing. Empty allow-list = no restriction.
+    pub async fn execute_checked(&self, call: &ToolCall, allow: &[String]) -> ToolResult {
+        if !self.is_allowed(&call.name, allow) {
+            log::warn!("Tool `{}` blocked by skill allow-list", call.name);
+            return ToolResult {
+                content: format!("Error: tool `{}` is not allowed by the active skill", call.name),
+                is_error: true,
+            };
+        }
+        self.execute(call).await
+    }
+
     /// Execute a tool call through the 3-stage pipeline.
     ///
     /// Returns the final ToolResult (truncated, error-normalized).
@@ -99,7 +122,6 @@ impl ToolRegistry {
                 };
             }
         };
-
         let (result_tx, result_rx) = tokio::sync::oneshot::channel();
         let executor = registered.executor.clone();
         let args = call.arguments.clone();

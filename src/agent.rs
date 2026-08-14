@@ -174,12 +174,12 @@ impl AgentLoop {
                 tool_calls: tool_calls.clone(),
             }).await;
 
-            // Execute tool calls.
+            // Execute tool calls (enforcing skill's tool allow-list).
             for call in &tool_calls {
                 self.session.append(SessionEvent::ToolCall { call: call.clone() });
                 let _ = event_tx.send(LoopEvent::ToolCall { call: call.clone() }).await;
 
-                let result = self.tools.execute(call).await;
+                let result = self.tools.execute_checked(call, &skill.tools_allow).await;
 
                 self.session.append(SessionEvent::ToolResult {
                     call_id: call.id.clone(),

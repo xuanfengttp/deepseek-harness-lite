@@ -112,11 +112,10 @@ impl Dispatcher {
             let step_num = (i + 1) as u64;
             let _ = event_tx.send(LoopEvent::StepStart { turn, step: step_num }).await;
 
-            // Evaluate `when` condition (simple: check if it's non-empty and
-            // contains a truthy expression — full template eval in P3).
+            // Evaluate `when` condition using the expression evaluator.
             if let Some(when_expr) = &step.when {
-                if !evaluate_condition(when_expr, &step_results) {
-                    log::info!("Step `{}` skipped (condition not met)", step.id);
+                if !crate::expr::evaluate(when_expr, &step_results) {
+                    log::info!("Step `{}` skipped (condition not met: {})", step.id, when_expr);
                     let _ = event_tx.send(LoopEvent::StepEnd { turn, step: step_num }).await;
                     continue;
                 }
@@ -125,7 +124,7 @@ impl Dispatcher {
             let result = match &step.action {
                 StepAction::Tool { tool, args } => {
                     // Interpolate variables in args.
-                    let interpolated_args = interpolate_json(args, &step_results, &skill.variables);
+                    let interpolated_args = crate::expr::interpolate_json(args, &step_results, &skill.variables);
                     let call = ToolCall {
                         id: format!("wf_{}", step.id),
                         name: tool.clone(),
@@ -136,7 +135,7 @@ impl Dispatcher {
                     let _ = event_tx.send(LoopEvent::ToolCall { call: call.clone() }).await;
                     self.session.append(SessionEvent::ToolCall { call: call.clone() });
 
-                    let result = self.tools.execute(&call).await;
+                    let result = self.tools.execute_checked(&call, &skill.tools_allow).await;
 
                     self.session.append(SessionEvent::ToolResult {
                         call_id: call.id.clone(),
@@ -153,8 +152,8 @@ impl Dispatcher {
                 }
                 StepAction::LlmJudge { prompt, input } => {
                     // Single LLM call with independent context (just the prompt + input).
-                    let interpolated_input = interpolate_str(input, &step_results, &skill.variables);
-                    let interpolated_prompt = interpolate_str(prompt, &step_results, &skill.variables);
+                    let interpolated_input = crate::expr::interpolate_str(input, &step_results, &skill.variables);
+                    let interpolated_prompt = crate::expr::interpolate_str(prompt, &step_results, &skill.variables);
 
                     log::info!("Workflow step `{}`: llm_judge", step.id);
 
@@ -305,65 +304,5 @@ impl Dispatcher {
     /// Access the session log.
     pub fn session(&self) -> &SessionLog {
         &self.session
-    }
-}
-
-/// Evaluate a `when` condition. Simple implementation for P2:
-/// checks if the expression references a step result and evaluates truthiness.
-/// Full template expression evaluation arrives in P3.
-fn evaluate_condition(expr: &str, results: &std::collections::HashMap<String, String>) -> bool {
-    // P2 simple: if the expression contains a step reference and "length > 0",
-    // check if that step's result is non-empty.
-    // This handles the common case in health-check style skills.
-    if expr.contains("length > 0") {
-        // Extract step reference like steps.xxx.result
-        if let Some(start) = expr.find("steps.") {
-            let rest = &expr[start + 6..]; // skip "steps."
-            if let Some(end) = rest.find('.') {
-                let step_id = &rest[..end];
-                return results.get(step_id).map(|r| !r.trim().is_empty()).unwrap_or(false);
-            }
-        }
-    }
-    // Default: no condition means always run.
-    true
-}
-
-/// Interpolate `{{steps.xxx.result}}` and `{{var}}` in a string.
-fn interpolate_str(text: &str, step_results: &std::collections::HashMap<String, String>, variables: &std::collections::HashMap<String, String>) -> String {
-    let mut result = text.to_string();
-
-    // Interpolate step results: {{steps.xxx.result}}
-    for (step_id, value) in step_results {
-        let placeholder = format!("{{{{steps.{step_id}.result}}}}");
-        result = result.replace(&placeholder, value);
-    }
-
-    // Interpolate variables: {{var}}
-    for (key, value) in variables {
-        let placeholder = format!("{{{{{key}}}}}");
-        result = result.replace(&placeholder, value);
-    }
-
-    result
-}
-
-/// Interpolate `{{steps.xxx.result}}` and `{{var}}` in a JSON value (recursively).
-fn interpolate_json(value: &serde_json::Value, step_results: &std::collections::HashMap<String, String>, variables: &std::collections::HashMap<String, String>) -> serde_json::Value {
-    match value {
-        serde_json::Value::String(s) => {
-            serde_json::Value::String(interpolate_str(s, step_results, variables))
-        }
-        serde_json::Value::Object(map) => {
-            let mut new_map = serde_json::Map::new();
-            for (k, v) in map {
-                new_map.insert(k.clone(), interpolate_json(v, step_results, variables));
-            }
-            serde_json::Value::Object(new_map)
-        }
-        serde_json::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(|v| interpolate_json(v, step_results, variables)).collect())
-        }
-        other => other.clone(),
     }
 }
