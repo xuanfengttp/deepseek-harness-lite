@@ -30,6 +30,7 @@ use crate::policy::Policy;
 use crate::agent::LoopEvent;
 use crate::dispatcher::DispatchResult;
 use std::env;
+use std::io::Write;
 use std::process::ExitCode;
 use tokio::sync::mpsc;
 
@@ -37,7 +38,19 @@ fn main() -> ExitCode {
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", "info");
     }
-    env_logger::init();
+    // Use a custom format with local time so logs are readable.
+    env_logger::Builder::from_env(env_logger::Env::default().filter_or("RUST_LOG", "info"))
+        .format(|buf, record| {
+            let now = chrono::Local::now();
+            let level = record.level();
+            let module = record.module_path().unwrap_or("");
+            writeln!(buf, "[{} {:5} {}] {}",
+                now.format("%Y-%m-%d %H:%M:%S"),
+                level,
+                module,
+                record.args())
+        })
+        .init();
 
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 && (args[1] == "--version" || args[1] == "-V") {
