@@ -183,6 +183,104 @@ impl LlmClient {
         }
     }
 
+    /// Generate a concise session title from the first user message.
+    ///
+    /// This is an auxiliary non-streaming LLM call (mirrors dsh's
+    /// session-title-llm provider). Uses a specialized system prompt that
+    /// asks for a one-line plain-text title in the message's language.
+    /// Falls back to `Err` on any failure — the caller uses the deterministic
+    /// fallback in that case.
+    pub async fn generate_title(&self, model: &str, first_message: &str) -> Result<String, LlmError> {
+        use http_body_util::{BodyExt, Full};
+        use hyper::body::Bytes;
+        use hyper_util::rt::TokioIo;
+        use hyper::{Request, Method};
+
+        // System prompt — adapted from dsh session-title-llm.
+        let system = "Create a concise title for an AI assistant session from the supplied human message. \
+Return only the title on one line, in plain text of natural language, with no quotes, \
+prefix, explanation, Markdown, XML, or terminal control codes. No code is allowed. \
+Use the language of the message. Aim for about 6 words in non-CJK languages or 12 CJK characters.";
+
+        let user_content = format!("Generate the session title from this human message:\n{}", first_message);
+
+        let body = serde_json::json!({
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_content},
+            ],
+            "stream": false,
+            "max_tokens": 64,
+            "temperature": 0.0,
+        });
+        let body_json = serde_json::to_string(&body)
+            .map_err(|e| LlmError::Serialize(e.to_string()))?;
+
+        let url = format!("{}/chat/completions", self.base_url);
+        let uri: hyper::Uri = url.parse().map_err(|e: http::uri::InvalidUri| LlmError::BadUrl(e.to_string()))?;
+        let host = uri.host().ok_or_else(|| LlmError::BadUrl("no host".into()))?;
+        let port = uri.port_u16().unwrap_or(if uri.scheme_str() == Some("https") { 443 } else { 80 });
+        let is_https = uri.scheme_str() == Some("https");
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(uri.path_and_query().map(|p| p.as_str()).unwrap_or("/v1/chat/completions"))
+            .header("Host", host)
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Connection", "close")
+            .body(Full::<Bytes>::new(body_json.as_bytes().to_vec().into()))
+            .map_err(|e| LlmError::BuildRequest(e.to_string()))?;
+
+        let stream = if is_https {
+            return Err(LlmError::Connect("HTTPS not yet supported for title generation".into()));
+        } else {
+            tokio::net::TcpStream::connect((host, port)).await
+                .map_err(|e| LlmError::Connect(e.to_string()))?
+        };
+        let io = TokioIo::new(stream);
+        let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+            .await
+            .map_err(|e| LlmError::Handshake(e.to_string()))?;
+        tokio::spawn(async move { let _ = conn.await; });
+
+        let resp = sender.send_request(req).await
+            .map_err(|e| LlmError::Request(e.to_string()))?;
+        let body_bytes = resp.into_body().collect().await
+            .map_err(|e| LlmError::Read(e.to_string()))?
+            .to_bytes();
+        let resp_text = String::from_utf8_lossy(&body_bytes);
+
+        // Parse the non-streaming response.
+        let resp_json: serde_json::Value = serde_json::from_str(&resp_text)
+            .map_err(|e| LlmError::Read(format!("title response parse: {e}")))?;
+
+        let title = resp_json
+            .get("choices")
+            .and_then(|c| c.get(0))
+            .and_then(|c| c.get("message"))
+            .and_then(|m| m.get("content"))
+            .and_then(|t| t.as_str())
+            .unwrap_or("");
+
+        // Normalize: strip control codes, collapse whitespace, trim.
+        let title = title
+            .replace(['\n', '\r'], " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .to_string();
+
+        if title.is_empty() {
+            Err(LlmError::Read("title model produced empty output".into()))
+        } else {
+            log::info!("LLM generated title: {title}");
+            Ok(title)
+        }
+    }
+
     /// Build the OpenAI-compatible request body from our internal types.
     fn build_request_body(&self, request: &LlmRequest) -> ChatCompletionRequest {
         let messages: Vec<ApiMessage> = request.messages.iter().map(|m| match m {

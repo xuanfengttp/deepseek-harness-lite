@@ -151,6 +151,31 @@ async fn handle_request(
             serve_json(r#"{"ok":true}"#)
         }
 
+        // Generate a session title via LLM (auxiliary call).
+        // Body: {message: "first user message"}  Response: {title: "..."}
+        (Method::POST, "/api/sessions/title") => {
+            let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+            let message = serde_json::from_slice::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("message").and_then(|m| m.as_str()).map(String::from))
+                .unwrap_or_default();
+
+            if message.is_empty() {
+                return Ok(serve_json(r#"{"error":"message is required"}"#));
+            }
+
+            let config = crate::load_config_file().unwrap_or_else(|| state.config.clone());
+            let llm = crate::llm::LlmClient::new(&config.model);
+
+            match llm.generate_title(&config.model.model, &message).await {
+                Ok(title) => serve_json(&format!(r#"{{"title":{:?}}}"#, title)),
+                Err(e) => {
+                    log::warn!("Title generation failed: {e}");
+                    serve_json(r#"{"error":"title generation failed"}"#)
+                }
+            }
+        }
+
         // List skills
         (Method::GET, "/api/skills") => {
             let skills_json: Vec<serde_json::Value> = state.skills.iter().map(|s| {

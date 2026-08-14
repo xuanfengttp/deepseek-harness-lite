@@ -672,33 +672,51 @@ async function switchSession(id) {
   } catch(e) { console.error('switchSession', e); }
 }
 
-// Auto-name the session from the first user message.
-// Trims to ~30 chars, picks a good summary point (space or punctuation).
+// Two-tier session naming (mirrors dsh session-title):
+// Tier 1: immediate deterministic fallback — first few words of the message.
+// Tier 2: LLM-generated title — async auxiliary call, replaces the fallback.
 async function autoNameSession(msg) {
   try {
     // Check if current active session still has the default title.
     const res = await fetch('/api/sessions');
     const sessions = await res.json();
     const active = sessions.find(s => s.in_memory);
-    if (!active || (active.title !== 'New session' && active.event_count > 0)) return;
+    if (!active) return;
+    const isFirstMessage = active.title === 'New session' && active.event_count === 0;
+    if (!isFirstMessage) return;
 
-    // Build a concise title from the message.
-    let title = msg.trim().replace(/\n/g, ' ');
-    if (title.length > 30) {
-      // Try to cut at a word boundary near 30 chars.
-      const cut = title.slice(0, 30);
-      const lastSpace = cut.lastIndexOf(' ');
-      title = lastSpace > 10 ? cut.slice(0, lastSpace) : cut;
-      title += '…';
-    }
-    if (!title) return;
+    // ── Tier 1: immediate fallback (deterministic) ──
+    // Take first ~6 words (matches dsh fallbackMaxWords), trimmed.
+    let fallback = msg.trim().replace(/\n/g, ' ');
+    const words = fallback.split(/\s+/).filter(Boolean).slice(0, 6);
+    fallback = words.join(' ');
+    if (fallback.length > 40) fallback = fallback.slice(0, 40).trimEnd() + '…';
+    if (!fallback) return;
 
     await fetch('/api/sessions/rename', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({id: active.id, title}),
+      body: JSON.stringify({id: active.id, title: fallback}),
     });
     loadSessions();
+
+    // ── Tier 2: LLM-generated title (async, best-effort) ──
+    try {
+      const titleRes = await fetch('/api/sessions/title', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg}),
+      });
+      const titleData = await titleRes.json();
+      if (titleData.title) {
+        await fetch('/api/sessions/rename', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({id: active.id, title: titleData.title}),
+        });
+        loadSessions();
+      }
+    } catch(e) { /* Tier 2 is best-effort; fallback title stays */ }
   } catch(e) { /* non-critical */ }
 }
 
