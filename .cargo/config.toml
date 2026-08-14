@@ -1,0 +1,21 @@
+# Cross-compilation configuration for DeepSeek Harness Lite
+# Targets: aarch64 (64-bit ARM), armv7 hard-float + soft-float, x86_64 (dev)
+
+[target.aarch64-unknown-linux-musl]
+# musl static link; pure-Rust deps need no extra toolchain
+
+[target.armv7-unknown-linux-musleabihf]
+# ARMv7 hard-float
+
+[target.armv7-unknown-linux-musleabi]
+# ARMv7 soft-float
+
+[target.x86_64-unknown-linux-musl]
+# Development / test target
+
+# On Windows host, cross-compiling to Linux musl needs a linker.
+# Options:
+#   1. cargo zigbuild (recommended, no extra toolchain): cargo install zigbuild
+#   2. cross (Docker-based): cargo install cross
+#   3. musl cross-compile toolchain (clang + musl)
+# Default: try the system linker; switch to zigbuild in CI.
