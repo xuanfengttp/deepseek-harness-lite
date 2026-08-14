@@ -215,4 +215,15 @@ impl AgentLoop {
     pub fn session(&self) -> &SessionLog {
         &self.session
     }
+
+    /// Mutable access to the session log.
+    pub fn session_mut(&mut self) -> &mut SessionLog {
+        &mut self.session
+    }
+
+    /// Consume the agent loop and return its parts.
+    /// Used by the dispatcher to restore ownership after a plan-mode turn.
+    pub fn into_parts(self) -> (SessionLog, ToolRegistry, LlmClient) {
+        (self.session, self.tools, self.llm)
+    }
 }

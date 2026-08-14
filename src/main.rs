@@ -1,8 +1,8 @@
 //! DeepSeek Harness Lite — lightweight embedded agent for network element devices.
 //!
 //! Entry point: parse CLI args, load config, register tools, load skills, and
-//! run the agent runtime. P1 implements the core loop end-to-end in plan mode:
-//! a user message → prompt assembly → LLM streaming → tool execution → result.
+//! run the agent runtime. P2 adds tri-mode dispatch (workflow/todo/plan):
+//! the dispatcher routes each request by the active skill's declared mode.
 
 mod types;
 mod session;
@@ -11,6 +11,8 @@ mod prompt;
 mod policy;
 mod skill;
 mod agent;
+mod workflow;
+mod dispatcher;
 mod tools;
 
 use crate::types::*;
@@ -20,7 +22,8 @@ use crate::tools::ToolRegistry;
 use crate::tools::shell;
 use crate::tools::file;
 use crate::policy::Policy;
-use crate::agent::{AgentLoop, LoopEvent};
+use crate::agent::LoopEvent;
+use crate::dispatcher::DispatchResult;
 use std::env;
 use std::process::ExitCode;
 use tokio::sync::mpsc;
@@ -56,7 +59,7 @@ fn main() -> ExitCode {
 }
 
 async fn async_main() -> ExitCode {
-    log::info!("DeepSeek Harness Lite v{} — P1 core loop", env!("CARGO_PKG_VERSION"));
+    log::info!("DeepSeek Harness Lite v{} — P2 tri-mode dispatch", env!("CARGO_PKG_VERSION"));
     log::info!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
 
     // Load configuration.
@@ -95,10 +98,10 @@ async fn async_main() -> ExitCode {
     let active_skill = skills.first().cloned().unwrap_or_else(default_skill);
     log::info!("Active skill: {} (mode: {:?}, think: {})", active_skill.name, active_skill.mode, active_skill.think);
 
-    // Create the session log and agent loop.
+    // Create the session log and dispatcher.
     let session = SessionLog::new(512);
     let llm = LlmClient::new(&config.model);
-    let mut agent_loop = AgentLoop::new(session, tools, llm, &config.model);
+    let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model);
 
     // If a prompt was passed on the CLI, run one turn immediately.
     let cli_prompt: Option<String> = env::args().nth(1).filter(|a| !a.starts_with('-'));
@@ -151,9 +154,9 @@ async fn async_main() -> ExitCode {
             }
         });
 
-        match agent_loop.run_turn(prompt, &active_skill, event_tx).await {
-            Ok(reason) => log::info!("Turn completed: {reason:?}"),
-            Err(e) => log::error!("Turn failed: {e}"),
+        match dispatcher.dispatch(prompt, &active_skill, event_tx).await {
+            DispatchResult::Done { mode, reason } => log::info!("Dispatch done: mode={mode:?}, reason={reason:?}"),
+            DispatchResult::Failed { mode, message } => log::error!("Dispatch failed: mode={mode:?}, {message}"),
         }
 
         // Wait for the printer to finish.
