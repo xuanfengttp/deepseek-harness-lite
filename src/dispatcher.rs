@@ -305,4 +305,9 @@ impl Dispatcher {
     pub fn session(&self) -> &SessionLog {
         &self.session
     }
+
+    /// Take the session log out of the dispatcher (for returning to SessionManager).
+    pub fn take_session(&mut self) -> SessionLog {
+        std::mem::replace(&mut self.session, SessionLog::new(0))
+    }
 }

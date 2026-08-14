@@ -6,6 +6,7 @@
 
 mod types;
 mod session;
+mod session_manager;
 mod llm;
 mod prompt;
 mod policy;
@@ -62,7 +63,7 @@ fn main() -> ExitCode {
 }
 
 async fn async_main() -> ExitCode {
-    log::info!("DeepSeek Harness Lite v{} — P4 memory + compaction + persistence", env!("CARGO_PKG_VERSION"));
+    log::info!("DeepSeek Harness Lite v{} — P5 session management", env!("CARGO_PKG_VERSION"));
     log::info!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
 
     // Load configuration.
@@ -131,22 +132,24 @@ async fn async_main() -> ExitCode {
         .unwrap_or_else(default_skill);
     log::info!("Active skill: {} (mode: {:?}, think: {})", active_skill.name, active_skill.mode, active_skill.think);
 
-    // Create or load the session log.
-    let session = if config.session.checkpoint_turn_end {
-        let checkpoint_path = format!("{}/session-current.bin", config.session.persist_dir.trim_end_matches('/'));
-        match SessionLog::load(&checkpoint_path, 512) {
-            Ok(loaded) => {
-                log::info!("Session restored from {}: {} events", checkpoint_path, loaded.len());
-                loaded
-            }
-            Err(_) => {
-                log::info!("No session checkpoint; starting fresh");
-                SessionLog::new(512)
-            }
-        }
+    // Create session manager (multi-session + offloading + double-page cache).
+    let mut session_mgr = session_manager::SessionManager::new(
+        &config.session.persist_dir,
+        512,
+    );
+    log::info!("Session manager: {} session(s) in index", session_mgr.len());
+
+    // Create a new session or switch to the most recent one.
+    let sessions_list = session_mgr.list();
+    let session_id = if let Some(most_recent) = sessions_list.first() {
+        log::info!("Resuming most recent session: {} ({})", most_recent.id, most_recent.title);
+        session_mgr.switch(&most_recent.id).unwrap_or_else(|| session_mgr.create("New session"))
     } else {
-        SessionLog::new(512)
+        session_mgr.create("New session")
     };
+
+    // Take the active session log out for the dispatcher.
+    let session = session_mgr.take_active().unwrap_or_else(|| SessionLog::new(512));
     let llm = LlmClient::new(&config.model);
     let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model);
 
@@ -208,9 +211,16 @@ async fn async_main() -> ExitCode {
 
         // Wait for the printer to finish.
         let _ = printer.await;
+
+        // Return the session to the manager and checkpoint.
+        let session = dispatcher.take_session();
+        session_mgr.return_session(session);
+        session_mgr.checkpoint_active();
+        log::info!("Session checkpointed: {} ({} events)", session_id, session_mgr.active().map(|s| s.len()).unwrap_or(0));
     } else {
-        // No CLI prompt — P1 scaffold mode (interactive server arrives in P6).
+        // No CLI prompt — interactive server arrives in P6.
         log::info!("No prompt provided. Use: dsh-lite \"your question here\"");
+        log::info!("Active sessions: {} (cached: {})", session_mgr.len(), session_mgr.cached_len());
         log::info!("Interactive web client arrives in P6. For now, pass a prompt as CLI argument.");
     }
 
