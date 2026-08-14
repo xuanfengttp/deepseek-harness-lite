@@ -616,6 +616,7 @@ body {
 let isStreaming = false;
 let currentAssistantEl = null;
 let currentAssistantText = '';
+let chatAbort = null;
 let currentTheme = 'system';
 
 // ─── Theme ─────────────────────────────────────────────────────────────
@@ -641,7 +642,7 @@ async function loadSessions() {
     list.innerHTML = '';
     sessions.forEach(s => {
       const el = document.createElement('div');
-      el.className = 'session-item' + (s.in_memory ? ' active' : '');
+      el.className = 'session-item' + (s.is_active ? ' active' : '');
       el.innerHTML = `<div class="title">${esc(s.title)}</div><div class="meta">${s.event_count} events</div>`;
       el.onclick = () => switchSession(s.id);
       list.appendChild(el);
@@ -758,13 +759,16 @@ async function sendMessage() {
   addMessage('user', msg);
   input.value = ''; input.style.height = '44px';
   isStreaming = true;
-  document.getElementById('send-btn').disabled = true;
+  setSendButtonMode('stop');
 
   // Auto-name the session from the first message if it's still "New session".
   autoNameSession(msg);
 
+  // AbortController lets the stop button cancel the SSE stream.
+  chatAbort = new AbortController();
+
   try {
-    const res = await fetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
+    const res = await fetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg}), signal: chatAbort.signal});
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -779,18 +783,49 @@ async function sendMessage() {
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         const data = line.slice(6);
-        if (data === '[DONE]') continue;
+        if (data === continue;
         try { handleEvent(JSON.parse(data), showTraj); } catch(e) {}
       }
     }
-  } catch(e) { console.error('chat', e); }
+  } catch(e) {
+    if (e.name === 'AbortError') {
+      // User clicked stop — finalize whatever partial text we got.
+      console.log('Chat stopped by user');
+    } else {
+      console.error('chat', e);
+    }
+  }
 
   if (currentAssistantEl && currentAssistantText) {
     currentAssistantEl.querySelector('.bubble').innerHTML = renderMd(currentAssistantText);
   }
   isStreaming = false;
-  document.getElementById('send-btn').disabled = false;
+  chatAbort = null;
+  setSendButtonMode('send');
   loadSessions();
+}
+
+// Toggle the send button between send (arrow) and stop (square) modes.
+function setSendButtonMode(mode) {
+  const btn = document.getElementById('send-btn');
+  if (mode === 'stop') {
+    btn.disabled = false;
+    btn.onclick = stopChat;
+    btn.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" /></svg>';
+    btn.style.background = 'var(--label-primary)';
+  } else {
+    btn.disabled = true;
+    btn.onclick = sendMessage;
+    btn.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg>';
+    btn.style.background = '';
+  }
+}
+
+// Stop the current chat stream.
+function stopChat() {
+  if (chatAbort) {
+    chatAbort.abort();
+  }
 }
 
 function handleEvent(event, showTraj) {

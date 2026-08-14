@@ -30,6 +30,8 @@ pub struct SessionMeta {
     pub updated_at: u64,
     /// Whether this session is currently loaded in memory.
     pub in_memory: bool,
+    /// Whether this is the currently active session (the one being viewed).
+    pub is_active: bool,
 }
 
 /// The session manager owns the session registry, the active session,
@@ -83,6 +85,7 @@ impl SessionManager {
             created_at: now,
             updated_at: now,
             in_memory: true,
+            is_active: true,
         };
 
         self.sessions.insert(id.clone(), meta);
@@ -104,6 +107,21 @@ impl SessionManager {
         if !self.sessions.contains_key(id) {
             log::warn!("Session not found: {id}");
             return None;
+        }
+
+        // Checkpoint the current active session to flash BEFORE switching,
+        // so its history survives even if it gets evicted from the cache.
+        if let Some(old_id) = &self.active_id {
+            if old_id != id {
+                if let Some(log) = self.cache.get(old_id) {
+                    let path = self.session_path(old_id);
+                    if let Err(e) = log.checkpoint(&path.to_string_lossy()) {
+                        log::warn!("Pre-switch checkpoint failed for {old_id}: {e}");
+                    } else {
+                        log::info!("Session checkpointed before switch: {old_id}");
+                    }
+                }
+            }
         }
 
         // If not in cache, load from flash.
@@ -164,7 +182,12 @@ impl SessionManager {
 
     /// List all sessions (metadata), sorted by last activity (most recent first).
     pub fn list(&self) -> Vec<SessionMeta> {
-        let mut sessions: Vec<SessionMeta> = self.sessions.values().cloned().collect();
+        let active = self.active_id.clone();
+        let mut sessions: Vec<SessionMeta> = self.sessions.values().map(|m| {
+            let mut m = m.clone();
+            m.is_active = Some(&m.id) == active.as_ref();
+            m
+        }).collect();
         sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         sessions
     }
@@ -292,9 +315,10 @@ impl SessionManager {
             Ok(data) => {
                 if let Ok(mut sessions) = bincode::deserialize::<HashMap<String, SessionMeta>>(&data) {
                     log::info!("Session index loaded: {} sessions", sessions.len());
-                    // All sessions start as not-in-memory (will load on switch).
+                    // All sessions start as not-in-memory and not-active (will set on switch/resume).
                     for meta in sessions.values_mut() {
                         meta.in_memory = false;
+                        meta.is_active = false;
                     }
                     self.sessions = sessions;
                 }
