@@ -160,9 +160,9 @@ body {
 .sidebar.collapsed .sidebar-header .brand { flex: none; }
 .sidebar.collapsed .sidebar-header .toggle-btn { display: none; }
 .sidebar.collapsed .sidebar-header .brand { cursor: pointer; }
-.sidebar.collapsed .btn-new { margin: 0 0 12px; width: 36px; height: 36px; padding: 0; gap: 0; border-color: transparent; background: transparent; }
+.sidebar.collapsed .btn-new { margin: 0 0 12px; width: 36px; height: 36px; padding: 0; gap: 0; border-color: transparent; background: transparent; align-self: center; }
 .sidebar.collapsed .btn-new:hover { background: var(--bg-hover); }
-.sidebar.collapsed .btn-settings { justify-content: center; padding: 0; width: 36px; height: 36px; gap: 0; }
+.sidebar.collapsed .btn-settings { justify-content: center; padding: 0; width: 36px; height: 36px; gap: 0; align-self: center; }
 .sidebar.collapsed .btn-settings span { display: none; }
 .sidebar.collapsed .session-item { padding: 8px 4px; }
 .sidebar.collapsed .session-item .title, .sidebar.collapsed .session-item .meta { display: none; }
@@ -236,6 +236,9 @@ body {
 /* ─── Chat ──────────────────────────────────────────────────────────── */
 .chat-area { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; }
 .chat-inner { max-width: 748px; margin: 0 auto; padding: 20px 16px 100px; }
+.traj-inner { max-width: 748px; margin: 0 auto; padding: 20px 16px 100px; }
+.traj-inner .trajectory-event { font-size: 12px; color: var(--label-secondary); padding: 4px 0; border-bottom: 1px solid var(--border-l1); }
+.traj-inner .trajectory-event:first-child { padding-top: 0; }
 
 .message { margin-bottom: 16px; }
 .message.user { text-align: right; }
@@ -289,23 +292,17 @@ body {
 .hero p { font-size: 14px; }
 
 /* ─── Input bar ─────────────────────────────────────────────────────── */
-.input-area { position: sticky; bottom: 0; background: var(--bg-base); padding: 6px 0 10px; }
-.input-card {
-  max-width: 748px; margin: 0 auto; padding: 10px 12px 6px;
-  border: 1px solid var(--border-l2); border-radius: 22px;
-  background: var(--bg-input); box-shadow: var(--shadow-l2);
-  display: flex; flex-direction: column; gap: 8px;
+.input-area { position: sticky; bottom: 0; background: var(--bg-base); padding: 6px 16px 10px; }
+.input-bar { max-width: 748px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px; }
+.input-bar textarea {
+  flex: 1; background: var(--bg-input); color: var(--label-primary);
+  border: 1px solid var(--border-l2); border-radius: 22px; padding: 10px 16px;
+  font-size: 15px; font-family: var(--font); line-height: 24px; resize: none; overflow: hidden;
+  height: 44px; max-height: 200px; box-shadow: var(--shadow-l2);
+  transition: border-color var(--dur) var(--ease);
 }
-.input-card textarea {
-  width: 100%; background: transparent; color: var(--label-primary);
-  border: none; outline: none; resize: none; overflow: hidden;
-  font-size: 15px; font-family: var(--font); line-height: 24px;
-  padding: 0 4px; min-height: 24px; max-height: 200px;
-}
-.input-card textarea::placeholder { color: var(--label-caption); user-select: none; }
-.input-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 2px; }
-.input-row-left { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.input-row-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.input-bar textarea:focus { outline: none; border-color: var(--accent); }
+.input-bar textarea::placeholder { color: var(--label-caption); user-select: none; }
 .model-select {
   border: none; border-radius: 8px; outline: none;
   background-color: transparent; color: var(--label-secondary);
@@ -313,16 +310,19 @@ body {
   appearance: none; -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2381858C' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 2px center; background-size: 12px;
-  padding: 0 18px 0 8px; height: 28px; min-width: 90px; max-width: 160px; white-space: nowrap;
+  padding: 0 18px 0 8px; height: 28px; max-width: 160px; white-space: nowrap; flex-shrink: 0;
+  transform: translateY(-2px);
   transition: background-color var(--dur) var(--ease);
 }
 .model-select:hover:not(:disabled) { background-color: var(--bg-hover); }
-.context-ring { color: var(--label-tertiary); display: flex; align-items: center; cursor: default; }
+.model-select.hidden { display: none; }
+.context-ring { color: var(--label-tertiary); display: flex; align-items: center; cursor: default; flex-shrink: 0; transform: translateY(-2px); }
 .send-btn {
   width: 34px; height: 34px; border: none; border-radius: 999px;
   background: var(--info-fill); color: #fff; cursor: pointer;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   transition: background-color 100ms var(--ease);
+  transform: translateY(-2px);
 }
 .send-btn:hover:not(:disabled) { background: var(--info-hover); }
 .send-btn:disabled { opacity: 0.4; cursor: default; }
@@ -501,7 +501,6 @@ body {
         <div class="header-title"><span data-i18n="skill">技能</span>: <span class="skill-name" id="active-skill-name">—</span></div>
       </div>
       <div class="header-controls">
-        <select class="skill-select" id="skill-select" onchange="switchSkill()"></select>
         <div class="view-tabs">
           <button class="view-tab active" id="tab-chat" onclick="setView('chat')" data-i18n="chat">对话</button>
           <button class="view-tab" id="tab-trajectory" onclick="setView('trajectory')" data-i18n="trajectory">轨迹</button>
@@ -509,32 +508,27 @@ body {
       </div>
     </div>
     <div class="chat-area" id="chat-area">
-      <div class="chat-inner">
+      <div class="chat-inner" id="chat-inner">
         <div class="hero" id="hero">
           <svg width="64" height="64" viewBox="0 0 50 50" fill="none" style="margin-bottom:16px;opacity:0.4"><path d="M48.8354 10.0479C48.3232 9.79199 48.1025 10.2798 47.8032 10.5278C47.7007 10.6079 47.6143 10.7119 47.5273 10.8076C46.7793 11.624 45.9048 12.1597 44.7622 12.0957C43.0923 12 41.666 12.5356 40.4058 13.8398C40.1377 12.2319 39.2476 11.272 37.8926 10.6558C37.1836 10.3359 36.4668 10.0156 35.9702 9.31982C35.6235 8.82373 35.5293 8.27197 35.356 7.72754C35.2456 7.3999 35.1353 7.06396 34.7651 7.00781C34.3633 6.94385 34.2056 7.2876 34.0479 7.57568C33.418 8.75195 33.1733 10.0479 33.1973 11.3599C33.2524 14.312 34.4736 16.6641 36.8999 18.3359C37.1758 18.5278 37.2466 18.7197 37.1597 19C36.9946 19.5757 36.7974 20.1357 36.624 20.7119C36.5137 21.0801 36.3486 21.1597 35.9624 21C34.6309 20.4321 33.481 19.5918 32.4644 18.5757C30.7393 16.8721 29.1792 14.9917 27.2334 13.52C26.7764 13.1758 26.3193 12.856 25.8467 12.5518C23.8618 10.584 26.1069 8.96777 26.627 8.77588C27.1704 8.57568 26.8159 7.8877 25.0591 7.896C23.3022 7.90381 21.6953 8.50391 19.647 9.30371C19.3477 9.42383 19.0322 9.51172 18.7095 9.58398C16.8501 9.22363 14.9199 9.14355 12.9033 9.37598C9.10596 9.80762 6.07275 11.6396 3.84326 14.7681C1.16455 18.5278 0.53418 22.7998 1.30664 27.2559C2.11768 31.9521 4.46582 35.8398 8.07373 38.8799C11.8159 42.0322 16.1255 43.5762 21.041 43.2803C24.0269 43.104 27.3516 42.6963 31.1016 39.4561C32.0469 39.936 33.0396 40.1279 34.686 40.272C35.9546 40.3921 37.1758 40.208 38.1211 40.0078C39.6021 39.688 39.4995 38.2881 38.9639 38.0322C34.623 35.9678 35.5762 36.8081 34.71 36.1279C36.9155 33.4639 40.2402 30.6958 41.54 21.728C41.6426 21.0161 41.5557 20.5679 41.54 19.9917C41.5322 19.6396 41.6108 19.5039 42.0049 19.4639C43.0923 19.3359 44.1479 19.0317 45.1167 18.4878C47.9292 16.9199 49.064 14.3438 49.3315 11.2559C49.3711 10.7837 49.3237 10.2959 48.8354 10.0479ZM24.3262 37.8398C20.1196 34.4639 18.0791 33.3521 17.2358 33.3999C16.4482 33.4482 16.5898 34.3682 16.7632 34.9678C16.9443 35.5601 17.1812 35.9683 17.5117 36.4878C17.7402 36.832 17.8979 37.3442 17.2832 37.728C15.9282 38.584 13.5728 37.4399 13.4624 37.3838C10.7207 35.7358 8.42822 33.5601 6.81348 30.584C5.25342 27.7197 4.34766 24.6479 4.19775 21.3677C4.1582 20.5757 4.38672 20.2959 5.15869 20.1519C6.17529 19.96 7.22314 19.9199 8.23926 20.0718C12.5327 20.7119 16.1885 22.6719 19.2529 25.7759C21.002 27.5439 22.3252 29.6558 23.6885 31.7202C25.1377 33.9121 26.6978 36 28.6831 37.7119C29.3843 38.312 29.9434 38.7681 30.479 39.104C28.8643 39.2881 26.1699 39.3281 24.3262 37.8398ZM26.3433 24.6001C26.3433 24.248 26.6191 23.9678 26.9658 23.9678C27.0444 23.9678 27.1152 23.9839 27.1782 24.0078C27.2651 24.04 27.3438 24.0879 27.4067 24.1602C27.5171 24.272 27.5801 24.4321 27.5801 24.6001C27.5801 24.9521 27.3042 25.2319 26.9575 25.2319C26.6108 25.2319 26.3433 24.9521 26.3433 24.6001ZM32.6064 27.8799C32.2046 28.0479 31.8027 28.1919 31.4165 28.208C30.8179 28.2397 30.1641 27.9922 29.8096 27.688C29.2583 27.2158 28.8643 26.9521 28.6987 26.1279C28.6279 25.7759 28.6675 25.2319 28.7305 24.9199C28.8721 24.248 28.7144 23.8159 28.2495 23.4238C27.8716 23.104 27.3911 23.0161 26.8633 23.0161C26.666 23.0161 26.4849 22.9277 26.3511 22.856C26.1304 22.7441 25.9492 22.4639 26.1226 22.1201C26.1777 22.0078 26.4458 21.7358 26.5088 21.688C27.2256 21.272 28.0527 21.4077 28.8169 21.7197C29.5259 22.0161 30.0615 22.5601 30.834 23.3281C31.6216 24.2559 31.7632 24.5117 32.2124 25.208C32.5669 25.752 32.8901 26.312 33.1104 26.9521C33.2446 27.3521 33.0713 27.6802 32.6064 27.8799Z" fill="currentColor" fill-rule="nonzero"/></svg>
           <h2 data-i18n="ready">就绪</h2>
           <p data-i18n="send_to_start">发送消息开始对话。</p>
         </div>
       </div>
+      <div class="traj-inner hidden" id="traj-inner"></div>
     </div>
     <div class="input-area">
-      <div class="input-card">
-        <textarea id="input" data-i18n-placeholder="input_placeholder" placeholder="发送消息..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-        <div class="input-row">
-          <div class="input-row-left">
-            <select id="model-preset" class="model-select" title="Model preset"></select>
-          </div>
-          <div class="input-row-right">
-            <div class="context-ring" id="context-ring" title="上下文占用">
-              <svg viewBox="0 0 14 14" width="14" height="14">
-                <circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="2" opacity="0.2"/>
-                <circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--info-fill)" stroke-width="2"
-                  stroke-dasharray="0 34.56" stroke-linecap="round" transform="rotate(-90 7 7)" id="ring-fill"/>
-              </svg>
-            </div>
-            <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>
-          </div>
+      <div class="input-bar">
+        <select id="model-preset" class="model-select hidden" title="Model preset"></select>
+        <div class="context-ring" id="context-ring" title="上下文占用">
+          <svg viewBox="0 0 14 14" width="14" height="14">
+            <circle cx="7" cy="7" r="5.5" fill="none" stroke="currentColor" stroke-width="2" opacity="0.2"/>
+            <circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--info-fill)" stroke-width="2"
+              stroke-dasharray="0 34.56" stroke-linecap="round" transform="rotate(-90 7 7)" id="ring-fill"/>
+          </svg>
         </div>
+        <textarea id="input" data-i18n-placeholder="input_placeholder" placeholder="发送消息..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>
       </div>
       <div class="stats-bar" id="stats-bar"><span id="stats-text"></span></div>
     </div>
@@ -772,6 +766,8 @@ async function createSession() {
     const data = await res.json();
     // Clear chat area and show hero
     document.querySelector('.chat-inner').innerHTML = heroTemplate;
+    document.getElementById('traj-inner').innerHTML = '';
+    setView('chat');
     applyI18n();
     currentAssistantEl = null;
     currentAssistantText = '';
@@ -787,6 +783,8 @@ async function switchSession(id) {
     const histData = await histRes.json();
     // Clear chat area
     document.querySelector('.chat-inner').innerHTML = '';
+    document.getElementById('traj-inner').innerHTML = '';
+    setView('chat');
     currentAssistantEl = null;
     currentAssistantText = '';
     resetSessionStats();
@@ -844,6 +842,8 @@ async function deleteSession(id) {
     } else {
       // No sessions left — show hero.
       document.querySelector('.chat-inner').innerHTML = heroTemplate;
+      document.getElementById('traj-inner').innerHTML = '';
+      setView('chat');
       applyI18n();
       currentAssistantEl = null;
       currentAssistantText = '';
@@ -924,7 +924,7 @@ function switchSkill() {
 
 // ─── Chat ──────────────────────────────────────────────────────────────
 function handleKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
-function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,200)+'px'; }
+function autoResize(el) { el.style.height='44px'; el.style.height=Math.min(el.scrollHeight,200)+'px'; }
 
 async function sendMessage() {
   const input = document.getElementById('input');
@@ -1025,6 +1025,10 @@ function setView(view) {
   const trajTab = document.getElementById('tab-trajectory');
   if (chatTab) chatTab.classList.toggle('active', view === 'chat');
   if (trajTab) trajTab.classList.toggle('active', view === 'trajectory');
+  const chatInner = document.getElementById('chat-inner');
+  const trajInner = document.getElementById('traj-inner');
+  if (chatInner) chatInner.classList.toggle('hidden', view === 'trajectory');
+  if (trajInner) trajInner.classList.toggle('hidden', view === 'chat');
 }
 async function loadModelPresets() {
   try {
@@ -1032,21 +1036,21 @@ async function loadModelPresets() {
     const presets = await res.json();
     const sel = document.getElementById('model-preset');
     if (!sel) return;
-    sel.innerHTML = '';
+    // Only show the dropdown if there are actual model presets configured
     if (!presets || presets.length === 0) {
-      const opt = document.createElement('option');
-      opt.value = '默认';
-      opt.textContent = '默认模型';
-      sel.appendChild(opt);
-    } else {
-      presets.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.name;
-        opt.textContent = `${p.name} (${p.model})`;
-        sel.appendChild(opt);
-      });
+      sel.classList.add('hidden');
+      currentPreset = '默认';
+      return;
     }
-    currentPreset = (presets && presets[0]) ? presets[0].name : '默认';
+    sel.classList.remove('hidden');
+    sel.innerHTML = '';
+    presets.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = `${p.name} (${p.model})`;
+      sel.appendChild(opt);
+    });
+    currentPreset = presets[0].name;
   } catch(e) { console.error('loadModelPresets', e); }
 }
 function resetSessionStats() {
@@ -1146,18 +1150,23 @@ function addMessage(role, content) {
 }
 function addToolEvent(label, content, isError, showTraj) {
   if (!showTraj && !isError) return;
-  const chat = document.querySelector('.chat-inner');
+  const traj = document.getElementById('traj-inner');
+  if (!traj) return;
   const el = document.createElement('div');
   el.className = 'tool-event' + (isError?' error':'');
   el.innerHTML = `<span class="label">${esc(label)}</span>${content?'<pre>'+esc(content)+'</pre>':''}`;
-  chat.appendChild(el);
+  traj.appendChild(el);
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
 }
 function addTraj(text) {
-  const chat = document.querySelector('.chat-inner');
+  const traj = document.getElementById('traj-inner');
+  if (!traj) return;
   const el = document.createElement('div');
   el.className = 'trajectory-event'; el.textContent = text;
-  chat.appendChild(el);
+  traj.appendChild(el);
+  // Auto-scroll the chat area to show new trajectory events
+  const area = document.getElementById('chat-area');
+  if (area) area.scrollTop = area.scrollHeight;
 }
 
 // ─── Markdown ──────────────────────────────────────────────────────────
