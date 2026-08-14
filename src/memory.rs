@@ -156,6 +156,10 @@ impl MemoryStore {
         let entries = self.entries.lock().unwrap();
         match bincode::serialize(&*entries) {
             Ok(data) => {
+                // Ensure parent directory exists before writing.
+                if let Some(parent) = self.path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
                 if let Err(e) = fs::write(&self.path, &data) {
                     log::warn!("Memory persist failed: {e}");
                 }
