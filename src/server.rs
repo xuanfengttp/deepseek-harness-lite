@@ -204,10 +204,9 @@ async fn handle_request(
                 return Ok(serve_json(r#"{"messages":[]}"#));
             }
             let mut mgr = state.session_mgr.lock().await;
-            // Ensure the session is loaded (switch loads from flash if needed)
-            if !mgr.is_cached(id) {
-                mgr.switch(id);
-            }
+            // Always switch to the requested session so active_messages()
+            // returns the correct session's history.
+            mgr.switch(id);
             let messages: Vec<serde_json::Value> = mgr.active_messages()
                 .unwrap_or_default()
                 .into_iter()

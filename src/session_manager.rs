@@ -137,11 +137,12 @@ impl SessionManager {
                     self.cache.insert(id.to_string(), SessionLog::new(self.max_events));
                 }
             }
-            self.evict_cache();
         }
 
-        // Mark as active.
+        // Mark as active BEFORE evicting, so the newly loaded session is
+        // never the LRU victim (evict_cache excludes the active session).
         self.active_id = Some(id.to_string());
+        self.evict_cache();
 
         // Update metadata.
         if let Some(meta) = self.sessions.get_mut(id) {

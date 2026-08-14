@@ -413,105 +413,25 @@ fn parse_cli_skill() -> Option<String> {
     None
 }
 
-/// A minimal default skill when no skill files are found.
-/// Ensure the skills directory exists next to the exe. If it doesn't,
-/// create it and write the two built-in skill files (health-check,
-/// interface-diagnostics) so the agent has skills on first run.
+/// Ensure the skills directory exists next to the exe. The lite version ships
+/// NO built-in skills — the directory starts empty and the user adds their own
+/// `.md` skill files. The system auto-discovers and registers them on startup.
 fn ensure_skills_dir(dir: &str) {
     let path = std::path::Path::new(dir);
-    if path.exists() && path.is_dir() {
-        // Directory exists — check if it has any .md files.
-        if let Ok(entries) = std::fs::read_dir(path) {
-            let has_skills = entries.flatten().any(|e| {
-                e.path().extension().map(|ext| ext == "md").unwrap_or(false)
-            });
-            if has_skills {
-                return; // Already populated.
-            }
-        }
+    if path.exists() {
+        return; // Already exists (may be empty or user-populated).
     }
-
-    // Create the directory.
     if let Err(e) = std::fs::create_dir_all(path) {
         log::warn!("Failed to create skills directory {}: {e}", path.display());
         return;
     }
-    log::info!("Created skills directory: {}", path.display());
-
-    // Write default skill files.
-    let health_check = r#"---
-name: health-check
-description: Run a deterministic health check SOP on the device — CPU, memory, interface, service status (auto-detects Windows/Linux)
-whenToUse: For routine inspection or when asked to check device health
-mode: workflow
-think: false
-tools:
-  allow: [shell, ssh_exec]
-steps:
-  - id: cpu_mem
-    tool: shell
-    args:
-      command: "ver 2>nul || uname -a"
-  - id: disk_usage
-    tool: shell
-    args:
-      command: "dir C:\ 2>nul || df -h"
-  - id: interface_status
-    tool: shell
-    args:
-      command: "ipconfig 2>nul || ip addr"
-  - id: service_status
-    tool: shell
-    args:
-      command: "sc query sshd 2>nul || systemctl is-active sshd 2>nul || echo service-check-skipped"
-  - id: summarize
-    llm_judge: "Summarize the health check results. Flag any anomalies. Return a concise status report."
-    input: "{{steps.cpu_mem.result}}\n{{steps.disk_usage.result}}\n{{steps.interface_status.result}}\n{{steps.service_status.result}}"
----
-
-# Health Check SOP
-
-This skill runs a fixed sequence of diagnostic commands and summarizes the results.
-Commands try Windows first (ver/wmic/ipconfig/sc), fall back to Linux (uname/df/ip/systemctl).
-No exploration needed — the steps are deterministic.
-"#;
-
-    let interface_diagnostics = r#"---
-name: interface-diagnostics
-description: Diagnose network interface issues on the device — check status, analyze failures, suggest fixes
-whenToUse: When the user reports interface anomalies, link failures, or port issues
-mode: plan
-think: true
-tools:
-  allow: [shell, file_read, file_write, memory_read, memory_write, todo_write]
-variables:
-  device_model: "unknown"
----
-
-# Interface Diagnostics
-
-You are a network element interface diagnostics assistant.
-
-## Diagnostic flow
-
-1. **Check interface status** — run `show interface brief` to get current state
-2. **Identify anomalies** — look for interfaces that are down, erroring, or degraded
-3. **Analyze root cause** — check logs, error counters, and link partner status
-4. **Suggest remediation** — provide specific, actionable fix steps
-
-## Rules
-
-- Always inspect actual device state before drawing conclusions
-- Report exact interface names and counters from command output
-- Prefer targeted fixes over broad restarts
-- Record confirmed failure patterns to long-term memory for future diagnosis
-"#;
-
-    let _ = std::fs::write(path.join("health-check.md"), health_check);
-    let _ = std::fs::write(path.join("interface-diagnostics.md"), interface_diagnostics);
-    log::info!("Wrote default skill files to {}", path.display());
+    log::info!("Created empty skills directory: {} (add .md skill files here)", path.display());
 }
 
+/// The fallback used when no skill is selected. This is NOT a skill — it is a
+/// bare general-purpose assistant with no domain-specific instructions. The lite
+/// version ships no built-in skills; the user defines their own in the skills/
+/// directory and the system auto-discovers them on startup.
 fn default_skill() -> Skill {
     Skill {
         name: "default".into(),
@@ -521,7 +441,7 @@ fn default_skill() -> Skill {
         think: false,
         tools_allow: vec![],
         variables: std::collections::HashMap::new(),
-        body: "You are a helpful assistant running on a network element device. Answer concisely.".into(),
+        body: "You are a helpful assistant. Answer concisely and accurately.".into(),
         steps: vec![],
     }
 }
