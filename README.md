@@ -191,7 +191,7 @@ The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming).
 
 ## Project status
 
-Currently at **P4** (memory + compaction + persistence). See [DESIGN-lite.md](DESIGN-lite.md) for the full design document and roadmap.
+Currently at **P5** (session management). See [DESIGN-lite.md](DESIGN-lite.md) for the full design document and roadmap.
 
 | Phase | Status |
 |---|---|
@@ -200,8 +200,8 @@ Currently at **P4** (memory + compaction + persistence). See [DESIGN-lite.md](DE
 | P2 — Tri-mode dispatch (workflow/todo/plan) | ✅ Done |
 | P3 — Skill system completion | ✅ Done |
 | P4 — Memory + compaction + persistence | ✅ Done |
-| P5 — Session management (multi-session + offloading) | 🔄 Next |
-| P6 — Web client + HTTP server | Planned |
+| P5 — Session management (multi-session + offloading) | ✅ Done |
+| P6 — Web client + HTTP server | 🔄 Next |
 | P7 — SSH client | Planned |
 | P8 — Size + memory optimization | Planned |
 

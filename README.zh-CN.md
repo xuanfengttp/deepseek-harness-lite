@@ -191,7 +191,7 @@ dir = "skills"
 
 ## 项目状态
 
-当前进度：**P4**（记忆 + 压缩 + 持久化）。完整设计文档和路线图见 [DESIGN-lite.md](DESIGN-lite.md)。
+当前进度：**P5**（会话管理）。完整设计文档和路线图见 [DESIGN-lite.md](DESIGN-lite.md)。
 
 | 阶段 | 状态 |
 |---|---|
@@ -200,8 +200,8 @@ dir = "skills"
 | P2 — 三模式分发（workflow/todo/plan） | ✅ 完成 |
 | P3 — Skill 系统完善 | ✅ 完成 |
 | P4 — 记忆 + 压缩 + 持久化 | ✅ 完成 |
-| P5 — 会话管理（多会话 + offloading） | 🔄 下一步 |
-| P6 — Web 客户端 + HTTP 服务器 | 计划中 |
+| P5 — 会话管理（多会话 + offloading） | ✅ 完成 |
+| P6 — Web 客户端 + HTTP 服务器 | 🔄 下一步 |
 | P7 — SSH 客户端 | 计划中 |
 | P8 — 体积 + 内存优化 | 计划中 |
 
