@@ -6,6 +6,9 @@ target/
 **/*.rs.bk
 *.pdb
 
+# Release binaries (built per phase, not tracked in git)
+release/
+
 # IDE / OS
 .vscode/
 .idea/
