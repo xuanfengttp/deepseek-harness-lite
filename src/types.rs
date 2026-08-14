@@ -125,6 +125,10 @@ pub struct ToolResult {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub model: ModelConfig,
+    /// Optional list of named model presets for hot-switching in the chat UI.
+    /// Each entry has a display name + the same fields as the default model.
+    #[serde(default)]
+    pub models: Vec<ModelPreset>,
     pub server: ServerConfig,
     pub session: SessionConfig,
     pub memory: MemoryConfig,
@@ -133,6 +137,26 @@ pub struct Config {
     pub trajectory: TrajectoryConfig,
     pub tools: ToolsConfig,
 }
+
+/// A named model preset for hot-switching in the chat UI.
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+pub struct ModelPreset {
+    pub name: String,
+    pub base_url: String,
+    #[serde(default)]
+    pub api_key: String,
+    pub model: String,
+    #[serde(default = "default_context_window")]
+    pub context_window: usize,
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: usize,
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+}
+
+fn default_context_window() -> usize { 8192 }
+fn default_max_tokens() -> usize { 2048 }
+fn default_temperature() -> f32 { 0.0 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ModelConfig {

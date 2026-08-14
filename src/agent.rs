@@ -44,6 +44,8 @@ pub enum LoopEvent {
     StepEnd { turn: u64, step: u64 },
     /// A turn ended.
     TurnEnd { turn: u64, reason: TurnEndReason },
+    /// Token usage reported by the model after an assistant message.
+    Usage { prompt_tokens: u64, completion_tokens: u64 },
     /// An error occurred.
     Error { message: String },
 }
@@ -160,6 +162,7 @@ impl AgentLoop {
             let mut full_content = String::new();
             let mut tool_calls: Vec<ToolCall> = Vec::new();
             let mut had_error = false;
+            let mut captured_usage: Option<TokenUsage> = None;
 
             while let Some(event) = stream_rx.recv().await {
                 match event {
@@ -171,12 +174,20 @@ impl AgentLoop {
                         // A fully assembled tool call from the stream — collect it.
                         tool_calls.push(tc);
                     }
-                    StreamEvent::Done { content, tool_calls: tc, .. } => {
+                    StreamEvent::Done { content, tool_calls: tc, usage } => {
                         // Use the accumulated content from Done (authoritative).
                         if !content.is_empty() {
                             full_content = content;
                         }
                         tool_calls = tc;
+                        // Capture token usage for the stats footer.
+                        if let Some(u) = &usage {
+                            let _ = event_tx.send(LoopEvent::Usage {
+                                prompt_tokens: u.prompt_tokens,
+                                completion_tokens: u.completion_tokens,
+                            }).await;
+                        }
+                        captured_usage = usage;
                     }
                     StreamEvent::Error(msg) => {
                         had_error = true;
@@ -199,7 +210,7 @@ impl AgentLoop {
             }
 
             // Record the assistant message.
-            let usage = None; // TODO: extract from StreamEvent::Done
+            let usage = captured_usage;
             self.session.append(SessionEvent::AssistantMessage {
                 content: full_content.clone(),
                 tool_calls: tool_calls.clone(),

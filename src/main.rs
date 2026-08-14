@@ -197,6 +197,9 @@ async fn async_main() -> ExitCode {
                     }
                     LoopEvent::StepEnd { turn, step } => log::info!("[step {turn}.{step} ended]"),
                     LoopEvent::TurnEnd { turn, reason } => log::info!("[turn {turn} ended: {reason:?}]"),
+                    LoopEvent::Usage { prompt_tokens, completion_tokens } => {
+                        log::info!("[tokens: {prompt_tokens} in, {completion_tokens} out]");
+                    }
                     LoopEvent::Error { message } => log::error!("[error: {message}]"),
                 }
             }

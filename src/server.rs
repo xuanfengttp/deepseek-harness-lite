@@ -176,6 +176,43 @@ async fn handle_request(
             }
         }
 
+        // Delete a session
+        (Method::POST, "/api/sessions/delete") => {
+            let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+            let id = serde_json::from_slice::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v.get("id").and_then(|t| t.as_str()).map(String::from))
+                .unwrap_or_default();
+
+            if id.is_empty() {
+                return Ok(serve_json(r#"{"ok":false,"error":"id required"}"#));
+            }
+            let mut mgr = state.session_mgr.lock().await;
+            mgr.delete(&id);
+            serve_json(r#"{"ok":true}"#)
+        }
+
+        // List model presets (for hot-switch dropdown in chat UI)
+        (Method::GET, "/api/models/presets") => {
+            let config = crate::load_config_file().unwrap_or_else(|| state.config.clone());
+            let presets: Vec<serde_json::Value> = config.models.iter().map(|p| {
+                serde_json::json!({
+                    "name": p.name,
+                    "model": p.model,
+                    "base_url": p.base_url,
+                })
+            }).collect();
+            // Always include the default model as the first entry.
+            let default = serde_json::json!({
+                "name": "默认",
+                "model": config.model.model,
+                "base_url": config.model.base_url,
+            });
+            let mut all = vec![default];
+            all.extend(presets);
+            serve_json(&serde_json::to_string(&all).unwrap_or_else(|_| "[]".into()))
+        }
+
         // List skills
         (Method::GET, "/api/skills") => {
             let skills_json: Vec<serde_json::Value> = state.skills.iter().map(|s| {
@@ -342,7 +379,26 @@ async fn handle_chat(
     // Re-read config from disk so changes made in the settings panel
     // (model base_url, api_key, tools toggles) take effect immediately
     // without a restart.
-    let config = crate::load_config_file().unwrap_or_else(|| state.config.clone());
+    let mut config = crate::load_config_file().unwrap_or_else(|| state.config.clone());
+
+    // If the request specifies a model preset name, override config.model
+    // with that preset's values (hot-switching).
+    let preset_name = serde_json::from_slice::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| v.get("preset").and_then(|p| p.as_str()).map(String::from));
+    if let Some(ref pname) = preset_name {
+        if pname != "默认" && !pname.is_empty() {
+            if let Some(preset) = config.models.iter().find(|p| &p.name == pname) {
+                config.model.base_url = preset.base_url.clone();
+                config.model.api_key = preset.api_key.clone();
+                config.model.model = preset.model.clone();
+                config.model.context_window = preset.context_window;
+                config.model.max_tokens = preset.max_tokens;
+                config.model.temperature = preset.temperature;
+                log::info!("Using model preset: {pname} ({})", preset.model);
+            }
+        }
+    }
 
     // Find the active skill.
     let skill_name = state.active_skill_name.lock().await.clone();
@@ -476,6 +532,9 @@ fn format_loop_event(event: &LoopEvent) -> String {
         }
         LoopEvent::TurnEnd { turn, reason } => {
             format!(r#"{{"type":"turn_end","turn":{turn},"reason":"{:?}"}}"#, reason)
+        }
+        LoopEvent::Usage { prompt_tokens, completion_tokens } => {
+            format!(r#"{{"type":"usage","prompt_tokens":{prompt_tokens},"completion_tokens":{completion_tokens}}}"#)
         }
         LoopEvent::Error { message } => {
             let escaped = escape_json_string(message);

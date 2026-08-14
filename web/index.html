@@ -390,6 +390,48 @@ body {
 .config-status.ok { color: var(--green); }
 .config-status.err { color: var(--red); }
 
+/* ─── Sidebar toggle ────────────────────────────────────────────────── */
+.app.sidebar-hidden .sidebar { width: 0; overflow: hidden; border-right: none; flex-shrink: 0; }
+.sidebar-toggle {
+  width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent;
+  color: var(--label-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.sidebar-toggle:hover { background: var(--bg-hover); color: var(--label-primary); }
+.header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* ─── Session delete ────────────────────────────────────────────────── */
+.session-item { position: relative; padding-right: 28px; }
+.session-delete {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  opacity: 0; width: 20px; height: 20px; border: none; border-radius: 6px;
+  background: transparent; color: var(--label-tertiary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 14px; line-height: 1;
+  transition: opacity var(--dur) var(--ease), background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.session-item:hover .session-delete { opacity: 1; }
+.session-delete:hover { background: var(--bg-active); color: var(--red); }
+
+/* ─── View tabs (chat / trajectory) ─────────────────────────────────── */
+.view-tabs { display: flex; gap: 2px; background: var(--bg-platform); border-radius: 8px; padding: 2px; }
+.view-tab {
+  padding: 4px 12px; border: none; background: transparent; color: var(--label-secondary);
+  font-size: 13px; cursor: pointer; border-radius: 6px; font-family: var(--font);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.view-tab.active { background: var(--bg-base); color: var(--label-primary); box-shadow: var(--shadow-l1); }
+
+/* ─── Model selector ────────────────────────────────────────────────── */
+.model-bar { max-width: 748px; margin: 0 auto; padding: 0 16px 4px; }
+.model-select {
+  background: var(--bg-platform); color: var(--label-secondary); border: 1px solid var(--border-l2);
+  border-radius: 8px; padding: 3px 8px; font-size: 12px; font-family: var(--font); cursor: pointer; outline: none;
+}
+
+/* ─── Stats bar ─────────────────────────────────────────────────────── */
+.stats-bar { max-width: 748px; margin: 0 auto; padding: 4px 16px 8px; font-size: 11px; color: var(--label-caption); display: flex; gap: 8px; }
+.stats-bar span { white-space: nowrap; }
+
 .hidden { display: none !important; }
 </style>
 </head>
@@ -416,10 +458,16 @@ body {
   <!-- Main -->
   <div class="main">
     <div class="header">
-      <div class="header-title"><span data-i18n="skill">技能</span>: <span class="skill-name" id="active-skill-name">—</span></div>
+      <div class="header-left">
+        <button class="sidebar-toggle" onclick="toggleSidebar()" id="sidebar-toggle" aria-label="toggle sidebar" title="Toggle sidebar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden><path d="M2 3.5H14V5H2V3.5ZM2 7.25H14V8.75H2V7.25ZM2 11H14V12.5H2V11Z" fill="currentColor"/></svg></button>
+        <div class="header-title"><span data-i18n="skill">技能</span>: <span class="skill-name" id="active-skill-name">—</span></div>
+      </div>
       <div class="header-controls">
         <select class="skill-select" id="skill-select" onchange="switchSkill()"></select>
-        <label class="toggle-label"><input type="checkbox" id="show-trajectory"> <span data-i18n="trajectory">轨迹</span></label>
+        <div class="view-tabs">
+          <button class="view-tab active" id="tab-chat" onclick="setView('chat')" data-i18n="chat">对话</button>
+          <button class="view-tab" id="tab-trajectory" onclick="setView('trajectory')" data-i18n="trajectory">轨迹</button>
+        </div>
       </div>
     </div>
     <div class="chat-area" id="chat-area">
@@ -432,10 +480,14 @@ body {
       </div>
     </div>
     <div class="input-area">
+      <div class="model-bar">
+        <select id="model-preset" class="model-select" title="Model preset"></select>
+      </div>
       <div class="input-bar">
         <textarea id="input" data-i18n-placeholder="input_placeholder" placeholder="发送消息..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
         <button id="send-btn" onclick="sendMessage()" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>
       </div>
+      <div class="stats-bar" id="stats-bar"><span id="stats-text"></span></div>
     </div>
   </div>
 </div>
@@ -493,6 +545,10 @@ body {
               </div>
             </div>
           </div>
+          <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
+            <div><div class="setting-label" data-i18n="stats_bar">统计栏</div><div class="setting-hint" data-i18n="stats_bar_hint">在输入框下方显示 token 用量与时长。</div></div>
+            <div class="toggle-switch" id="toggle-stats" onclick="toggleStats(this)"></div>
+          </div>
         </div>
 
         <!-- Model -->
@@ -530,6 +586,10 @@ body {
             <div class="setting-label" data-i18n="temperature">温度</div>
             <div class="setting-hint" data-i18n="temperature_hint">0 = 确定性，越高越有创造力。</div>
             <input class="setting-input" id="cfg-temperature" type="number" step="0.1" min="0" max="2" placeholder="0.0">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label" data-i18n="model_presets">模型预设</div>
+            <div class="setting-hint" data-i18n="model_presets_hint">可在输入框上方的下拉菜单中快速切换模型预设。预设通过配置文件中的 [[models]] 段定义，请在"配置文件"中编辑后保存重启生效。</div>
           </div>
           <div class="btn-row">
             <button class="btn btn-primary" onclick="saveModelConfig()" data-i18n="save">保存</button>
@@ -618,6 +678,11 @@ let currentAssistantEl = null;
 let currentAssistantText = '';
 let chatAbort = null;
 let currentTheme = 'system';
+let showTrajectory = false;
+let showStats = localStorage.getItem('dsh-stats') !== 'off';
+let currentPreset = '默认';
+let sessionStats = { turns: 0, steps: 0, inputTokens: 0, outputTokens: 0, startTime: 0 };
+let heroTemplate = '';
 
 // ─── Theme ─────────────────────────────────────────────────────────────
 function initTheme() {
@@ -643,11 +708,14 @@ async function loadSessions() {
     sessions.forEach(s => {
       const el = document.createElement('div');
       el.className = 'session-item' + (s.is_active ? ' active' : '');
-      el.innerHTML = `<div class="title">${esc(s.title)}</div><div class="meta">${s.event_count} events</div>`;
+      el.innerHTML = `<div class="title">${esc(s.title)}</div><div class="meta">${s.event_count} events</div><button class="session-delete" aria-label="delete" title="${esc(t('delete') || 'delete')}">✕</button>`;
       el.onclick = () => switchSession(s.id);
+      const delBtn = el.querySelector('.session-delete');
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteSession(s.id); };
       list.appendChild(el);
     });
-  } catch(e) { console.error('loadSessions', e); }
+    return sessions;
+  } catch(e) { console.error('loadSessions', e); return []; }
 }
 async function createSession() {
   try {
@@ -658,6 +726,7 @@ async function createSession() {
     applyI18n();
     currentAssistantEl = null;
     currentAssistantText = '';
+    resetSessionStats();
     await loadSessions();
   } catch(e) { console.error('createSession', e); }
 }
@@ -669,8 +738,38 @@ async function switchSession(id) {
     applyI18n();
     currentAssistantEl = null;
     currentAssistantText = '';
+    resetSessionStats();
     await loadSessions();
   } catch(e) { console.error('switchSession', e); }
+}
+
+async function deleteSession(id) {
+  if (!confirm(t('confirm_delete') || 'Delete this session?')) return;
+  // Determine if the deleted session was the active one.
+  let wasActive = false;
+  try {
+    const res = await fetch('/api/sessions');
+    const pre = await res.json();
+    const target = pre.find(s => s.id === id);
+    wasActive = !!(target && (target.is_active || target.in_memory));
+  } catch(e) {}
+  try {
+    await fetch('/api/sessions/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+  } catch(e) { console.error('deleteSession', e); }
+  resetSessionStats();
+  const remaining = await loadSessions();
+  if (wasActive) {
+    if (remaining && remaining.length > 0) {
+      // Switch to the most recent remaining session.
+      await switchSession(remaining[0].id);
+    } else {
+      // No sessions left — show hero.
+      document.querySelector('.chat-inner').innerHTML = heroTemplate;
+      applyI18n();
+      currentAssistantEl = null;
+      currentAssistantText = '';
+    }
+  }
 }
 
 // Two-tier session naming (mirrors dsh session-title):
@@ -768,11 +867,11 @@ async function sendMessage() {
   chatAbort = new AbortController();
 
   try {
-    const res = await fetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg}), signal: chatAbort.signal});
+    const res = await fetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg, preset: document.getElementById('model-preset')?.value || '默认'}), signal: chatAbort.signal});
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    const showTraj = document.getElementById('show-trajectory').checked;
+    const showTraj = showTrajectory;
 
     while (true) {
       const {done, value} = await reader.read();
@@ -812,7 +911,7 @@ function setSendButtonMode(mode) {
     btn.disabled = false;
     btn.onclick = stopChat;
     btn.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><rect x="3" y="3" width="10" height="10" rx="3" fill="currentColor" /></svg>';
-    btn.style.background = 'var(--label-primary)';
+    btn.style.background = 'var(--info-fill)';
   } else {
     btn.disabled = true;
     btn.onclick = sendMessage;
@@ -826,6 +925,66 @@ function stopChat() {
   if (chatAbort) {
     chatAbort.abort();
   }
+}
+
+// ─── Sidebar / view / model / stats helpers ────────────────────────────
+function toggleSidebar() {
+  document.querySelector('.app').classList.toggle('sidebar-hidden');
+}
+function setView(view) {
+  showTrajectory = (view === 'trajectory');
+  const chatTab = document.getElementById('tab-chat');
+  const trajTab = document.getElementById('tab-trajectory');
+  if (chatTab) chatTab.classList.toggle('active', view === 'chat');
+  if (trajTab) trajTab.classList.toggle('active', view === 'trajectory');
+}
+async function loadModelPresets() {
+  try {
+    const res = await fetch('/api/models/presets');
+    const presets = await res.json();
+    const sel = document.getElementById('model-preset');
+    if (!sel) return;
+    sel.innerHTML = '';
+    presets.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name;
+      opt.textContent = `${p.name} (${p.model})`;
+      sel.appendChild(opt);
+    });
+    currentPreset = presets[0]?.name || '默认';
+  } catch(e) { console.error('loadModelPresets', e); }
+}
+function resetSessionStats() {
+  sessionStats = { turns: 0, steps: 0, inputTokens: 0, outputTokens: 0, startTime: 0 };
+  updateStatsBar();
+}
+function updateStatsBar() {
+  const bar = document.getElementById('stats-bar');
+  if (!bar) return;
+  const parts = [];
+  if (sessionStats.turns > 0) parts.push(`${sessionStats.turns} 轮 / ${sessionStats.steps} 步`);
+  if (sessionStats.inputTokens > 0 || sessionStats.outputTokens > 0) {
+    parts.push(`${formatTokens(sessionStats.inputTokens)} in / ${formatTokens(sessionStats.outputTokens)} out`);
+  }
+  if (sessionStats.startTime > 0) {
+    const dur = Math.round((Date.now() - sessionStats.startTime) / 1000);
+    parts.push(`${dur}s`);
+  }
+  if (!showStats || parts.length === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  const text = document.getElementById('stats-text');
+  if (text) text.textContent = parts.join(' | ');
+}
+function formatTokens(n) {
+  if (n < 1000) return String(n);
+  if (n < 1000000) return (n / 1000).toFixed(1) + 'K';
+  return (n / 1000000).toFixed(1) + 'M';
+}
+function toggleStats(el) {
+  el.classList.toggle('on');
+  showStats = el.classList.contains('on');
+  localStorage.setItem('dsh-stats', showStats ? 'on' : 'off');
+  updateStatsBar();
 }
 
 function handleEvent(event, showTraj) {
@@ -845,10 +1004,25 @@ function handleEvent(event, showTraj) {
       break;
     case 'tool_call': addToolEvent(`Executing: ${event.name}`, JSON.stringify(event.arguments,null,2), false, showTraj); break;
     case 'tool_result': addToolEvent('Result', event.content, event.is_error, showTraj); break;
-    case 'turn_start': currentAssistantEl=null; currentAssistantText=''; if(showTraj) addTraj(`── Turn ${event.turn} ──`); break;
-    case 'step_start': if(showTraj) addTraj(`  Step ${event.turn}.${event.step}`); break;
+    case 'turn_start':
+      sessionStats.turns++;
+      if (!sessionStats.startTime) sessionStats.startTime = Date.now();
+      updateStatsBar();
+      currentAssistantEl=null; currentAssistantText='';
+      if(showTraj) addTraj(`── Turn ${event.turn} ──`);
+      break;
+    case 'step_start':
+      sessionStats.steps++;
+      updateStatsBar();
+      if(showTraj) addTraj(`  Step ${event.turn}.${event.step}`);
+      break;
     case 'step_end': if(showTraj) addTraj(`  Step ${event.turn}.${event.step} done`); break;
     case 'turn_end': if(showTraj) addTraj(`── Turn end: ${event.reason} ──`); currentAssistantEl=null; break;
+    case 'usage':
+      sessionStats.inputTokens += event.prompt_tokens || 0;
+      sessionStats.outputTokens += event.completion_tokens || 0;
+      updateStatsBar();
+      break;
     case 'error': addToolEvent('Error', event.message, true, true); break;
   }
 }
@@ -906,6 +1080,8 @@ function openSettings() {
   loadConfig();
   loadConfigFile();
   loadConfigPath();
+  const statsToggle = document.getElementById('toggle-stats');
+  if (statsToggle) statsToggle.classList.toggle('on', showStats);
 }
 function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
 function switchSection(name) {
@@ -1113,6 +1289,9 @@ const I18N = {
     save_to_file:'保存到文件', reload:'重新加载',
     saved_restart:'已保存，对话时即时生效。', save_failed:'保存失败：',
     language_hint:'选择界面语言。',
+    chat:'对话', delete:'删除', confirm_delete:'确定删除此会话？',
+    stats_bar:'统计栏', stats_bar_hint:'在输入框下方显示 token 用量与时长。',
+    model_presets:'模型预设', model_presets_hint:'可在输入框上方的下拉菜单中快速切换模型预设。预设通过配置文件中的 [[models]] 段定义，请在"配置文件"中编辑后保存重启生效。',
   },
   en: {
     new_session:'New Session', settings:'Settings', settings_title:'Settings',
@@ -1140,6 +1319,9 @@ const I18N = {
     save_to_file:'Save to file', reload:'Reload',
     saved_restart:'Saved. Takes effect on next message.', save_failed:'Save failed: ',
     language_hint:'Choose the interface language.',
+    chat:'Chat', delete:'Delete', confirm_delete:'Delete this session?',
+    stats_bar:'Stats Bar', stats_bar_hint:'Show token usage and duration below the input box.',
+    model_presets:'Model Presets', model_presets_hint:'Switch model presets quickly from the dropdown above the input box. Presets are defined via the [[models]] sections in config.toml — edit them in "Config File" and restart to apply.',
   }
 };
 let currentLang = 'zh';
@@ -1183,8 +1365,13 @@ function injectIcons() {
 initTheme();
 initLanguage();
 injectIcons();
+// Capture the hero markup (with i18n applied) for reuse by deleteSession.
+const _heroEl = document.getElementById('hero');
+heroTemplate = _heroEl ? _heroEl.outerHTML : '<div class="hero" id="hero"><h2 data-i18n="ready">就绪</h2><p data-i18n="send_to_start">发送消息开始对话。</p></div>';
 loadSessions();
 loadSkills();
+loadModelPresets();
+updateStatsBar();
 </script>
 </body>
 </html>
