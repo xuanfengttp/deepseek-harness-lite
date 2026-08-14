@@ -283,23 +283,33 @@ body {
 .traj-preview .tp-label { flex: none; width: 32px; font-size: 9px; color: var(--label-caption); text-align: right; padding-right: 4px; line-height: 1; }
 .traj-preview .tp-track { flex: 1; display: flex; align-items: center; gap: 2px; height: 100%; min-width: 0; }
 .traj-preview .tp-bar { height: 8px; border-radius: 1px; min-width: 3px; opacity: 0.78; flex-shrink: 0; }
-.traj-preview .tp-bar[data-kind="user"] { background: var(--accent); }
-.traj-preview .tp-bar[data-kind="message"] { background: #6366f1; }
-.traj-preview .tp-bar[data-kind="tool"] { background: var(--amber); }
-.traj-preview .tp-bar[data-kind="error"] { background: var(--red); }
+.traj-preview .tp-bar[data-kind="user"] { background: var(--accent); opacity: 1; }
+.traj-preview .tp-bar[data-kind="message"] { background: #6366f1; opacity: 1; }
+.traj-preview .tp-bar[data-kind="tool"] { background: var(--amber); opacity: 1; }
+.traj-preview .tp-bar[data-kind="error"] { background: var(--red); opacity: 1; }
 .traj-preview .tp-bar[data-kind="system"] { background: var(--label-tertiary); }
 .traj-preview .tp-empty { font-size: 11px; color: var(--label-caption); }
 
 .traj-row {
   display: flex; align-items: center; box-sizing: border-box;
-  height: 30px; padding: 0 12px; gap: 10px;
-  border-bottom: 1px solid var(--border-l1);
+  height: 30px; padding: 0 12px 0 36px; gap: 8px;
+  border-bottom: 1px solid var(--border-l1); position: relative;
   transition: background-color 120ms var(--ease);
 }
 .traj-row:hover { background: var(--bg-hover); }
+.traj-row[data-turn-start]:not(:first-child)::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--border-l1); transform: translateY(-50%);
+}
+.traj-row .tc-turn-label {
+  position: absolute; left: 4px; top: 1px; z-index: 1;
+  font: 8px/10px var(--font-code); font-variant-numeric: tabular-nums;
+  color: var(--label-tertiary); background: var(--bg-platform);
+  padding: 1px 4px; border-radius: 0 0 2px; white-space: nowrap;
+}
 .traj-row.error .tc-text { color: var(--red); }
-.traj-row .tc-index { flex: none; width: 28px; font-size: 11px; color: var(--label-tertiary); text-align: right; font-variant-numeric: tabular-nums; }
-.traj-row .tc-tag { flex: none; width: 52px; }
+.traj-row .tc-index { flex: none; width: 24px; font-size: 11px; color: var(--label-tertiary); text-align: right; font-variant-numeric: tabular-nums; }
+.traj-row .tc-tag { flex: none; width: 64px; display: flex; align-items: center; justify-content: flex-end; }
 .traj-row .tc-tag span {
   display: inline-flex; align-items: center; height: 19px; padding: 0 5px;
   border-radius: 4px; font-size: 10px; font-weight: 650; letter-spacing: 0.035em; white-space: nowrap;
@@ -309,10 +319,14 @@ body {
 .traj-row .tc-tag .tag-system { color: var(--label-secondary); background: var(--bg-platform); }
 .traj-row .tc-tag .tag-error { color: var(--red); background: rgba(220,50,50,0.1); }
 .traj-row .tc-tag .tag-message { color: #6366f1; background: rgba(99,102,241,0.10); }
+.traj-row .tc-tag .tag-result { color: var(--green); background: rgba(34,197,94,0.10); }
 .traj-row .tc-text {
   flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; font-size: 12px; color: var(--label-primary); font-family: var(--font-code);
+  white-space: nowrap; font-size: 12px; color: var(--label-primary);
 }
+.traj-row .tc-text .tc-tool-name { font-family: var(--font-code); color: var(--label-primary); }
+.traj-row .tc-text .tc-tool-args { font-family: var(--font-code); color: var(--label-tertiary); margin-left: 7px; }
+.traj-row .tc-text .tc-result-arrow { color: var(--label-caption); margin-right: 6px; }
 .traj-row .tc-time { flex: none; width: 56px; text-align: right; font-size: 11px; color: var(--label-tertiary); font-variant-numeric: tabular-nums; }
 .traj-turn-header {
   position: sticky; top: 0; z-index: 5;
@@ -568,9 +582,14 @@ body {
 }
 .view-tab.active { background: var(--bg-base); color: var(--label-primary); box-shadow: var(--shadow-l1); }
 
-/* ─── Stats bar ─────────────────────────────────────────────────────── */
-.stats-bar { max-width: 748px; margin: 0 auto; padding: 4px 16px 8px; font-size: 11px; color: var(--label-caption); display: flex; gap: 8px; }
-.stats-bar span { white-space: nowrap; }
+/* ─── Stats bar (matching original dsh StatsLine) ──────────────────── */
+.stats-bar {
+  display: block; text-align: center; max-width: 748px; width: 100%;
+  margin: 0 auto; box-sizing: border-box; padding: 4px 16px 0;
+  font-size: 12px; line-height: 20px; color: var(--label-tertiary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stats-bar .sep { color: var(--border-l2); margin: 0 8px; }
 
 .hidden { display: none !important; }
 </style>
@@ -653,7 +672,7 @@ body {
           <button class="send-btn" id="send-btn" onclick="sendMessage()" disabled><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M8.3125 0.980183C8.66767 1.0531 8.97902 1.20418 9.2627 1.43233C9.48724 1.61297 9.73029 1.85793 9.97949 2.10714L14.707 6.83468L13.293 8.24874L9 3.95577V15.0417H7V3.95577L2.70703 8.24874L1.29297 6.83468L6.02051 2.10714C6.26971 1.85793 6.51277 1.61297 6.7373 1.43233C6.97662 1.23986 7.28445 1.04402 7.6875 0.980183C7.8973 0.947006 8.1031 0.95516 8.3125 0.980183Z" fill="currentColor" /></svg></button>
         </div>
       </div>
-      <div class="stats-bar" id="stats-bar"><span id="stats-text"></span></div>
+      <div class="stats-bar" id="stats-bar"></div>
     </div>
   </div>
 </div>
@@ -852,8 +871,10 @@ let currentTheme = 'system';
 let showTrajectory = false;
 let showStats = localStorage.getItem('dsh-stats') !== 'off';
 let currentPreset = '默认';
-let sessionStats = { turns: 0, steps: 0, inputTokens: 0, outputTokens: 0, startTime: 0 };
+let sessionStats = { turns: 0, steps: 0, latestInputTokens: 0, totalOutputTokens: 0, totalInputTokens: 0, startTime: 0, llmMs: 0, toolMs: 0, stepStartTime: 0, toolCallStartTime: 0 };
 let configContextWindow = 8192;
+let sessionStatsMap = {}; // per-session stats, keyed by session id
+let currentSessionId = null;
 let heroTemplate = '';
 
 // ─── Theme ─────────────────────────────────────────────────────────────
@@ -891,8 +912,11 @@ async function loadSessions() {
 }
 async function createSession() {
   try {
+    // Save current session stats before switching
+    saveSessionStats();
     const res = await fetch('/api/sessions/create', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New session'})});
     const data = await res.json();
+    currentSessionId = data.id;
     // Clear chat area and show hero
     document.querySelector('.chat-inner').innerHTML = heroTemplate;
     clearTrajectory(); currentToolCallEl = null;
@@ -906,7 +930,10 @@ async function createSession() {
 }
 async function switchSession(id) {
   try {
+    // Save current session stats, restore target session's stats
+    saveSessionStats();
     await fetch('/api/sessions/switch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+    currentSessionId = id;
     // Fetch and render the session's message history
     const histRes = await fetch('/api/sessions/history?id=' + encodeURIComponent(id));
     const histData = await histRes.json();
@@ -916,7 +943,7 @@ async function switchSession(id) {
     setView('chat');
     currentAssistantEl = null;
     currentAssistantText = '';
-    resetSessionStats();
+    restoreSessionStats(id);
     if (histData.messages && histData.messages.length > 0) {
       histData.messages.forEach(msg => {
         if (msg.role === 'user') addMessage('user', msg.content);
@@ -936,6 +963,7 @@ async function loadActiveHistory() {
     const res = await fetch('/api/sessions');
     const sessions = await res.json();
     const active = sessions.find(s => s.is_active);
+    if (active) currentSessionId = active.id;
     if (active && active.event_count > 0) {
       const histRes = await fetch('/api/sessions/history?id=' + encodeURIComponent(active.id));
       const histData = await histRes.json();
@@ -962,7 +990,7 @@ async function deleteSession(id) {
   try {
     await fetch('/api/sessions/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
   } catch(e) { console.error('deleteSession', e); }
-  resetSessionStats();
+  delete sessionStatsMap[id];
   const remaining = await loadSessions();
   if (wasActive) {
     if (remaining && remaining.length > 0) {
@@ -1191,26 +1219,49 @@ async function loadModelPresets() {
   } catch(e) { console.error('loadModelPresets', e); }
 }
 function resetSessionStats() {
-  sessionStats = { turns: 0, steps: 0, inputTokens: 0, outputTokens: 0, startTime: 0 };
+  sessionStats = { turns: 0, steps: 0, latestInputTokens: 0, totalOutputTokens: 0, totalInputTokens: 0, startTime: 0, llmMs: 0, toolMs: 0, stepStartTime: 0, toolCallStartTime: 0 };
   updateStatsBar();
   updateContextRing();
 }
+
+function saveSessionStats() {
+  if (currentSessionId) sessionStatsMap[currentSessionId] = { ...sessionStats };
+}
+
+function restoreSessionStats(id) {
+  if (sessionStatsMap[id]) {
+    sessionStats = { ...sessionStatsMap[id] };
+  } else {
+    sessionStats = { turns: 0, steps: 0, latestInputTokens: 0, totalOutputTokens: 0, totalInputTokens: 0, startTime: 0, llmMs: 0, toolMs: 0, stepStartTime: 0, toolCallStartTime: 0 };
+  }
+  updateStatsBar();
+  updateContextRing();
+}
+
+function formatDuration(ms) {
+  const s = ms / 1000;
+  if (s < 60) return (Math.round(s * 10) / 10) + 's';
+  const whole = Math.round(s);
+  return Math.floor(whole / 60) + 'm' + (whole % 60) + 's';
+}
+
 function updateStatsBar() {
   const bar = document.getElementById('stats-bar');
   if (!bar) return;
-  const parts = [];
-  if (sessionStats.turns > 0) parts.push(`${sessionStats.turns} 轮 / ${sessionStats.steps} 步`);
-  if (sessionStats.inputTokens > 0 || sessionStats.outputTokens > 0) {
-    parts.push(`${formatTokens(sessionStats.inputTokens)} in / ${formatTokens(sessionStats.outputTokens)} out`);
+  const groups = [];
+  if (sessionStats.steps > 0) {
+    groups.push(sessionStats.turns + ' 轮 / ' + sessionStats.steps + ' 步');
+    const durations = [];
+    if (sessionStats.llmMs > 0) durations.push('LLM ' + formatDuration(sessionStats.llmMs));
+    if (sessionStats.toolMs > 0) durations.push('工具 ' + formatDuration(sessionStats.toolMs));
+    if (durations.length > 0) groups.push(durations.join(' · '));
   }
-  if (sessionStats.startTime > 0) {
-    const dur = Math.round((Date.now() - sessionStats.startTime) / 1000);
-    parts.push(`${dur}s`);
+  if (sessionStats.totalInputTokens > 0 || sessionStats.totalOutputTokens > 0) {
+    groups.push(formatTokens(sessionStats.totalInputTokens) + ' in / ' + formatTokens(sessionStats.totalOutputTokens) + ' out');
   }
-  if (!showStats || parts.length === 0) { bar.style.display = 'none'; return; }
+  if (!showStats || groups.length === 0) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
   bar.style.display = '';
-  const text = document.getElementById('stats-text');
-  if (text) text.textContent = parts.join(' | ');
+  bar.innerHTML = groups.map((g, i) => (i > 0 ? '<span class="sep">|</span> ' : '') + '<span>' + g + '</span>').join('');
 }
 function formatTokens(n) {
   if (n < 1000) return String(n);
@@ -1221,16 +1272,17 @@ function updateContextRing() {
   const ring = document.getElementById('ring-fill');
   if (!ring) return;
   const total = configContextWindow || 8192;
-  const used = sessionStats.inputTokens + sessionStats.outputTokens;
+  // latestInputTokens from the LLM API already includes the ENTIRE context:
+  // system prompt + tools + all user/assistant messages + all tool results.
+  // That IS the current context fill — no accumulation needed.
+  const used = sessionStats.latestInputTokens;
   const circumference = 2 * Math.PI * 5.5;
   const pct = Math.min(100, total > 0 ? Math.round(used / total * 100) : 0);
   const dash = circumference * pct / 100;
   ring.setAttribute('stroke-dasharray', dash + ' ' + circumference);
   ring.setAttribute('stroke', pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--amber)' : 'var(--info-fill)');
-  // Update tooltip
   const trigger = document.getElementById('ctx-trigger');
-  if (trigger) trigger.setAttribute('aria-label', `上下文已用 ${pct}%`);
-  // Update panel if open
+  if (trigger) trigger.setAttribute('aria-label', '上下文已用 ' + pct + '%');
   const panel = document.getElementById('ctx-panel');
   if (panel) renderCtxPanel(panel);
 }
@@ -1259,22 +1311,24 @@ function toggleCtxPanel() {
 
 function renderCtxPanel(panel) {
   const total = configContextWindow || 8192;
-  const used = sessionStats.inputTokens + sessionStats.outputTokens;
+  const used = sessionStats.latestInputTokens;
   const pct = Math.min(100, total > 0 ? Math.round(used / total * 100) : 0);
-  const inputPct = total > 0 ? Math.min(100, sessionStats.inputTokens / total * 100) : 0;
-  const outputPct = total > 0 ? Math.min(100, sessionStats.outputTokens / total * 100) : 0;
+  // Context breakdown: the latestInputTokens IS the full context (system + messages + tools).
+  // We show it as "上下文" (context) and the accumulated output separately.
+  const ctxPct = total > 0 ? Math.min(100, sessionStats.latestInputTokens / total * 100) : 0;
+  const outPct = total > 0 ? Math.min(100 - ctxPct, sessionStats.totalOutputTokens / total * 100) : 0;
   panel.innerHTML = `
     <div class="ctx-header">
       <span class="ctx-percent">${pct}%</span>
       <span class="ctx-figures">~${formatTokens(used)} / ${formatTokens(total)}</span>
     </div>
     <div class="ctx-bar">
-      <div class="ctx-seg input" style="width:${inputPct}%"></div>
-      <div class="ctx-seg output" style="width:${outputPct}%"></div>
+      <div class="ctx-seg input" style="width:${ctxPct}%"></div>
+      <div class="ctx-seg output" style="width:${outPct}%"></div>
     </div>
     <dl>
-      <div class="ctx-row"><dt><span class="ctx-swatch input"></span>输入</dt><dd>~${formatTokens(sessionStats.inputTokens)}</dd></div>
-      <div class="ctx-row"><dt><span class="ctx-swatch output"></span>输出</dt><dd>~${formatTokens(sessionStats.outputTokens)}</dd></div>
+      <div class="ctx-row"><dt><span class="ctx-swatch input"></span>上下文（系统+消息+工具）</dt><dd>~${formatTokens(sessionStats.latestInputTokens)}</dd></div>
+      <div class="ctx-row"><dt><span class="ctx-swatch output"></span>累计输出</dt><dd>~${formatTokens(sessionStats.totalOutputTokens)}</dd></div>
     </dl>`;
 }
 function toggleStats(el) {
@@ -1307,17 +1361,28 @@ function handleEvent(event, showTraj) {
       if (!currentAssistantEl) currentAssistantEl = addMessage('assistant','');
       if (event.content) { currentAssistantText = event.content; currentAssistantEl.querySelector('.bubble').innerHTML = renderMd(event.content); }
       if (event.tool_calls) event.tool_calls.forEach(tc => {
-        addTrajCell('message', 'Message', tc.name, '');
+        addTrajCell('message', 'ASSISTANT', tc.name, '');
         addChatToolCall(tc.name, JSON.stringify(tc.arguments,null,2), false);
       });
+      // Track LLM time: step_start → assistant_message
+      if (sessionStats.stepStartTime) {
+        sessionStats.llmMs += Date.now() - sessionStats.stepStartTime;
+        sessionStats.stepStartTime = 0;
+      }
       document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
       break;
     case 'tool_call':
-      addTrajCell('tool', 'Tool', event.name, JSON.stringify(event.arguments,null,2));
+      addTrajCell('tool', 'TOOL', event.name, JSON.stringify(event.arguments,null,2));
       addChatToolCall(event.name, JSON.stringify(event.arguments,null,2), false);
+      sessionStats.toolCallStartTime = Date.now();
       break;
     case 'tool_result':
-      addTrajCell('tool', event.is_error ? 'Error' : 'Result', '', event.content, event.is_error);
+      addTrajCell('result', event.is_error ? 'ERROR' : 'RESULT', '', event.content, event.is_error);
+      // Track tool time: tool_call → tool_result
+      if (sessionStats.toolCallStartTime) {
+        sessionStats.toolMs += Date.now() - sessionStats.toolCallStartTime;
+        sessionStats.toolCallStartTime = 0;
+      }
       if (currentToolCallEl) {
         const body = currentToolCallEl.querySelector('.ctc-body');
         if (body) {
@@ -1343,18 +1408,25 @@ function handleEvent(event, showTraj) {
       break;
     case 'step_start':
       sessionStats.steps++;
+      sessionStats.stepStartTime = Date.now();
       updateStatsBar();
       break;
     case 'step_end': break;
-    case 'turn_end': currentAssistantEl=null; break;
+    case 'turn_end':
+      currentAssistantEl=null;
+      saveSessionStats();
+      break;
     case 'usage':
-      sessionStats.inputTokens += event.prompt_tokens || 0;
-      sessionStats.outputTokens += event.completion_tokens || 0;
+      // prompt_tokens from the API = total context (system prompt + all messages + tools).
+      // This IS the current context fill — use the latest value, not accumulated.
+      sessionStats.latestInputTokens = event.prompt_tokens || 0;
+      sessionStats.totalInputTokens += event.prompt_tokens || 0;
+      sessionStats.totalOutputTokens += event.completion_tokens || 0;
       updateStatsBar();
       updateContextRing();
       break;
     case 'error':
-      addTrajCell('error', 'Error', '', event.message, true);
+      addTrajCell('error', 'ERROR', '', event.message, true);
       addChatToolCall('Error', event.message, true);
       break;
   }
@@ -1373,17 +1445,56 @@ function addMessage(role, content) {
 }
 
 // ── Trajectory rows — simple one-row-per-action (matching original dsh) ──
+let trajCurrentTurn = 0;
+
 function addTrajCell(kind, tagLabel, text, detail, isError) {
   const list = document.getElementById('traj-list');
   if (!list) return;
   trajCellIndex++;
   const elapsed = trajTurnStartTime ? ((Date.now() - trajTurnStartTime) / 1000).toFixed(1) + 's' : '';
-  const tagClass = kind === 'tool' ? 'tag-tool' : kind === 'error' ? 'tag-error' : kind === 'message' ? 'tag-message' : 'tag-system';
+  const tagClass = kind === 'tool' ? 'tag-tool' : kind === 'error' ? 'tag-error' : kind === 'message' ? 'tag-message' : kind === 'result' ? (isError ? 'tag-error' : 'tag-result') : 'tag-system';
   const el = document.createElement('div');
   el.className = 'traj-row' + (isError ? ' error' : '');
-  el.dataset.kind = kind;
-  const displayText = detail ? (text || tagLabel) + ' · ' + truncate(detail, 80) : (text || tagLabel);
-  el.innerHTML = `<span class="tc-index">${trajCellIndex}</span><span class="tc-tag"><span class="${tagClass}">${esc(tagLabel)}</span></span><span class="tc-text">${esc(displayText)}</span><span class="tc-time">${elapsed}</span>`;
+  el.dataset.kind = kind === 'result' ? (isError ? 'error' : 'tool') : kind;
+  // Add turn label on first row of a turn
+  if (trajCurrentTurn > 0) {
+    el.setAttribute('data-turn-start', '');
+    const label = document.createElement('span');
+    label.className = 'tc-turn-label';
+    label.textContent = 'T' + trajCurrentTurn;
+    el.appendChild(label);
+    trajCurrentTurn = 0; // only first row gets it
+  }
+  // Build text content
+  let textHtml = '';
+  if (kind === 'tool' && text) {
+    // Tool call: name in code font + args in lighter color
+    const args = detail ? truncate(detail, 60) : '';
+    textHtml = '<span class="tc-tool-name">' + esc(text) + '</span>' + (args ? '<span class="tc-tool-args">' + esc(args) + '</span>' : '');
+  } else if (kind === 'result' && detail) {
+    // Tool result: arrow + truncated result
+    textHtml = '<span class="tc-result-arrow">→</span>' + esc(truncate(detail, 80));
+  } else if (kind === 'error' && detail) {
+    textHtml = esc(truncate(detail, 80));
+  } else {
+    textHtml = esc(text || tagLabel);
+  }
+  const indexSpan = document.createElement('span');
+  indexSpan.className = 'tc-index';
+  indexSpan.textContent = trajCellIndex;
+  const tagSpan = document.createElement('span');
+  tagSpan.className = 'tc-tag';
+  tagSpan.innerHTML = '<span class="' + tagClass + '">' + esc(tagLabel) + '</span>';
+  const textSpan = document.createElement('span');
+  textSpan.className = 'tc-text';
+  textSpan.innerHTML = textHtml;
+  const timeSpan = document.createElement('span');
+  timeSpan.className = 'tc-time';
+  timeSpan.textContent = elapsed;
+  el.appendChild(indexSpan);
+  el.appendChild(tagSpan);
+  el.appendChild(textSpan);
+  el.appendChild(timeSpan);
   list.appendChild(el);
   updateTrajPreview();
   const area = document.getElementById('chat-area');
@@ -1414,9 +1525,10 @@ function updateTrajPreview() {
 function addTrajTurnHeader(turn) {
   const list = document.getElementById('traj-list');
   if (!list) return;
+  trajCurrentTurn = turn; // next addTrajCell will show "T{turn}" label
   const el = document.createElement('div');
   el.className = 'traj-turn-header';
-  el.textContent = `Turn ${turn}`;
+  el.textContent = 'Turn ' + turn;
   list.appendChild(el);
 }
 
