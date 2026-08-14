@@ -135,6 +135,16 @@ impl SessionManager {
         Some(id.to_string())
     }
 
+    /// Rename a session's title.
+    pub fn rename(&mut self, id: &str, title: &str) {
+        if let Some(meta) = self.sessions.get_mut(id) {
+            meta.title = title.to_string();
+            meta.updated_at = current_millis();
+            self.save_index();
+            log::info!("Session renamed: {id} → {title}");
+        }
+    }
+
     /// Get the active session log (mutable).
     pub fn active_mut(&mut self) -> Option<&mut SessionLog> {
         let id = self.active_id.as_ref()?;

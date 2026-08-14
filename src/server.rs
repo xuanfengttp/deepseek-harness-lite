@@ -131,6 +131,26 @@ async fn handle_request(
             }
         }
 
+        // Rename session
+        (Method::POST, "/api/sessions/rename") => {
+            let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+            let (id, title) = serde_json::from_slice::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| {
+                    let id = v.get("id").and_then(|t| t.as_str()).map(String::from)?;
+                    let title = v.get("title").and_then(|t| t.as_str()).map(String::from)?;
+                    Some((id, title))
+                })
+                .unwrap_or_default();
+
+            if id.is_empty() || title.is_empty() {
+                return Ok(serve_json(r#"{"ok":false,"error":"id and title required"}"#));
+            }
+            let mut mgr = state.session_mgr.lock().await;
+            mgr.rename(&id, &title);
+            serve_json(r#"{"ok":true}"#)
+        }
+
         // List skills
         (Method::GET, "/api/skills") => {
             let skills_json: Vec<serde_json::Value> = state.skills.iter().map(|s| {
