@@ -1,6 +1,12 @@
 # Original dsh reference source (kept for design reference, not tracked)
 reference/
 
+# Original opencode skills (from upstream dsh, not used by lite)
+.opencode/
+
+# Design document (confidential, local only)
+DESIGN-lite.md
+
 # Rust build artifacts
 target/
 **/*.rs.bk
@@ -22,6 +28,10 @@ release/
 .sessions/
 .storages/
 .cache/
+
+# Test artifacts
+.test-memory-*
+.test-sessions-*
 
 # Explore / design notes (working docs, not shipped)
 .explore-notes.md
