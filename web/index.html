@@ -1240,6 +1240,7 @@ function switchSection(name) {
 async function loadConfig() {
   try {
     const res = await fetch('/api/config');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const cfg = await res.json();
     if (cfg.model) {
       document.getElementById('cfg-base-url').value = cfg.model.base_url || '';
@@ -1255,7 +1256,10 @@ async function loadConfig() {
         if (el) el.classList.toggle('on', !!cfg.tools[t]);
       });
     }
-  } catch(e) { console.error('loadConfig', e); }
+  } catch(e) {
+    console.error('loadConfig', e);
+    showModelConfigStatus('⚠ 无法连接服务器: ' + e.message, 'err');
+  }
 }
 
 let _autoSaveTimer = null;

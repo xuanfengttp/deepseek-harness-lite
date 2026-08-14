@@ -335,7 +335,7 @@ async fn handle_request(
                 merge_json(&mut current_val, &incoming);
                 let new_toml = toml::to_string(&current_val).unwrap_or_default();
                 if std::fs::write(&config_path, new_toml).is_ok() {
-                    serve_json(r#"{"ok":true,"message":"Config saved. Restart to apply."}"#)
+                    serve_json(r#"{"ok":true,"message":"Config saved. Applied on next chat request (hot-reload)."}"#)
                 } else {
                     serve_json(r#"{"ok":false,"error":"Failed to write config file"}"#)
                 }
