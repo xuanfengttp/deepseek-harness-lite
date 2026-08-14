@@ -272,6 +272,13 @@ pub fn resolve_config_path() -> String {
 }
 
 /// Load configuration from the resolved path.
+/// Load config from the resolved path. Public so the HTTP server can
+/// re-read the config file on each chat request, picking up settings
+/// changes without a restart.
+pub fn load_config_file() -> Option<Config> {
+    load_config().ok()
+}
+
 fn load_config() -> Result<Config, String> {
     let path = resolve_config_path();
     let content = std::fs::read_to_string(&path)

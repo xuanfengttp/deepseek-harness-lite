@@ -306,14 +306,16 @@ body {
 .nav-item:hover { background: var(--bg-hover); }
 .nav-item.active { background: var(--bg-platform); font-weight: 500; }
 .nav-icon { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex-shrink: 0; color: var(--label-secondary); }
-.modal-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.modal-content { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .modal-header {
-  height: 54px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between;
+  height: 54px; padding: 0 24px; display: flex; align-items: center;
 }
 .modal-header h2 { font-size: 16px; font-weight: 500; }
 .modal-close {
+  position: absolute; top: 14px; right: 16px;
   width: 28px; height: 28px; border: none; border-radius: 50%; background: transparent;
-  color: var(--label-secondary); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--label-secondary); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  z-index: 10;
 }
 .modal-close:hover { background: var(--bg-hover); }
 .modal-body { flex: 1; overflow-y: auto; padding: 0 24px 24px; }
@@ -848,8 +850,10 @@ async function saveModelConfig() {
   };
   try {
     await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
-    showConfigStatus('Model config saved. Restart to apply.', 'ok');
-  } catch(e) { showConfigStatus('Save failed: '+e.message, 'err'); }
+    showConfigStatus(t('saved_restart') || '已保存，重启后生效。', 'ok');
+    // Reload config from disk so the form reflects what was actually saved.
+    await loadConfig();
+  } catch(e) { showConfigStatus(t('save_failed') + e.message, 'err'); }
 }
 
 async function saveToolConfig() {
@@ -859,8 +863,9 @@ async function saveToolConfig() {
   });
   try {
     await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tools})});
-    showConfigStatus('Tool config saved. Restart to apply.', 'ok');
-  } catch(e) { showConfigStatus('Save failed: '+e.message, 'err'); }
+    showConfigStatus(t('saved_restart') || '已保存，重启后生效。', 'ok');
+    await loadConfig();
+  } catch(e) { showConfigStatus(t('save_failed') + e.message, 'err'); }
 }
 
 function toggleTool(name, el) { el.classList.toggle('on'); }
@@ -1005,6 +1010,7 @@ const I18N = {
     change:'修改',
     raw_config:'原始配置', raw_config_hint:'直接编辑 TOML 配置文件。保存后重启生效。',
     save_to_file:'保存到文件', reload:'重新加载',
+    saved_restart:'已保存，对话时即时生效。', save_failed:'保存失败：',
     language_hint:'选择界面语言。',
   },
   en: {
@@ -1031,6 +1037,7 @@ const I18N = {
     change:'Change',
     raw_config:'Raw Configuration', raw_config_hint:'Edit the TOML config file directly. Changes apply after save + restart.',
     save_to_file:'Save to file', reload:'Reload',
+    saved_restart:'Saved. Takes effect on next message.', save_failed:'Save failed: ',
     language_hint:'Choose the interface language.',
   }
 };
