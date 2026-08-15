@@ -11,6 +11,7 @@
 use crate::types::*;
 
 /// Context passed to `StepHook::pre_step`.
+#[allow(dead_code)]
 pub struct PreStepContext<'a> {
     pub turn: u64,
     pub step: u64,
@@ -42,6 +43,7 @@ pub enum StepDecision {
 }
 
 /// Context passed to `StepHook::post_step`.
+#[allow(dead_code)]
 pub struct PostStepContext<'a> {
     pub turn: u64,
     pub step: u64,

@@ -200,6 +200,7 @@ impl SessionLog {
     }
 
     /// Current turn number.
+    #[allow(dead_code)]
     pub fn current_turn(&self) -> u64 {
         self.current_turn
     }
@@ -210,6 +211,7 @@ impl SessionLog {
     }
 
     /// Whether the log is empty.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
     }

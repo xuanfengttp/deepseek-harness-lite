@@ -13,7 +13,6 @@
 
 use crate::types::*;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tokio::sync::mpsc;
 
 /// Parameters for a single streaming completion request.
@@ -34,6 +33,7 @@ pub enum StreamEvent {
     /// A text delta from the assistant.
     Delta(String),
     /// A complete assembled tool call (emitted once per tool call when assembled).
+    #[allow(dead_code)]
     ToolCall(ToolCall),
     /// The final assistant message with full content and usage.
     Done { content: String, tool_calls: Vec<ToolCall>, usage: Option<TokenUsage> },
@@ -106,6 +106,7 @@ struct StreamChunkDto {
 struct StreamChoice {
     delta: StreamDelta,
     #[serde(default)]
+    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 
@@ -368,7 +369,6 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
         use hyper::body::Bytes;
         use hyper_util::rt::TokioIo;
         use hyper::{Request, Method};
-        use std::convert::Infallible;
 
         // Parse URL.
         let uri: hyper::Uri = url.parse().map_err(|e: http::uri::InvalidUri| LlmError::BadUrl(e.to_string()))?;
@@ -434,7 +434,6 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
         let mut full_content = String::new();
         let mut final_usage: Option<TokenUsage> = None;
 
-        use hyper::body::Body;
         use tokio_stream::StreamExt;
         pin_mut!(frame_stream);
         while let Some(chunk_result) = frame_stream.next().await {

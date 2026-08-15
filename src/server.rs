@@ -248,19 +248,19 @@ async fn handle_request(
             let mut trajectory: Vec<serde_json::Value> = Vec::new();
             let mut step_start_time: u64 = 0;
             let mut tool_call_time: u64 = 0;
-            let mut turn_start_time: u64 = 0;
-            let mut current_turn: u64 = 0;
+            let mut _turn_start_time: u64 = 0;
+            let mut _current_turn: u64 = 0;
 
             if let Some(log) = mgr.active() {
                 for event in log.events() {
                     match event {
                         SessionEvent::TurnStart { turn } => {
-                            current_turn = *turn;
+                            _current_turn = *turn;
                             let now = std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .map(|d| d.as_millis() as u64)
                                 .unwrap_or(0);
-                            turn_start_time = now;
+                            _turn_start_time = now;
                             if stats["startTime"].as_u64() == Some(0) {
                                 stats["startTime"] = serde_json::json!(now);
                             }

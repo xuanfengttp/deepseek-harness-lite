@@ -11,6 +11,7 @@ use std::collections::HashMap;
 // ─── Identifiers ───────────────────────────────────────────────────────────
 
 /// Branded session id (newtype for type safety at boundaries).
+#[allow(dead_code)]
 pub type SessionId = String;
 
 /// Branded tool-call id (correlates a tool_call with its tool_result).
@@ -41,6 +42,7 @@ pub struct ToolCall {
 }
 
 /// One chunk from the streaming response (kept for trajectory; not in derived history).
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamChunk {
     pub delta: String,
@@ -48,6 +50,7 @@ pub struct StreamChunk {
 }
 
 /// Incremental tool-call fragment from streaming (assembled into full ToolCall).
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallDelta {
     pub index: usize,
@@ -257,6 +260,7 @@ impl Default for ExecMode {
 pub struct Skill {
     pub name: String,
     pub description: String,
+    #[allow(dead_code)]
     pub when_to_use: Option<String>,
     pub mode: ExecMode,
     pub think: bool,

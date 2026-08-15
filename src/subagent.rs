@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex};
 /// Maximum delegation depth (matches dsh's maxDepth=3).
 const MAX_DEPTH: u32 = 3;
 
-/// Thread-local delegation depth counter (prevents infinite recursion).
+// Thread-local delegation depth counter (prevents infinite recursion).
 thread_local! {
     static DEPTH: std::cell::Cell<u32> = std::cell::Cell::new(0);
 }
@@ -207,22 +207,42 @@ impl ToolPlugin for SubagentTool {
         .with_hooks(hooks)
         .with_compaction(self.compaction_threshold, self.keep_recent_turns);
 
-        // Run the child turn asynchronously. Since execute() runs inside
-        // spawn_blocking (a dedicated blocking thread), we can safely use
-        // Handle::current().block_on() to drive the async run_turn.
+        // Run the child turn on a dedicated runtime.
+        //
+        // WHY a separate runtime: execute() runs inside spawn_blocking on a
+        // dedicated blocking thread. The main runtime uses current_thread mode,
+        // so its I/O driver lives on the main thread — which is blocked waiting
+        // for this spawn_blocking task. Calling Handle::current().block_on()
+        // would deadlock because tokio::spawn (used by the LLM connection driver)
+        // needs the main runtime's scheduler, which is stuck.
+        //
+        // Solution: create an independent current_thread runtime on this blocking
+        // thread. LlmClient only holds base_url + api_key (no runtime-bound state),
+        // and each stream() call creates a fresh TcpStream, so the independent
+        // runtime can drive the child agent's async work without any dependency
+        // on the main runtime.
         let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<LoopEvent>(128);
 
         // Increment depth for the child.
         DEPTH.with(|d| d.set(current_depth + 1));
 
-        let run_result = tokio::runtime::Handle::current().block_on(async {
-            // Spawn a task to drain events (we don't bubble them to parent).
-            let _drain = tokio::spawn(async move {
-                while event_rx.recv().await.is_some() {}
-            });
+        let run_result = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(child_rt) => child_rt.block_on(async {
+                // Spawn a task to drain events (we don't bubble them to parent).
+                let _drain = tokio::spawn(async move {
+                    while event_rx.recv().await.is_some() {}
+                });
 
-            child_loop.run_turn(prompt.to_string(), &skill, event_tx).await
-        });
+                child_loop.run_turn(prompt.to_string(), &skill, event_tx).await
+            }),
+            Err(e) => {
+                log::error!("Subagent: failed to create child runtime: {e}");
+                Err(format!("Failed to create child runtime: {e}"))
+            }
+        };
 
         // Decrement depth after child completes.
         DEPTH.with(|d| d.set(current_depth));

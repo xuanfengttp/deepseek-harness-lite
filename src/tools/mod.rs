@@ -85,6 +85,7 @@ impl ToolRegistry {
     }
 
     /// Get definitions filtered to a specific allow-list.
+    #[allow(dead_code)]
     pub fn definitions_for(&self, allow: &[String]) -> Vec<ToolDefinition> {
         if allow.is_empty() {
             return self.definitions();

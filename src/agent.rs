@@ -235,8 +235,8 @@ impl AgentLoop {
         skill: &Skill,
         assembled: &prompt::AssembledPrompt,
         event_tx: &mpsc::Sender<LoopEvent>,
-        turn: u64,
-        step: u64,
+        _turn: u64,
+        _step: u64,
         injection: Option<String>,
     ) -> StepOutcome {
         // Inject guidance if provided (Todo mode).
@@ -538,6 +538,7 @@ impl AgentLoop {
     }
 
     /// Mutable access to the session log.
+    #[allow(dead_code)]
     pub fn session_mut(&mut self) -> &mut SessionLog {
         &mut self.session
     }

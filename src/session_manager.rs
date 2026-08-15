@@ -12,9 +12,8 @@
 //! ~400 KB max — well within the 10 MB target.
 
 use crate::session::SessionLog;
-use crate::types::*;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Metadata for a session (stored in the sidebar index, cheap to keep in memory).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -171,6 +170,7 @@ impl SessionManager {
     }
 
     /// Check if a session is currently in the cache.
+    #[allow(dead_code)]
     pub fn is_cached(&self, id: &str) -> bool {
         self.cache.contains_key(id)
     }
@@ -188,6 +188,7 @@ impl SessionManager {
     }
 
     /// Get the active session id.
+    #[allow(dead_code)]
     pub fn active_id(&self) -> Option<&str> {
         self.active_id.as_deref()
     }
@@ -206,6 +207,7 @@ impl SessionManager {
 
     /// Close a session (offload to flash, remove from cache).
     /// If it's the active session, active_id is cleared.
+    #[allow(dead_code)]
     pub fn close(&mut self, id: &str) -> bool {
         if let Some(log) = self.cache.remove(id) {
             // Persist to flash before removing from memory.
@@ -366,6 +368,7 @@ impl SessionManager {
     }
 
     /// Get the active session id (for logging).
+    #[allow(dead_code)]
     pub fn active_session_id(&self) -> Option<&str> {
         self.active_id.as_deref()
     }
@@ -391,6 +394,7 @@ fn current_millis() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::{SessionEvent, TurnEndReason};
     use std::fs;
 
     fn temp_dir() -> String {
@@ -425,8 +429,8 @@ mod tests {
         let mut mgr = SessionManager::new(&dir, 128);
 
         let id1 = mgr.create("S1");
-        let id2 = mgr.create("S2");
-        let id3 = mgr.create("S3");
+        let _id2 = mgr.create("S2");
+        let _id3 = mgr.create("S3");
 
         // Cache capacity is 2, so after creating 3, only 2 should be cached.
         assert!(mgr.cached_len() <= 2);

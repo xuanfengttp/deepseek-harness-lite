@@ -131,6 +131,7 @@ impl MemoryStore {
     }
 
     /// Delete a key. Persists to flash.
+    #[allow(dead_code)]
     pub fn delete(&self, key: &str) -> bool {
         let mut entries = self.entries.lock().unwrap();
         let removed = entries.remove(key).is_some();
@@ -147,6 +148,7 @@ impl MemoryStore {
     }
 
     /// Check if empty.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.entries.lock().unwrap().is_empty()
     }

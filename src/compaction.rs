@@ -21,7 +21,6 @@
 
 use crate::types::*;
 use crate::llm::{LlmClient, LlmRequest, StreamEvent};
-use crate::session::SessionLog;
 
 /// The result of a compaction pass.
 pub struct CompactionResult {

@@ -128,6 +128,7 @@ impl Dispatcher {
     }
 
     /// Access the session log.
+    #[allow(dead_code)]
     pub fn session(&self) -> &SessionLog {
         &self.session
     }

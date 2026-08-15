@@ -16,6 +16,7 @@ pub struct TodoStrategy {
     steps: Vec<SkillStep>,
     current: usize,
     step_results: HashMap<String, String>,
+    #[allow(dead_code)]
     variables: HashMap<String, String>,
 }
 
