@@ -926,28 +926,23 @@ async fn handle_command(
             };
             let result = plugin.execute(&args, &mut ctx);
 
-            // Build JSON response.
-            let text_escaped = result.text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
-            let ok_str = if result.ok { "true" } else { "false" };
-            let error_field = if result.ok {
-                String::new()
+            // Build JSON response using serde_json (not manual string concatenation).
+            let resp = if result.ok {
+                serde_json::json!({
+                    "ok": true,
+                    "text": result.text,
+                    "action": result.action,
+                    "sessionId": result.session_id,
+                })
             } else {
-                format!(r#","error":"{text_escaped}""#)
+                serde_json::json!({
+                    "ok": false,
+                    "error": result.text,
+                    "action": result.action,
+                    "sessionId": result.session_id,
+                })
             };
-            let session_id_field = result.session_id
-                .as_ref()
-                .map(|id| format!(r#","sessionId":{:?}"#, id))
-                .unwrap_or_default();
-            let text_field = if result.ok {
-                format!(r#""text":"{text_escaped}""#)
-            } else {
-                String::new()
-            };
-
-            serve_json(&format!(
-                r#"{{"ok":{ok_str},{text_field}{error_field},"action":"{}"{session_id_field}}}"#,
-                result.action
-            ))
+            serve_json(&resp.to_string())
         }
         None => {
             serve_json(&format!(
