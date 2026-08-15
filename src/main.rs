@@ -21,6 +21,7 @@ mod tools;
 mod hooks;
 mod strategies;
 mod commands;
+mod subagent;
 
 use crate::types::*;
 use crate::session::SessionLog;
@@ -121,6 +122,7 @@ async fn async_main() -> ExitCode {
     let policy = Policy::from_config(&config.tools);
     let mut tools = ToolRegistry::new(policy);
     crate::tools::register_builtins(&mut tools, &config);
+    crate::tools::register_subagent(&mut tools, &config);
 
     log::info!("Registered {} tool(s)", tools.definitions().len());
 

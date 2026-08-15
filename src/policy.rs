@@ -23,6 +23,8 @@ impl Policy {
         if config.ssh_exec { allowed.insert("ssh_exec".into()); }
         if config.memory { allowed.insert("memory_read".into()); allowed.insert("memory_write".into()); allowed.insert("memory_recall".into()); }
         if config.todo { allowed.insert("todo_write".into()); }
+        // Subagent is always allowed (registered separately via register_subagent).
+        allowed.insert("subagent".into());
         Self { allowed }
     }
 

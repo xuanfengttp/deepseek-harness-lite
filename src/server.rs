@@ -626,6 +626,7 @@ async fn handle_chat(
     let policy = crate::policy::Policy::from_config(&config.tools);
     let mut tools = crate::tools::ToolRegistry::new(policy);
     crate::tools::register_builtins(&mut tools, &config);
+    crate::tools::register_subagent(&mut tools, &config);
 
     let llm = crate::llm::LlmClient::new(&config.model);
     let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model)

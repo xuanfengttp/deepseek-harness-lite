@@ -35,7 +35,8 @@ pub trait ToolPlugin: Send + Sync {
     /// Execute the tool with JSON arguments. Returns the result.
     ///
     /// This runs inside `spawn_blocking`, so it must not hold non-Send data
-    /// and must not call async functions.
+    /// and must not call async functions. Tools that need async execution
+    /// (like SubagentTool) use `Handle::current().block_on()` internally.
     fn execute(&self, args: serde_json::Value) -> ToolResult;
 }
 
@@ -64,6 +65,18 @@ impl ToolRegistry {
         let def = plugin.definition();
         log::debug!("Registered tool: {}", def.name);
         self.tools.insert(def.name.clone(), Arc::from(plugin));
+    }
+
+    /// Register a tool plugin from an Arc (for sharing between parent and child agents).
+    pub fn register_arc(&mut self, plugin: Arc<dyn ToolPlugin>) {
+        let def = plugin.definition();
+        log::debug!("Registered tool (shared): {}", def.name);
+        self.tools.insert(def.name.clone(), plugin);
+    }
+
+    /// Get Arc references to all registered plugins (for sharing with subagents).
+    pub fn plugins_arc(&self) -> Vec<Arc<dyn ToolPlugin>> {
+        self.tools.values().cloned().collect()
     }
 
     /// Get all registered tool definitions (for prompt assembly).
@@ -217,4 +230,31 @@ pub fn register_builtins(registry: &mut ToolRegistry, config: &crate::types::Con
         registry.register(Box::new(memory::MemoryWriteTool { store: store.clone() }));
         registry.register(Box::new(memory::MemoryRecallTool { store }));
     }
+}
+
+/// Register the subagent tool, sharing all currently-registered tools with it.
+///
+/// Call this after `register_builtins()` so the subagent can access the same
+/// tools as the parent. The subagent tool is registered under the name "subagent".
+pub fn register_subagent(
+    registry: &mut ToolRegistry,
+    config: &crate::types::Config,
+) {
+    let subagent = crate::subagent::SubagentTool::new(
+        crate::llm::LlmClient::new(&config.model),
+        config.model.clone(),
+        config.compaction.threshold,
+        config.compaction.keep_recent_turns,
+        config.skill.dir.clone(),
+    );
+
+    // Share all currently-registered tools with the subagent.
+    let plugins = registry.plugins_arc();
+    let shared_count = plugins.len();
+    for plugin in &plugins {
+        subagent.share_tool(Arc::clone(plugin));
+    }
+
+    registry.register(Box::new(subagent));
+    log::info!("Registered subagent tool (shared {} tools)", shared_count);
 }
