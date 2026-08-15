@@ -22,7 +22,6 @@ mod hooks;
 mod strategies;
 mod commands;
 mod subagent;
-mod skill_creator;
 
 use crate::types::*;
 use crate::session::SessionLog;

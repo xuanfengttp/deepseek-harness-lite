@@ -26,16 +26,16 @@ name: my-sop                          # 必填，kebab-case
 description: 一句话描述                # 必填
 mode: workflow                        # 必填
 think: false                          # 推荐 false（快、省）
-tools_allow: [shell]                  # 精确限定工具
+tools:
+  allow: [shell]                      # 精确限定工具
 variables:                            # 可变参数，不同设备复用
   target: "192.168.1.1"
   iface: "eth0"
 steps:                                # 按顺序执行
   - id: step1                         # 必填，步骤标识
-    action:
-      tool: shell                     # 工具名
-      args:                           # JSON 参数，支持 {{var}} 插值
-        command: "ping -c 5 {{target}}"
+    tool: shell                       # 工具名（扁平结构，不要嵌套 action:）
+    args:                             # JSON 参数，支持 {{var}} 插值
+      command: "ping -c 5 {{target}}"
     when: "steps.init.result length > 0"  # 可选，条件满足才执行
 ---
 Markdown 正文（此 skill 的人话说明，workflow 模式不发给 LLM）。
@@ -46,20 +46,19 @@ Markdown 正文（此 skill 的人话说明，workflow 模式不发给 LLM）。
 **Tool 步**（确定执行，0 次 LLM）：
 ```yaml
 - id: ping
-  action:
-    tool: shell
-    args:
-      command: "ping -c 10 {{target}}"
+  tool: shell
+  args:
+    command: "ping -c 10 {{target}}"
 ```
 
 **LlmJudge 步**（单次 LLM 调用，独立上下文）：
 ```yaml
 - id: analyze
-  action:
-    tool: llm_judge
-    prompt: "你是网络专家。分析数据，输出：状态/原因/建议"
-    input: "Ping:\n{{steps.ping.result}}\n\n接口:\n{{steps.iface.result}}"
+  llm_judge: "你是网络专家。分析数据，输出：状态/原因/建议"
+  input: "Ping:\n{{steps.ping.result}}\n\n接口:\n{{steps.iface.result}}"
 ```
+
+> **重要**：步骤用扁平结构（`tool:` / `llm_judge:` 直接在 step 下），不要用 `action: { tool: }` 嵌套结构，否则解析器无法识别。
 
 ### 变量插值
 
@@ -88,46 +87,42 @@ name: interface-health-check
 description: 网络接口健康检查（ping + 状态 + 错误计数 + 分析）
 mode: workflow
 think: false
-tools_allow: [shell]
+tools:
+  allow: [shell]
 variables:
   target: "192.168.1.1"
   iface: "eth0"
 steps:
   - id: ping
-    action:
-      tool: shell
-      args:
-        command: "ping -c 10 {{target}}"
+    tool: shell
+    args:
+      command: "ping -c 10 {{target}}"
 
   - id: interface_status
-    action:
-      tool: shell
-      args:
-        command: "ip link show {{iface}}"
+    tool: shell
+    args:
+      command: "ip link show {{iface}}"
 
   - id: error_counters
-    action:
-      tool: shell
-      args:
-        command: "ip -s link show {{iface}}"
+    tool: shell
+    args:
+      command: "ip -s link show {{iface}}"
 
   - id: analyze
-    action:
-      tool: llm_judge
-      prompt: |
-        你是网络诊断专家。分析以下数据，按此格式输出：
-        状态: [正常/警告/故障]
-        原因: [一句话说明]
-        建议: [具体操作]
-      input: |
-        Ping 结果:
-        {{steps.ping.result}}
+    llm_judge: |
+      你是网络诊断专家。分析以下数据，按此格式输出：
+      状态: [正常/警告/故障]
+      原因: [一句话说明]
+      建议: [具体操作]
+    input: |
+      Ping 结果:
+      {{steps.ping.result}}
 
-        接口状态:
-        {{steps.interface_status.result}}
+      接口状态:
+      {{steps.interface_status.result}}
 
-        错误计数:
-        {{steps.error_counters.result}}
+      错误计数:
+      {{steps.error_counters.result}}
 ---
 网络接口健康检查标准 SOP。
 ```
@@ -135,7 +130,7 @@ steps:
 ### 准确率优化
 
 1. **llm_judge 的 prompt 给输出模板**：明确格式，减少 LLM 跑偏
-2. **tools_allow 精确限定**：只列用到的工具
+2. **tools.allow 精确限定**：只列用到的工具
 3. **variables 参数化**：同 SOP 复用不同设备，只改变量
 4. **when 做条件分支**：根据前序结果跳过/执行后续步骤
 
@@ -151,7 +146,8 @@ name: fault-diagnosis
 description: 网络故障自主诊断
 mode: plan
 think: true                           # 推荐 true（质量优先）
-tools_allow: [shell, file_read, memory_read, memory_write]
+tools:
+  allow: [shell, file_read, memory_read, memory_write]
 ---
 你是高级网络诊断工程师。
 
@@ -171,7 +167,7 @@ tools_allow: [shell, file_read, memory_read, memory_write]
 - **body 是 persona（角色指令）**，不是步骤——plan 模式 LLM 自主决定步骤
 - **写方法论而非步骤**：不是"检查网络"，而是"分层排查→假设验证→范围收窄"
 - **think: true** 开启推理模式，复杂问题分析质量更高
-- **tools_allow 给足工具**：让 LLM 有探索空间
+- **tools.allow 给足工具**：让 LLM 有探索空间
 - **明确输出格式**：减少 LLM 跑偏
 
 ---
@@ -186,17 +182,18 @@ name: config-audit
 description: 设备配置审计
 mode: todo
 think: false
-tools_allow: [shell, file_read]
+tools:
+  allow: [shell, file_read]
 steps:
   - id: check_hostname
-    action: { tool: shell, args: { command: "hostname" } }
+    tool: shell
+    args: { command: "hostname" }
   - id: check_routing
-    action: { tool: shell, args: { command: "ip route show" } }
+    tool: shell
+    args: { command: "ip route show" }
   - id: summarize
-    action:
-      tool: llm_judge
-      prompt: "汇总审计结果，标注不合规项"
-      input: "{{steps.check_hostname.result}}\n{{steps.check_routing.result}}"
+    llm_judge: "汇总审计结果，标注不合规项"
+    input: "{{steps.check_hostname.result}}\n{{steps.check_routing.result}}"
 ---
 设备配置审计 SOP。
 ```
@@ -264,7 +261,7 @@ steps:
 
 ### 5.3 主 agent 的 skill 怎么写
 
-主 agent 的 skill 是 `plan` 模式，`tools_allow` 必须包含 `subagent`。
+主 agent 的 skill 是 `plan` 模式，`tools.allow` 必须包含 `subagent`。
 body（Markdown 正文）是主 agent 的 persona，告诉它如何编排委托。
 
 **示例：批量巡检编排 skill**（`skills/batch-inspection.md`）
@@ -301,7 +298,7 @@ tools:
 **要点**：
 - `mode: plan` — 主 agent 需要智能规划（决定检查哪些设备、如何汇总）
 - `think: true` — 编排需要推理
-- `tools_allow` 包含 `subagent` — 这是委托的关键
+- `tools.allow` 包含 `subagent` — 这是委托的关键
 - body 里明确告诉主 agent "调用 subagent 并指定 skill"
 - 主 agent 自己不执行诊断命令，只做编排 + 汇总
 
@@ -358,14 +355,14 @@ steps:
 写主 agent 编排 skill 时检查：
 - [ ] `mode: plan`（编排需要智能规划）
 - [ ] `think: true`（编排需要推理）
-- [ ] `tools_allow` 包含 `subagent`
+- [ ] `tools.allow` 包含 `subagent`
 - [ ] body 明确说明委托策略（指定哪个 skill / 不指定）
 - [ ] body 给出 subagent 调用 JSON 示例
 - [ ] body 说明如何汇总子 agent 结果
 
 写子 agent 执行 skill 时检查：
 - [ ] 根据确定性需求选 `workflow` 或 `plan`
-- [ ] `tools_allow` 精确限定（不需要 `subagent`）
+- [ ] `tools.allow` 精确限定（不需要 `subagent`）
 - [ ] workflow 的 steps 覆盖完整流程
 - [ ] 最后一步用 `llm_judge` 汇总输出（子 agent 只返回最终输出）
 
@@ -377,24 +374,24 @@ steps:
 |------|------|------|------|
 | `name` | string | ✅ | kebab-case 标识 |
 | `description` | string | ✅ | 一句话描述 |
-| `when_to_use` | string | ❌ | 何时使用此 skill |
+| `whenToUse` | string | ❌ | 何时使用此 skill |
 | `mode` | `workflow`/`todo`/`plan` | ✅ | 执行模式 |
 | `think` | bool | ❌ | LLM 推理模式（默认 plan=true，其他=false） |
-| `tools_allow` | string[] | ❌ | 工具白名单（空=全部允许） |
+| `tools.allow` | string[] | ❌ | 工具白名单（空=全部允许） |
 | `variables` | map | ❌ | 可变参数 |
-| `steps` | Step[] | workflow/todo 必填 | 执行步骤 |
+| `steps` | Step[] | workflow/todo 必填 | 执行步骤（扁平结构：`tool:` / `llm_judge:` 直接在 step 下） |
 | body | markdown | ❌ | persona（plan）或说明（workflow） |
 
 ---
 
 ## 7. 上下文压缩配置
 
-当对话消息超过模型上下文窗口的可配置阈值比例时，较早的 turn 会被自动摘要为一条消息，保留最近的对话不变。这通过 `config/default.toml` 的 `[compaction]` 段控制：
+当对话消息超过模型上下文窗口的可配置阈值比例时，较早的 turn 会被自动摘要为一条消息，保留最近的对话不变。这通过 `config/default.yaml` 的 `compaction` 段控制：
 
-```toml
-[compaction]
-threshold = 0.7           # 消息 token 超过 context_window 的 70% 时触发压缩
-keep_recent_turns = 4     # 始终保留最近 4 个 turn 不被摘要
+```yaml
+compaction:
+  threshold: 0.7           # 消息 token 超过 context_window 的 70% 时触发压缩
+  keep_recent_turns: 4     # 始终保留最近 4 个 turn 不被摘要
 ```
 
 **调优建议**：
@@ -405,7 +402,7 @@ keep_recent_turns = 4     # 始终保留最近 4 个 turn 不被摘要
 | 大上下文模型（32K+） | 0.8 | 6 | 晚点压缩，保留更多上下文 |
 | 长 workflow SOP | 0.7 | 4 | 平衡——保留最近结果供 llm_judge 引用 |
 
-修改后在下一个 chat 请求即时生效（热重载），无需重启。Web UI 设置面板的 TOML 编辑器可直接修改。
+修改后在下一个 chat 请求即时生效（热重载），无需重启。Web UI 设置面板的「通用」页可直接调整压缩滑块，或点「打开配置文件」用系统编辑器编辑 YAML。
 
 **与 skill 的关系**：
 - `workflow` 模式：压缩对 workflow 步骤无影响（ForceTool 不累积 LLM 历史）

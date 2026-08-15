@@ -25,8 +25,6 @@ impl Policy {
         if config.todo { allowed.insert("todo_write".into()); }
         // Subagent is always allowed (registered separately via register_subagent).
         allowed.insert("subagent".into());
-        // Skill creator is always available.
-        allowed.insert("skill_creator".into());
         Self { allowed }
     }
 
