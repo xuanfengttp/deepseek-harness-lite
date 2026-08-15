@@ -416,6 +416,11 @@ fn ensure_skills_dir(dir: &str) {
 /// bare general-purpose assistant with no domain-specific instructions. The lite
 /// version ships no built-in skills; the user defines their own in the skills/
 /// directory and the system auto-discovers them on startup.
+///
+/// The persona is intentionally short (~15 tokens) — the identity section and
+/// behavior rules in prompt.rs provide the rest. Adding more here permanently
+/// costs context window on every turn; domain-specific guidance belongs in a
+/// skill file instead.
 fn default_skill() -> Skill {
     Skill {
         name: "default".into(),
@@ -425,7 +430,7 @@ fn default_skill() -> Skill {
         think: false,
         tools_allow: vec![],
         variables: std::collections::HashMap::new(),
-        body: "You are a helpful assistant. Answer concisely and accurately.".into(),
+        body: "Answer the user's request using available tools. Be concise and accurate.".into(),
         steps: vec![],
     }
 }

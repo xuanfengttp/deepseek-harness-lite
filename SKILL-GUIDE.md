@@ -5,6 +5,81 @@ dsh-lite 的 skill 是 YAML frontmatter + Markdown body 的 `.md` 文件，放�
 
 ---
 
+## 0. 系统提示词架构（分层 Section 设计）
+
+dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个巨大的文本块，
+而是由 4 个有序的微型 section 拼接而成，每个 section 极短、高信噪比。
+
+### 为什么分层
+
+小模型的核心矛盾：提示词越丰富 → 执行准确率越高，但永久占用上下文窗口 →
+剩余上下文越少 → 执行效果越差。分层设计通过以下方式化解这个矛盾：
+
+- **固定成本极低**：identity + rules + tool guidance 总计 ~200-300 tokens
+- **按需注入**：workflow 模式的 tool 步不发系统提示词（ForceTool 绕过 LLM）
+- **行为规则 > 描述**：每个工具注入 1 句"怎么用"的行为规则，而非"是什么"的描述
+- **变量插值**：`{{cwd}}`、`{{model}}` 运行时自动注入，不需要 LLM 探索
+
+### 4 层 Section（按 order 排序）
+
+| order | name | 内容 | token 成本 | 注入条件 |
+|-------|------|------|-----------|----------|
+| -100 | `harness:identity` | "You are an AI agent. Working directory: {{cwd}}." | ~20 | 始终注入 |
+| 0 | `persona` | skill body（角色/方法论） | 可变 | skill body 非空时 |
+| 10 | `behavior-rules` | 3 条通用行为规则 | ~80 | 始终注入 |
+| 100 | `tools` | 每个工具 1 句行为规则（guidance） | ~15/工具 | 有允许工具时 |
+
+### 通用行为规则（order=10）
+
+```
+## Rules
+
+- Check command exit codes; investigate failures before proceeding.
+- Verify facts with tools; do not guess or fabricate.
+- Be concise; answer the question directly.
+```
+
+这 3 条规则针对小模型最常见的 3 个错误：忽略命令失败、编造事实、输出冗长。
+
+### 工具行为规则（guidance 字段）
+
+每个工具在 `ToolDefinition` 中有两个文本字段：
+
+| 字段 | 用途 | 注入位置 |
+|------|------|----------|
+| `description` | 工具描述（WHAT it does） | 工具 schema（functions 参数） |
+| `guidance` | 行为规则（HOW to use it） | 系统提示词 tool section |
+
+示例：
+- `shell`: "Check the [exit code: N] marker on every result; investigate failures before moving on."
+- `file_read`: "Use this, not shell cat, to read text files. Results include line numbers."
+- `ssh_exec`: "SSH sessions persist; reuse the same target for sequential commands on one device."
+
+### 运行时变量
+
+| 变量 | 来源 | 注入位置 |
+|------|------|----------|
+| `{{cwd}}` | `std::env::current_dir()` | identity section |
+| `{{model}}` | config.model.model | 可在 skill body 中使用 |
+| `{{自定义}}` | skill variables | args, prompt, input, when, body |
+
+### 准确率策略：不是靠提示词，是靠执行模式
+
+对于小模型，提升准确率的最佳策略不是"写更好的提示词让模型自己想明白"，
+而是"不让模型想"：
+
+| 策略 | LLM 调用 | 准确率 | 上下文消耗 |
+|------|----------|--------|------------|
+| plan 模式 + 长提示词 | 多次 | 取决于模型智力 | 高 |
+| workflow 模式 + 短提示词 | 0 (tool) + 1 (judge) | **100%** (tool 步) | 低 |
+| plan 编排 + workflow 子 agent | 主每步 + 子 judge | 高 | 中 |
+
+**workflow 模式是小模型的杀手锏**：tool 步 ForceTool 绕过 LLM（0 智力需求），
+judge 步 ForceLlm 独立上下文（不受对话历史污染）。系统提示词对 workflow
+步骤完全无影响（不发给 LLM）。
+
+---
+
 ## 1. 选择模式
 
 | 场景 | 模式 | think | LLM 调用次数 | 确定性 |

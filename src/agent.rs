@@ -138,8 +138,14 @@ impl AgentLoop {
             .append(SessionEvent::UserMessage { content: user_message });
 
         // Assemble the prompt from the active skill + available tools.
+        // Inject runtime variables ({{cwd}}, {{model}}) for the identity section.
         let all_tools = self.tools.definitions();
-        let assembled = prompt::assemble(skill, &all_tools, &skill.variables);
+        let mut runtime_vars = skill.variables.clone();
+        runtime_vars.insert("cwd".into(), std::env::current_dir()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| ".".into()));
+        runtime_vars.insert("model".into(), self.model.clone());
+        let assembled = prompt::assemble(skill, &all_tools, &runtime_vars);
 
         // Loop: steps continue as long as hooks say Continue.
         loop {

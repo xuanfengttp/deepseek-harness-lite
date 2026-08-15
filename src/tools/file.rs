@@ -17,6 +17,7 @@ impl ToolPlugin for FileReadTool {
         ToolDefinition {
             name: "file_read".into(),
             description: "Read the contents of a file".into(),
+            guidance: "Use this, not shell cat, to read text files. Results include line numbers.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -58,6 +59,7 @@ impl ToolPlugin for FileWriteTool {
         ToolDefinition {
             name: "file_write".into(),
             description: "Write content to a file (overwrites if exists)".into(),
+            guidance: "Read the file first before editing to avoid overwriting unknown content.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -106,7 +108,8 @@ impl ToolPlugin for FileSearchTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "file_search".into(),
-            description: "List files matching a glob pattern (e.g. *.log, config/*.toml)".into(),
+            description: "List files matching a glob pattern (e.g. *.log, config/*.yaml)".into(),
+            guidance: "Use glob patterns to discover files; prefer specific patterns over broad ones.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

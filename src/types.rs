@@ -123,7 +123,12 @@ pub enum TurnEndReason {
 #[derive(Debug, Clone)]
 pub struct ToolDefinition {
     pub name: String,
+    /// One-line description sent in the tool schema (WHAT the tool does).
     pub description: String,
+    /// Behavior rule injected into the system prompt (HOW to use the tool).
+    /// Empty string = no guidance section for this tool.
+    #[allow(dead_code)]
+    pub guidance: String,
     /// JSON schema for the parameters object.
     pub parameters: serde_json::Value,
     /// Maximum execution time in milliseconds.

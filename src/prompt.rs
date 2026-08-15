@@ -5,8 +5,9 @@
 //! `order` field. Sections are built dynamically — any plugin can contribute.
 //!
 //! Small-model constraints enforced here:
-//! - Tool descriptions capped (each tool gets a concise one-liner)
-//! - Total prompt stays short — the model's limited context is the bottleneck
+//! - Tool guidance uses behavior rules (HOW to use), not descriptions (WHAT it does)
+//! - Each section is short and high-signal — every token has a permanent context cost
+//! - Total system prompt stays under ~300 tokens for the default skill
 
 use crate::types::*;
 use std::collections::HashMap;
@@ -31,20 +32,41 @@ pub struct PromptSection {
 }
 
 /// Section order conventions (mirrors dsh system-prompt order semantics):
+///   -100  harness:identity  — fixed agent identity
+///      0  persona           — skill body (role/methodology)
+///     10  behavior-rules    — universal behavior rules
+///    100  tools             — per-tool behavior guidance
+pub const ORDER_IDENTITY: i32 = -100;
 pub const ORDER_PERSONA: i32 = 0;
+pub const ORDER_RULES: i32 = 10;
 pub const ORDER_TOOLS: i32 = 100;
+
+/// Universal behavior rules for all agents (order=10).
+/// Short, high-signal rules that prevent the most common small-model mistakes.
+const BEHAVIOR_RULES: &str = "## Rules\n\n- Check command exit codes; investigate failures before proceeding.\n- Verify facts with tools; do not guess or fabricate.\n- Be concise; answer the question directly.";
 
 /// Build prompt sections from a skill and available tools.
 ///
 /// Returns dynamic sections that `assemble()` will sort and join.
-/// Future plugins can push additional sections before calling assemble.
+/// The layered design mirrors dsh's section-based architecture:
+///   1. Identity (fixed, ~20 tokens)
+///   2. Persona (skill body, variable)
+///   3. Behavior rules (fixed, ~80 tokens)
+///   4. Tool guidance (per-tool behavior rules, ~15 tokens/tool)
 pub fn build_sections(
     skill: &Skill,
     all_tools: &[ToolDefinition],
 ) -> (Vec<PromptSection>, Vec<ToolDefinition>) {
     let mut sections: Vec<PromptSection> = Vec::new();
 
-    // Persona section (skill Markdown body).
+    // Layer 1: Harness identity (order=-100, always present, ~20 tokens).
+    sections.push(PromptSection {
+        name: "harness:identity".into(),
+        order: ORDER_IDENTITY,
+        text: "You are an AI agent. Working directory: {{cwd}}.".into(),
+    });
+
+    // Layer 2: Persona section (order=0, skill Markdown body).
     if !skill.body.is_empty() {
         sections.push(PromptSection {
             name: "persona".into(),
@@ -53,22 +75,34 @@ pub fn build_sections(
         });
     }
 
-    // Tool guidance section: one concise line per allowed tool.
+    // Layer 3: Behavior rules (order=10, always present, ~80 tokens).
+    sections.push(PromptSection {
+        name: "behavior-rules".into(),
+        order: ORDER_RULES,
+        text: BEHAVIOR_RULES.into(),
+    });
+
+    // Layer 4: Tool guidance (order=100, one behavior rule per allowed tool).
+    // Uses `guidance` (HOW to use) not `description` (WHAT it does).
+    // Description stays in the tool schema sent separately to the LLM.
     let allowed_tools = filter_tools(all_tools, &skill.tools_allow);
     if !allowed_tools.is_empty() {
         let tool_lines: Vec<String> = allowed_tools
             .iter()
-            .map(|t| format!("- `{}`: {}", t.name, truncate_description(&t.description, 120)))
+            .filter(|t| !t.guidance.is_empty())
+            .map(|t| format!("- `{}`: {}", t.name, t.guidance))
             .collect();
-        let tool_section = format!(
-            "## Available tools\n\nYou may call these tools:\n\n{}\n\nCall a tool by name with JSON arguments. Wait for the result before proceeding.",
-            tool_lines.join("\n")
-        );
-        sections.push(PromptSection {
-            name: "tools".into(),
-            order: ORDER_TOOLS,
-            text: tool_section,
-        });
+        if !tool_lines.is_empty() {
+            let tool_section = format!(
+                "## Tool guidance\n\n{}\n\nCall a tool by name with JSON arguments. Wait for the result before proceeding.",
+                tool_lines.join("\n")
+            );
+            sections.push(PromptSection {
+                name: "tools".into(),
+                order: ORDER_TOOLS,
+                text: tool_section,
+            });
+        }
     }
 
     (sections, allowed_tools)
@@ -130,15 +164,6 @@ fn filter_tools(all: &[ToolDefinition], allow: &[String]) -> Vec<ToolDefinition>
         .collect()
 }
 
-/// Truncate a description to `max` chars, appending "..." if truncated.
-fn truncate_description(desc: &str, max: usize) -> String {
-    if desc.len() <= max {
-        desc.to_string()
-    } else {
-        format!("{}...", &desc[..max.saturating_sub(3)])
-    }
-}
-
 /// Replace all `{{var}}` occurrences with the corresponding value.
 /// Unknown variables are left as-is (not stripped) so misconfiguration is visible.
 fn interpolate(text: &str, vars: &HashMap<String, String>) -> String {
@@ -173,6 +198,7 @@ mod tests {
         ToolDefinition {
             name: name.into(),
             description: desc.into(),
+            guidance: format!("Use {name} correctly."),
             parameters: serde_json::json!({"type": "object"}),
             timeout_ms: 5000,
         }
@@ -187,12 +213,33 @@ mod tests {
             make_tool("file_write", "Write a file"),
         ];
         let prompt = assemble(&skill, &tools, &HashMap::new());
+        // Persona present.
         assert!(prompt.system.contains("diagnostic agent"));
-        assert!(prompt.system.contains("shell"));
-        assert!(prompt.system.contains("file_read"));
+        // Tool guidance uses behavior rules (guidance), not descriptions.
+        assert!(prompt.system.contains("Use shell correctly."));
+        assert!(prompt.system.contains("Use file_read correctly."));
         // file_write is not in the allow-list, should be filtered out.
         assert!(!prompt.system.contains("file_write"));
         assert_eq!(prompt.tools.len(), 2);
+    }
+
+    #[test]
+    fn includes_harness_identity_and_rules() {
+        let skill = make_skill("diag", "You are a diagnostic agent.", vec![]);
+        let prompt = assemble(&skill, &[], &HashMap::new());
+        // Identity section (order=-100) should be present.
+        assert!(prompt.system.contains("You are an AI agent."));
+        assert!(prompt.system.contains("{{cwd}}")); // uninterpolated when no vars provided
+        // Behavior rules section (order=10) should be present.
+        assert!(prompt.system.contains("## Rules"));
+        assert!(prompt.system.contains("investigate failures"));
+        // Identity should come before persona.
+        let id_pos = prompt.system.find("You are an AI agent.").unwrap();
+        let persona_pos = prompt.system.find("diagnostic agent").unwrap();
+        assert!(id_pos < persona_pos);
+        // Persona should come before rules.
+        let rules_pos = prompt.system.find("## Rules").unwrap();
+        assert!(persona_pos < rules_pos);
     }
 
     #[test]
@@ -201,7 +248,17 @@ mod tests {
         skill.variables.insert("device_model".into(), "AX-200".into());
         let prompt = assemble(&skill, &[], &HashMap::new());
         assert!(prompt.system.contains("AX-200"));
-        assert!(!prompt.system.contains("{{"));
+        assert!(!prompt.system.contains("{{device_model}}"));
+    }
+
+    #[test]
+    fn cwd_variable_interpolated() {
+        let skill = make_skill("diag", "You are a diagnostic agent.", vec![]);
+        let mut extra = HashMap::new();
+        extra.insert("cwd".into(), "/tmp/work".into());
+        let prompt = assemble(&skill, &[], &extra);
+        assert!(prompt.system.contains("/tmp/work"));
+        assert!(!prompt.system.contains("{{cwd}}"));
     }
 
     #[test]

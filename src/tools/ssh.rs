@@ -271,6 +271,7 @@ impl ToolPlugin for SshExecTool {
         ToolDefinition {
             name: "ssh_exec".into(),
             description: "Execute a command on a remote network element via persistent SSH session. The connection stays open between calls — subsequent commands reuse the same session. Use for interactive device queries (show commands, config retrieval, diagnostics).".into(),
+            guidance: "SSH sessions persist; reuse the same target for sequential commands on one device. Prefer pre-configured targets over ad-hoc host/user/password.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

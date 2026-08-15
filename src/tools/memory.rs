@@ -19,6 +19,7 @@ impl ToolPlugin for MemoryReadTool {
         ToolDefinition {
             name: "memory_read".into(),
             description: "Read a value from long-term memory by exact key.".into(),
+            guidance: "Use memory_read to recall facts learned in earlier sessions (e.g. device configs, known issues).".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -52,6 +53,7 @@ impl ToolPlugin for MemoryWriteTool {
         ToolDefinition {
             name: "memory_write".into(),
             description: "Write a key-value pair to long-term memory (persists across sessions).".into(),
+            guidance: "Record durable facts (device IPs, known bugs, config templates) for future sessions.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -95,6 +97,7 @@ impl ToolPlugin for MemoryRecallTool {
         ToolDefinition {
             name: "memory_recall".into(),
             description: "Search long-term memory by fuzzy key/value matching. Returns all matching entries.".into(),
+            guidance: "Use recall when you do not know the exact key; it searches both keys and values.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

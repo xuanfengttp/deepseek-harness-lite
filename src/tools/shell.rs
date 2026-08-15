@@ -14,6 +14,7 @@ impl ToolPlugin for ShellTool {
         ToolDefinition {
             name: "shell".into(),
             description: "Execute a shell command on the device and return its output".into(),
+            guidance: "Check the [exit code: N] marker on every result; investigate failures before moving on.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {

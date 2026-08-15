@@ -89,6 +89,7 @@ impl ToolPlugin for SubagentTool {
         ToolDefinition {
             name: "subagent".into(),
             description: "Delegate a self-contained task to a child agent. The child runs independently and returns only its final result. Use for focused subtasks (research, scoped analysis, verification) to save parent context.".into(),
+            guidance: "Give the child a complete, self-contained prompt — it sees nothing from your conversation. Specify a skill for deterministic SOPs; omit for autonomous exploration.".into(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
