@@ -1,13 +1,10 @@
 //! Prompt assembly: ordered sections + tool schemas + variable interpolation.
 //!
-//! Mirrors dsh `core/system-prompt`, drastically simplified for a single-skill,
-//! small-model context. The system prompt is assembled from:
-//! - persona (from the active skill's Markdown body)
-//! - tool guidance (one line per active tool)
-//! - variables ({{var}} interpolation)
+//! Maps to dsh `core/system-prompt` + `ctx.systemPrompt.section()`.
+//! The system prompt is assembled from ordered `PromptSection`s, sorted by
+//! `order` field. Sections are built dynamically — any plugin can contribute.
 //!
 //! Small-model constraints enforced here:
-//! - One skill active at a time (its persona + tools only)
 //! - Tool descriptions capped (each tool gets a concise one-liner)
 //! - Total prompt stays short — the model's limited context is the bottleneck
 
@@ -22,15 +19,89 @@ pub struct AssembledPrompt {
     pub tools: Vec<ToolDefinition>,
 }
 
+/// A system prompt section with ordering.
+///
+/// Plugins contribute sections by pushing `PromptSection`s into the assemble
+/// call. Sections are sorted by `order` (ascending) before joining.
+pub struct PromptSection {
+    pub name: String,
+    pub order: i32,
+    pub text: String,
+}
+
 /// Section order conventions (mirrors dsh system-prompt order semantics):
-const ORDER_PERSONA: i32 = 0;
-const ORDER_TOOLS: i32 = 100;
+pub const ORDER_PERSONA: i32 = 0;
+pub const ORDER_TOOLS: i32 = 100;
+
+/// Build prompt sections from a skill and available tools.
+///
+/// Returns dynamic sections that `assemble()` will sort and join.
+/// Future plugins can push additional sections before calling assemble.
+pub fn build_sections(
+    skill: &Skill,
+    all_tools: &[ToolDefinition],
+) -> (Vec<PromptSection>, Vec<ToolDefinition>) {
+    let mut sections: Vec<PromptSection> = Vec::new();
+
+    // Persona section (skill Markdown body).
+    if !skill.body.is_empty() {
+        sections.push(PromptSection {
+            name: "persona".into(),
+            order: ORDER_PERSONA,
+            text: skill.body.clone(),
+        });
+    }
+
+    // Tool guidance section: one concise line per allowed tool.
+    let allowed_tools = filter_tools(all_tools, &skill.tools_allow);
+    if !allowed_tools.is_empty() {
+        let tool_lines: Vec<String> = allowed_tools
+            .iter()
+            .map(|t| format!("- `{}`: {}", t.name, truncate_description(&t.description, 120)))
+            .collect();
+        let tool_section = format!(
+            "## Available tools\n\nYou may call these tools:\n\n{}\n\nCall a tool by name with JSON arguments. Wait for the result before proceeding.",
+            tool_lines.join("\n")
+        );
+        sections.push(PromptSection {
+            name: "tools".into(),
+            order: ORDER_TOOLS,
+            text: tool_section,
+        });
+    }
+
+    (sections, allowed_tools)
+}
+
+/// Assemble the system prompt from dynamic sections + tool schemas.
+///
+/// - `sections`: ordered prompt sections (sorted by `order` field)
+/// - `tools`: tool schemas (already filtered to the skill's allow-list)
+/// - `variables`: variables for `{{var}}` interpolation
+pub fn assemble_sections(
+    sections: Vec<PromptSection>,
+    tools: Vec<ToolDefinition>,
+    variables: &HashMap<String, String>,
+) -> AssembledPrompt {
+    // Sort sections by order, then join.
+    let mut sorted = sections;
+    sorted.sort_by_key(|s| s.order);
+    let mut system = sorted
+        .into_iter()
+        .map(|s| s.text)
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    // Interpolate variables: {{var}} → value.
+    system = interpolate(&system, variables);
+
+    AssembledPrompt { system, tools }
+}
 
 /// Assemble the system prompt from the active skill and available tools.
 ///
-/// - `skill`: the active skill (provides persona body + tool allow-list)
-/// - `all_tools`: all registered tools; filtered by skill.tools_allow
-/// - `variables`: extra variables to interpolate (merged over skill.variables)
+/// Convenience function: builds sections from skill + tools, then assembles.
+/// This preserves backward compatibility with the original assemble() signature.
 pub fn assemble(
     skill: &Skill,
     all_tools: &[ToolDefinition],
@@ -42,35 +113,8 @@ pub fn assemble(
         vars.insert(k.clone(), v.clone());
     }
 
-    // Build sections in order.
-    let mut sections: Vec<(i32, String)> = Vec::new();
-
-    // Persona section (skill Markdown body).
-    if !skill.body.is_empty() {
-        sections.push((ORDER_PERSONA, skill.body.clone()));
-    }
-
-    // Tool guidance section: one concise line per allowed tool.
-    let allowed_tools = filter_tools(all_tools, &skill.tools_allow);
-    if !allowed_tools.is_empty() {
-        let tool_lines: Vec<String> = allowed_tools.iter()
-            .map(|t| format!("- `{}`: {}", t.name, truncate_description(&t.description, 120)))
-            .collect();
-        let tool_section = format!("## Available tools\n\nYou may call these tools:\n\n{}\n\nCall a tool by name with JSON arguments. Wait for the result before proceeding.", tool_lines.join("\n"));
-        sections.push((ORDER_TOOLS, tool_section));
-    }
-
-    // Sort by order, then join.
-    sections.sort_by_key(|(order, _)| *order);
-    let mut system = sections.into_iter().map(|(_, text)| text).collect::<Vec<_>>().join("\n\n");
-
-    // Interpolate variables: {{var}} → value.
-    system = interpolate(&system, &vars);
-
-    AssembledPrompt {
-        system,
-        tools: allowed_tools,
-    }
+    let (sections, allowed_tools) = build_sections(skill, all_tools);
+    assemble_sections(sections, allowed_tools, &vars)
 }
 
 /// Filter tools to only those in the allow-list. If the allow-list is empty,
@@ -136,7 +180,11 @@ mod tests {
     #[test]
     fn assembles_persona_and_tools() {
         let skill = make_skill("diag", "You are a diagnostic agent.", vec!["shell", "file_read"]);
-        let tools = vec![make_tool("shell", "Execute a shell command"), make_tool("file_read", "Read a file"), make_tool("file_write", "Write a file")];
+        let tools = vec![
+            make_tool("shell", "Execute a shell command"),
+            make_tool("file_read", "Read a file"),
+            make_tool("file_write", "Write a file"),
+        ];
         let prompt = assemble(&skill, &tools, &HashMap::new());
         assert!(prompt.system.contains("diagnostic agent"));
         assert!(prompt.system.contains("shell"));
@@ -161,5 +209,21 @@ mod tests {
         let tools = vec![make_tool("shell", "x"), make_tool("file_read", "y")];
         let prompt = assemble(&skill, &tools, &HashMap::new());
         assert_eq!(prompt.tools.len(), 2);
+    }
+
+    #[test]
+    fn dynamic_sections_sorted_by_order() {
+        let sections = vec![
+            PromptSection { name: "tools".into(), order: 100, text: "Tools section".into() },
+            PromptSection { name: "persona".into(), order: 0, text: "Persona section".into() },
+            PromptSection { name: "custom".into(), order: 50, text: "Custom section".into() },
+        ];
+        let prompt = assemble_sections(sections, vec![], &HashMap::new());
+        // Persona (0) should come before custom (50) before tools (100).
+        let persona_pos = prompt.system.find("Persona section").unwrap();
+        let custom_pos = prompt.system.find("Custom section").unwrap();
+        let tools_pos = prompt.system.find("Tools section").unwrap();
+        assert!(persona_pos < custom_pos);
+        assert!(custom_pos < tools_pos);
     }
 }
