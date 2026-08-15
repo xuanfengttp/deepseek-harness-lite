@@ -68,7 +68,17 @@ The append-only event log is the single source of truth for model context. `deri
 
 ### Compaction (short-context survival)
 
-For small models with limited context windows, compaction is a core feature, not an optional add-on. When derived messages exceed a threshold, older turns are summarized into a single message using an independent context (the summary request does not include the conversation being summarized).
+For small models with limited context windows, compaction is a core feature, not an optional add-on. When derived messages exceed a configurable threshold fraction of the context window, older turns are summarized into a single message using an independent context (the summary request does not include the conversation being summarized).
+
+The threshold is configurable in `config/default.toml`:
+
+```toml
+[compaction]
+threshold = 0.7           # compact when messages exceed 70% of context_window
+keep_recent_turns = 4     # always keep the latest N turns unsummarized
+```
+
+Changes take effect on the next chat request (hot-reload — no restart needed). The config editor in the web UI provides raw TOML editing for this and all other settings.
 
 ### Two-layer memory
 
@@ -86,8 +96,10 @@ For small models with limited context windows, compaction is a core feature, not
 | `ssh_exec` | SSH command execution via persistent connection pool (placeholder) |
 | `memory_*` | Long-term memory read / write / recall |
 | `todo_write` | Task tracking for multi-step operations |
+| `subagent` | Delegate a sub-task to a child agent (zero parent context, maxDepth=3) |
+| `skill_creator` | AI-assisted skill file generation (workflow/todo/plan templates) |
 
-Tools run through a 3-stage pipeline: **check** (permission + validation) → **execute** (with timeout) → **result** (truncation + normalization).
+Tools are `ToolPlugin` trait implementations registered through `register_builtins()`. Adding a tool means implementing the trait + one registration line — no core code changes. Tools run through a 3-stage pipeline: **check** (permission + validation) → **execute** (with timeout) → **result** (truncation + normalization).
 
 ### Single binary, no runtime dependencies
 
@@ -105,39 +117,60 @@ Tools run through a 3-stage pipeline: **check** (permission + validation) → **
 
 ## Architecture
 
+The unified plugin architecture ("one loop + pluggable hooks") replaces the original three hardcoded dispatch branches. All execution modes — `workflow`, `todo`, `plan` — run through a single agent loop, with behavior controlled by `StepHook` strategies. New modes or behaviors are added by implementing a trait, not by editing core loop code. See [DESIGN-UNIFIED.md](DESIGN-UNIFIED.md) for the full design.
+
 ```
 User input
-  → Dispatcher (routes by skill mode)
-     ├─ workflow → fixed step sequence (bypass agent loop)
-     ├─ todo     → agent loop + step guidance
-     └─ plan     → full agent loop (explore → execute → re-plan)
-
-Agent loop (plan/todo):
-  turn/start
-    → assemble prompt (persona + tools + variables)
-    → step/start → LLM stream → assistant message
-      → tool calls → 3-stage pipeline → tool results
-    → step/end
-    → (pending tools or new input → next step)
-  turn/end
+  → Dispatcher (builds hooks from active skill mode)
+     → AgentLoop (single loop, hooks decide per-step behavior)
+        ├─ StepHook::pre_step()
+        │    ├─ Proceed(injection) → normal LLM step (plan / todo)
+        │    ├─ ForceTool(call)    → skip LLM, run tool directly (workflow tool step)
+        │    ├─ ForceLlm(prompt)   → independent-context LLM call (workflow llm_judge)
+        │    └─ Stop(reason)       → end turn
+        ├─ execute tools / stream LLM
+        └─ StepHook::post_step() → continue or stop
 ```
+
+| Mode | pre_step returns | LLM usage | Determinism |
+|---|---|---|---|
+| `plan` | `Proceed(None)` | Full reasoning each step | LLM-driven |
+| `todo` | `Proceed(Some(guidance))` | Per-step with guidance | Medium |
+| `workflow` (tool) | `ForceTool(call)` | **0 calls** — bypassed | 100% repeatable |
+| `workflow` (llm_judge) | `ForceLlm(prompt)` | Single call, independent context | High |
+
+### Five extension points
+
+| Extension point | Trait | Purpose |
+|---|---|---|
+| Step hook | `StepHook` | Per-step decision: inject / force tool / force LLM / stop |
+| Tool plugin | `ToolPlugin` | Tool definition + execution in one unit |
+| Prompt section | `PromptSection` | Dynamic system-prompt sections |
+| Command plugin | `CommandPlugin` | Slash command registration |
+| Subagent tool | `SubagentTool` | Child agent delegation (inherits dsh core pattern) |
 
 ### Module map
 
 | Module | Responsibility | Mirrors dsh |
 |---|---|---|
-| `types` | Core type definitions | session + agent + llm types |
-| `session` | Append-only event log + message derivation + flash checkpoint | core/session |
+| `types` | Core type definitions + config structs | session + agent + llm types |
+| `session` | Append-only event log + message derivation + flash checkpoint + compaction | core/session |
 | `llm` | HTTP streaming client (OpenAI-compatible) | llm/llm |
-| `prompt` | System prompt assembly | core/system-prompt |
-| `tools` | Tool registry + 3-stage execution pipeline | core/tools |
+| `prompt` | System prompt assembly with dynamic `PromptSection` | core/system-prompt |
+| `hooks` | `StepHook` trait + `StepDecision` / `StepFlow` / context types | agent/pre-step waterfall |
+| `strategies` | Three `StepHook` implementations: Plan / Todo / Workflow | (new, replaces dispatch branches) |
+| `tools` | `ToolPlugin` trait + `ToolRegistry` + 3-stage execution pipeline | core/tools |
+| `commands` | `CommandPlugin` trait + built-in slash commands | interaction/commands |
+| `subagent` | `SubagentTool` — child agent delegation (zero parent context, maxDepth=3) | subagent capability |
+| `skill_creator` | `SkillCreatorTool` — AI-assisted skill file generation | (new) |
 | `policy` | Allow/deny permission checks | sandbox-policy |
 | `skill` | Declarative skill loading (YAML + MD) | skill/skill + skill-filesystem |
-| `agent` | Turn/step driver (plan mode) | core/agent-loop |
+| `agent` | Turn/step driver with hook integration + compaction | core/agent-loop |
 | `expr` | Condition expression evaluator + variable interpolation | (new) |
 | `memory` | Long-term KV store (flash-backed, LRU) | (new) |
-| `compaction` | Rolling context summary (independent context) | (new) |
-| `dispatcher` | Tri-mode routing (workflow/todo/plan) | (new) |
+| `compaction` | Rolling context summary (independent context, configurable threshold) | (new) |
+| `dispatcher` | Builds hooks from skill mode + drives AgentLoop | (new, simplified) |
+| `server` | HTTP server + SSE streaming + web client + config hot-reload | (new) |
 
 ## Build
 
@@ -190,27 +223,43 @@ base_url = "http://127.0.0.1:8080/v1"
 model = "your-model"
 context_window = 8192
 
+[compaction]
+threshold = 0.7           # compact when messages exceed 70% of context_window
+keep_recent_turns = 4
+
 [skill]
 dir = "skills"
 ```
 
-The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming).
+The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming). All config changes are hot-reloaded on the next chat request — no restart needed. The web UI's settings panel provides a raw TOML editor for live editing.
 
 ## Project status
 
-Currently at **P6** (web client + HTTP server). See [DESIGN-lite.md](DESIGN-lite.md) for the full design document and roadmap.
+The unified plugin化 architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**. All extension points are implemented and tested: `StepHook`, `ToolPlugin`, `PromptSection`, `CommandPlugin`, `SubagentTool`, `SkillCreatorTool`. 46 tests pass, 0 compiler warnings.
 
-| Phase | Status |
-|---|---|
-| P0 — Scaffold + cross-compilation | ✅ Done |
-| P1 — Core agent loop (plan mode) | ✅ Done |
-| P2 — Tri-mode dispatch (workflow/todo/plan) | ✅ Done |
-| P3 — Skill system completion | ✅ Done |
-| P4 — Memory + compaction + persistence | ✅ Done |
-| P5 — Session management (multi-session + offloading) | ✅ Done |
-| P6 — Web client + HTTP server | ✅ Done |
-| P7 — SSH client | 🔄 Next |
-| P8 — Size + memory optimization | Planned |
+| Phase | Content | Status |
+|---|---|---|
+| P0 | Scaffold + cross-compilation | ✅ Done |
+| P1 | Core agent loop (plan mode) | ✅ Done |
+| P2 | Tri-mode dispatch (workflow/todo/plan) | ✅ Done |
+| P3 | Skill system completion | ✅ Done |
+| P4 | Memory + compaction + persistence | ✅ Done |
+| P5 | Session management (multi-session + offloading) | ✅ Done |
+| P6 | Web client + HTTP server | ✅ Done |
+| **Unified 1** | **StepHook + AgentLoop refactor + 3 strategies** | **✅ Done** |
+| **Unified 2** | **ToolPlugin trait + eliminate registration duplication** | **✅ Done** |
+| **Unified 3** | **PromptSection dynamic registration** | **✅ Done** |
+| **Unified 4** | **CommandPlugin trait + unified slash commands** | **✅ Done** |
+| **Unified 5** | **SubagentTool — child agent delegation** | **✅ Done** |
+| **Unified 6** | **Compaction message replacement + think bug fix** | **✅ Done** |
+| **Unified 7** | **SkillCreatorTool — AI-assisted skill generation** | **✅ Done** |
+| **Post-7** | **Slash command autocomplete popup + compaction ratio config** | **✅ Done** |
+| P7 | SSH client | 🔄 Next |
+| P8 | Size + memory optimization | Planned |
+
+### Slash command autocomplete
+
+Typing `/` in the web input box opens a popup listing all registered commands (fetched from `GET /api/commands`, which reads the `CommandPlugin` list). The popup filters matches as you type, supports keyboard navigation (`↑↓` to cycle, `Enter`/`Tab` to select, `Esc` to close), and inserts the command into the input. This mirrors the original dsh `InputTriggerService` slash-menu pattern in a lightweight frontend implementation.
 
 ## License
 

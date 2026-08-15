@@ -68,7 +68,17 @@ Append-only 事件日志是模型上下文的唯一真相来源。`derive_messag
 
 ### 压缩（短上下文生存）
 
-对于上下文窗口有限的小模型，压缩是核心特性，而非可选附加。当派生消息超过阈值时，较早的 turn 会被摘要为一条消息，使用**独立上下文**（摘要请求不包含被摘要的对话本身）。
+对于上下文窗口有限的小模型，压缩是核心特性，而非可选附加。当派生消息超过上下文窗口的可配置阈值比例时，较早的 turn 会被摘要为一条消息，使用**独立上下文**（摘要请求不包含被摘要的对话本身）。
+
+阈值在 `config/default.toml` 中可配置：
+
+```toml
+[compaction]
+threshold = 0.7           # 消息超过 context_window 的 70% 时触发压缩
+keep_recent_turns = 4     # 始终保留最近 N 个 turn 不被摘要
+```
+
+修改后在下一个 chat 请求即时生效（热重载——无需重启）。Web UI 的设置面板提供原始 TOML 编辑器，可实时编辑此配置及所有其他设置。
 
 ### 两层记忆
 
@@ -86,8 +96,10 @@ Append-only 事件日志是模型上下文的唯一真相来源。`derive_messag
 | `ssh_exec` | SSH 命令执行，持久连接池（占位） |
 | `memory_*` | 长期记忆读取 / 写入 / 回忆 |
 | `todo_write` | 多步操作任务跟踪 |
+| `subagent` | 委托子任务给子 agent（零父上下文，maxDepth=3） |
+| `skill_creator` | AI 辅助生成 skill 文件（workflow/todo/plan 模板） |
 
-工具通过 3 阶段管线执行：**check**（权限 + 校验）→ **execute**（带超时）→ **result**（截断 + 归一化）。
+工具是 `ToolPlugin` trait 实现，通过 `register_builtins()` 注册。新增工具只需实现 trait + 一行注册代码——无需修改核心代码。工具通过 3 阶段管线执行：**check**（权限 + 校验）→ **execute**（带超时）→ **result**（截断 + 归一化）。
 
 ### 单二进制，无运行时依赖
 
@@ -105,39 +117,60 @@ Append-only 事件日志是模型上下文的唯一真相来源。`derive_messag
 
 ## 架构
 
+统一插件化架构（"一个循环 + 可插拔钩子"）替代了原有的三个硬编码分发分支。所有执行模式——`workflow`、`todo`、`plan`——都通过同一个 agent loop 运行，行为由 `StepHook` 策略控制。新增模式或行为只需实现 trait，无需修改核心循环代码。完整设计见 [DESIGN-UNIFIED.md](DESIGN-UNIFIED.md)。
+
 ```
 用户输入
-  → Dispatcher（按 skill 模式路由）
-     ├─ workflow → 固定步骤序列（绕过 agent loop）
-     ├─ todo     → agent loop + 步骤引导
-     └─ plan     → 完整 agent loop（探索 → 执行 → 重新规划）
-
-Agent loop（plan/todo）：
-  turn/start
-    → 组装 prompt（persona + 工具 + 变量）
-    → step/start → LLM 流式 → assistant 消息
-      → tool calls → 3 阶段管线 → tool results
-    → step/end
-    →（有待处理的工具或新输入 → 下一步）
-  turn/end
+  → Dispatcher（根据激活 skill 模式构建钩子）
+     → AgentLoop（唯一循环，钩子决定每步行为）
+        ├─ StepHook::pre_step()
+        │    ├─ Proceed(injection) → 正常 LLM 步骤（plan / todo）
+        │    ├─ ForceTool(call)    → 跳过 LLM，直接执行工具（workflow tool 步）
+        │    ├─ ForceLlm(prompt)   → 独立上下文调 LLM（workflow llm_judge）
+        │    └─ Stop(reason)       → 结束 turn
+        ├─ 执行工具 / 流式 LLM
+        └─ StepHook::post_step() → 继续或停止
 ```
+
+| 模式 | pre_step 返回 | LLM 使用 | 确定性 |
+|---|---|---|---|
+| `plan` | `Proceed(None)` | 每步完整推理 | LLM 驱动 |
+| `todo` | `Proceed(Some(guidance))` | 每步带引导 | 中等 |
+| `workflow`（tool） | `ForceTool(call)` | **0 次调用**——绕过 LLM | 100% 可重复 |
+| `workflow`（llm_judge） | `ForceLlm(prompt)` | 单次调用，独立上下文 | 高 |
+
+### 五个扩展点
+
+| 扩展点 | Trait | 作用 |
+|---|---|---|
+| 步骤钩子 | `StepHook` | 每步决策：注入 / 强制工具 / 强制 LLM / 停止 |
+| 工具插件 | `ToolPlugin` | 工具定义 + 执行一体化 |
+| 提示段落 | `PromptSection` | 动态系统提示 section |
+| 命令插件 | `CommandPlugin` | 斜杠命令注册 |
+| 子 agent 工具 | `SubagentTool` | 子 agent 委托（继承 dsh 核心模式） |
 
 ### 模块映射
 
 | 模块 | 职责 | 对应 dsh |
 |---|---|---|
-| `types` | 核心类型定义 | session + agent + llm types |
-| `session` | Append-only 事件日志 + 消息派生 + flash checkpoint | core/session |
+| `types` | 核心类型定义 + 配置结构 | session + agent + llm types |
+| `session` | Append-only 事件日志 + 消息派生 + flash checkpoint + 压缩 | core/session |
 | `llm` | HTTP 流式客户端（OpenAI 兼容） | llm/llm |
-| `prompt` | 系统 prompt 组装 | core/system-prompt |
-| `tools` | 工具注册表 + 3 阶段执行管线 | core/tools |
+| `prompt` | 系统 prompt 组装 + 动态 `PromptSection` | core/system-prompt |
+| `hooks` | `StepHook` trait + `StepDecision` / `StepFlow` / 上下文类型 | agent/pre-step 瀑布流 |
+| `strategies` | 三个 `StepHook` 实现：Plan / Todo / Workflow |（新增，替代分发分支）|
+| `tools` | `ToolPlugin` trait + `ToolRegistry` + 3 阶段执行管线 | core/tools |
+| `commands` | `CommandPlugin` trait + 内置斜杠命令 | interaction/commands |
+| `subagent` | `SubagentTool` — 子 agent 委托（零父上下文，maxDepth=3） | subagent capability |
+| `skill_creator` | `SkillCreatorTool` — AI 辅助生成 skill 文件 |（新增）|
 | `policy` | 允许/拒绝权限检查 | sandbox-policy |
 | `skill` | 声明式 skill 加载（YAML + MD） | skill/skill + skill-filesystem |
-| `agent` | Turn/step 驱动（plan 模式） | core/agent-loop |
+| `agent` | Turn/step 驱动 + 钩子集成 + 压缩 | core/agent-loop |
 | `expr` | 条件表达式求值 + 变量插值 |（新增）|
 | `memory` | 长期 KV store（flash 持久化，LRU） |（新增）|
-| `compaction` | 滚动上下文摘要（独立上下文） |（新增）|
-| `dispatcher` | 三模式路由（workflow/todo/plan） |（新增）|
+| `compaction` | 滚动上下文摘要（独立上下文，阈值可配置） |（新增）|
+| `dispatcher` | 根据 skill 模式构建钩子 + 驱动 AgentLoop |（新增，已简化）|
+| `server` | HTTP 服务器 + SSE 流式 + Web 客户端 + 配置热重载 |（新增）|
 
 ## 构建
 
@@ -190,27 +223,43 @@ base_url = "http://127.0.0.1:8080/v1"
 model = "your-model"
 context_window = 8192
 
+[compaction]
+threshold = 0.7           # 消息超过 context_window 的 70% 时触发压缩
+keep_recent_turns = 4
+
 [skill]
 dir = "skills"
 ```
 
-模型端点为 OpenAI 兼容（`/v1/chat/completions`，支持流式）。
+模型端点为 OpenAI 兼容（`/v1/chat/completions`，支持流式）。所有配置修改在下一个 chat 请求时热重载——无需重启。Web UI 的设置面板提供原始 TOML 编辑器进行实时编辑。
 
 ## 项目状态
 
-当前进度：**P6**（Web 客户端 + HTTP 服务器）。完整设计文档和路线图见 [DESIGN-lite.md](DESIGN-lite.md)。
+统一插件化架构（DESIGN-UNIFIED.md，7 个阶段）已**全部完成**。所有扩展点已实现并测试：`StepHook`、`ToolPlugin`、`PromptSection`、`CommandPlugin`、`SubagentTool`、`SkillCreatorTool`。46 个测试通过，0 个编译警告。
 
-| 阶段 | 状态 |
-|---|---|
-| P0 — 脚手架 + 交叉编译 | ✅ 完成 |
-| P1 — 核心 agent loop（plan 模式） | ✅ 完成 |
-| P2 — 三模式分发（workflow/todo/plan） | ✅ 完成 |
-| P3 — Skill 系统完善 | ✅ 完成 |
-| P4 — 记忆 + 压缩 + 持久化 | ✅ 完成 |
-| P5 — 会话管理（多会话 + offloading） | ✅ 完成 |
-| P6 — Web 客户端 + HTTP 服务器 | ✅ 完成 |
-| P7 — SSH 客户端 | 🔄 下一步 |
-| P8 — 体积 + 内存优化 | 计划中 |
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| P0 | 脚手架 + 交叉编译 | ✅ 完成 |
+| P1 | 核心 agent loop（plan 模式） | ✅ 完成 |
+| P2 | 三模式分发（workflow/todo/plan） | ✅ 完成 |
+| P3 | Skill 系统完善 | ✅ 完成 |
+| P4 | 记忆 + 压缩 + 持久化 | ✅ 完成 |
+| P5 | 会话管理（多会话 + offloading） | ✅ 完成 |
+| P6 | Web 客户端 + HTTP 服务器 | ✅ 完成 |
+| **统一 1** | **StepHook + AgentLoop 重构 + 三个策略** | **✅ 完成** |
+| **统一 2** | **ToolPlugin trait + 消除注册重复** | **✅ 完成** |
+| **统一 3** | **PromptSection 动态注册** | **✅ 完成** |
+| **统一 4** | **CommandPlugin trait + 统一斜杠命令** | **✅ 完成** |
+| **统一 5** | **SubagentTool — 子 agent 委托** | **✅ 完成** |
+| **统一 6** | **压缩消息替换 + think bug 修复** | **✅ 完成** |
+| **统一 7** | **SkillCreatorTool — AI 辅助生成 skill** | **✅ 完成** |
+| **7 后增强** | **斜杠命令自动补全弹窗 + 压缩比例可配置** | **✅ 完成** |
+| P7 | SSH 客户端 | 🔄 下一步 |
+| P8 | 体积 + 内存优化 | 计划中 |
+
+### 斜杠命令自动补全
+
+在 Web 输入框中输入 `/` 会弹出命令列表（从 `GET /api/commands` 获取，读取 `CommandPlugin` 列表）。弹窗随输入实时过滤匹配命令，支持键盘导航（`↑↓` 切换、`Enter`/`Tab` 选中、`Esc` 关闭），选中后插入命令到输入框。这是对原版 dsh `InputTriggerService` slash-menu 模式的轻量级前端实现。
 
 ## 许可证
 

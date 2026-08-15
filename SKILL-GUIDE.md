@@ -248,3 +248,46 @@ steps:
 | `variables` | map | ❌ | 可变参数 |
 | `steps` | Step[] | workflow/todo 必填 | 执行步骤 |
 | body | markdown | ❌ | persona（plan）或说明（workflow） |
+
+---
+
+## 7. 上下文压缩配置
+
+当对话消息超过模型上下文窗口的可配置阈值比例时，较早的 turn 会被自动摘要为一条消息，保留最近的对话不变。这通过 `config/default.toml` 的 `[compaction]` 段控制：
+
+```toml
+[compaction]
+threshold = 0.7           # 消息 token 超过 context_window 的 70% 时触发压缩
+keep_recent_turns = 4     # 始终保留最近 4 个 turn 不被摘要
+```
+
+**调优建议**：
+
+| 场景 | threshold | keep_recent_turns | 说明 |
+|------|-----------|-------------------|------|
+| 小上下文模型（8K） | 0.6 | 3 | 早点压缩，避免溢出 |
+| 大上下文模型（32K+） | 0.8 | 6 | 晚点压缩，保留更多上下文 |
+| 长 workflow SOP | 0.7 | 4 | 平衡——保留最近结果供 llm_judge 引用 |
+
+修改后在下一个 chat 请求即时生效（热重载），无需重启。Web UI 设置面板的 TOML 编辑器可直接修改。
+
+**与 skill 的关系**：
+- `workflow` 模式：压缩对 workflow 步骤无影响（ForceTool 不累积 LLM 历史）
+- `todo` 模式：压缩后最近 N 个 turn 的步骤引导仍保留
+- `plan` 模式：压缩影响最大——较早的探索历史被摘要，最近的推理链保留
+
+---
+
+## 8. 斜杠命令
+
+在 Web 输入框中输入 `/` 会自动弹出命令列表，支持模糊匹配和键盘导航：
+
+| 命令 | 作用 |
+|------|------|
+| `/new` | 创建新会话 |
+| `/clear` | 清空当前会话消息 |
+| `/compact` | 手动触发上下文压缩 |
+| `/context` | 查看当前上下文占用 |
+| `/help` | 查看帮助 |
+
+命令列表由后端 `CommandPlugin` 动态注册，前端通过 `GET /api/commands` 获取，新增命令只需实现 `CommandPlugin` trait 并注册。

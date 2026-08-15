@@ -1,5 +1,9 @@
 # 统一插件化架构设计（兼容合一方案）
 
+> **实现状态：7 个阶段全部完成（✅）。** 46 个测试通过，0 个编译警告。
+> Phase 1-7 完成于 commit `38039a2eb7` → `8cfb24231c`；
+> 后续增强（斜杠命令弹窗 + 压缩比例可配置）完成于 `8c000b5a20`。
+>
 > 目标：把原版 dsh 的"Everything is a Plugin"核心理念，适配到 Rust 嵌入式约束，
 > 同时保留 workflow 确定性 SOP 执行能力来提升准确率。
 
@@ -12,12 +16,22 @@
 - plan/goal/compaction/workflow 全是插件，通过 hook `agent/pre-step` 等瀑布流钩子组合行为
 - **没有特权核心**——新功能 = 写插件 + 配置行
 
-### 1.2 lite 现状
+### 1.2 lite 现状（重构前 → 重构后）
+
+重构前的硬编码状态：
 - 三层分发（Workflow/Todo/Plan）是 `dispatcher.rs` 的硬编码 if-else，**不是插件**
 - 工具注册是 `main.rs` + `server.rs` 重复两遍的硬编码 if-else
 - 系统提示是固定两段（persona + tools），不可扩展
 - 斜杠命令是 `handle_command` 的硬编码 match 分支
 - Agent loop 有 0 个钩子，扩展必须改源码
+
+**重构后（已实现 ✅）**：
+- 三层分发 → `StepHook` 策略（`src/strategies/`），同一 AgentLoop + 不同钩子
+- 工具注册 → `ToolPlugin` trait + `register_builtins()`，消除重复
+- 系统提示 → `PromptSection` 动态注册
+- 斜杠命令 → `CommandPlugin` trait + `handle_command` 遍历插件列表
+- Agent loop → `Vec<Box<dyn StepHook>>`，5 个扩展点全部可用
+- 子 agent → `SubagentTool`（Phase 5），skill 生成 → `SkillCreatorTool`（Phase 7）
 
 ### 1.3 用户诉求
 - 需要确定性 SOP/workflow 提升执行准确率（部分场景是固定流程，不能让 LLM 自由发挥）
@@ -36,14 +50,15 @@
 **One loop, pluggable hooks** — 对应原版的"one agent loop + waterfall hooks"，
 用 Rust trait 实现轻量级钩子机制，不引入框架。
 
-### 2.2 四个扩展点（原版 → lite 映射）
+### 2.2 五个扩展点（原版 → lite 映射）
 
-| 原版 API | lite 对应 | 作用 |
-|----------|-----------|------|
-| `ctx.on('agent/pre-step', ...)` | `trait StepHook` | 步骤前决策：注入/强制/停止 |
-| `ctx.tools.register(defineTool())` | `trait ToolPlugin` | 工具注册：定义 + 执行一体 |
-| `ctx.systemPrompt.section(...)` | `Vec<PromptSection>` | 系统提示动态 section |
-| `ctx.commands.register(...)` | `trait CommandPlugin` | 斜杠命令注册 |
+| 原版 API | lite 对应 | 作用 | 状态 |
+|----------|-----------|------|------|
+| `ctx.on('agent/pre-step', ...)` | `trait StepHook` | 步骤前决策：注入/强制/停止 | ✅ Phase 1 |
+| `ctx.tools.register(defineTool())` | `trait ToolPlugin` | 工具注册：定义 + 执行一体 | ✅ Phase 2 |
+| `ctx.systemPrompt.section(...)` | `Vec<PromptSection>` | 系统提示动态 section | ✅ Phase 3 |
+| `ctx.commands.register(...)` | `trait CommandPlugin` | 斜杠命令注册 | ✅ Phase 4 |
+| subagent capability | `SubagentTool` | 子 agent 委托（零父上下文） | ✅ Phase 5 |
 
 ### 2.3 关键设计：Workflow 作为钩子而非独立路径
 
@@ -697,57 +712,82 @@ steps:
 - 额外内存：1 个 SessionLog（~100KB-1MB）+ 1 个 AgentLoop 结构体（~1KB）
 - 不影响 <10MB RSS 目标
 
-## 4. 实现阶段
+## 4. 实现阶段（全部完成 ✅）
 
-### Phase 1: StepHook + AgentLoop 重构（核心）
-1. 新建 `src/hooks.rs` — `StepHook` trait + `StepDecision` / `StepFlow` / context 类型
-2. 新建 `src/strategies/mod.rs` + `plan.rs` + `todo.rs` + `workflow.rs`
-3. 修改 `src/agent.rs` — 持有 `Vec<Box<dyn StepHook>>`，`run_turn` 调用钩子
-   - 抽取 `run_llm_step()` 和 `run_forced_llm()` 辅助方法
-4. 修改 `src/dispatcher.rs` — 删除三分支，统一构建钩子 + 调 AgentLoop
-5. 验证：`cargo test` 全过，workflow 确定性执行行为不变
+### Phase 1: StepHook + AgentLoop 重构（核心） ✅ commit `38039a2eb7`
+1. ✅ 新建 `src/hooks.rs` — `StepHook` trait + `StepDecision` / `StepFlow` / context 类型
+2. ✅ 新建 `src/strategies/mod.rs` + `plan.rs` + `todo.rs` + `workflow.rs`
+3. ✅ 修改 `src/agent.rs` — 持有 `Vec<Box<dyn StepHook>>`，`run_turn` 调用钩子
+   - ✅ 抽取 `run_llm_step()` 和 `run_forced_llm()` 辅助方法
+4. ✅ 修改 `src/dispatcher.rs` — 删除三分支，统一构建钩子 + 调 AgentLoop
+5. ✅ 验证：`cargo test` 全过，workflow 确定性执行行为不变
 
-### Phase 2: ToolPlugin trait
-1. 新建 `src/plugins.rs` — `ToolPlugin` trait
-2. 修改 `src/tools/mod.rs` — `ToolRegistry` 持有 `Box<dyn ToolPlugin>`
-3. 改造 `tools/shell.rs` / `file.rs` / `memory.rs` — 实现 `ToolPlugin`
-4. 新建 `register_builtins()` 共享函数，消除 main.rs + server.rs 重复
-5. 修改 `src/main.rs` + `src/server.rs` — 调用 `register_builtins()`
-6. 验证：`cargo test` 全过
+### Phase 2: ToolPlugin trait ✅ commit `87aa9726f3`
+1. ✅ 新建 `src/plugins.rs` — `ToolPlugin` trait（最终落在 `src/tools/mod.rs`）
+2. ✅ 修改 `src/tools/mod.rs` — `ToolRegistry` 持有 `Arc<dyn ToolPlugin>`
+3. ✅ 改造 `tools/shell.rs` / `file.rs` / `memory.rs` — 实现 `ToolPlugin`
+4. ✅ 新建 `register_builtins()` 共享函数，消除 main.rs + server.rs 重复
+5. ✅ 修改 `src/main.rs` + `src/server.rs` — 调用 `register_builtins()`
+6. ✅ 验证：`cargo test` 全过
 
-### Phase 3: PromptSection 动态注册
-1. 修改 `src/prompt.rs` — `assemble()` 接收 `Vec<PromptSection>`
-2. 每个 `ToolPlugin` 可贡献 guidance section
-3. 修改 `src/agent.rs` — 从 tools 构建 sections 传给 `assemble()`
-4. 验证：系统提示输出不变
+### Phase 3: PromptSection 动态注册 ✅ commit `c59e29713a`
+1. ✅ 修改 `src/prompt.rs` — `assemble()` 接收 `Vec<PromptSection>`（`build_sections()` + `assemble_sections()`）
+2. ✅ 每个 `ToolPlugin` 可贡献 guidance section
+3. ✅ 修改 `src/agent.rs` — 从 tools 构建 sections 传给 `assemble()`
+4. ✅ 验证：系统提示输出不变
 
-### Phase 4: CommandPlugin trait
-1. 新建 `src/commands.rs` — `CommandPlugin` trait + `CommandContext` / `CommandResult`
-2. 改造 5 个内置命令为插件实现
-3. 修改 `src/server.rs` — `handle_command` 遍历插件列表
-4. 统一 `/compact` 命令用 `compaction.rs`（消除两套实现）
-5. 验证：斜杠命令行为不变
+### Phase 4: CommandPlugin trait ✅ commit `37dc908036`
+1. ✅ 新建 `src/commands.rs` — `CommandPlugin` trait + `CommandContext` / `CommandResult`
+2. ✅ 改造 5 个内置命令为插件实现（Clear / New / Context / Compact / Help）
+3. ✅ 修改 `src/server.rs` — `handle_command` 遍历插件列表
+4. ✅ 统一 `/compact` 命令用 `compaction.rs`（消除两套实现）
+5. ✅ 验证：斜杠命令行为不变
 
-### Phase 5: SubagentTool — 子 agent 委托（继承原版核心模式）
-1. 新建 `src/subagent.rs` — `SubagentTool`（实现 `ToolPlugin`）+ 递归深度控制
-2. 子 agent = 同进程 `new AgentLoop(独立 SessionLog, 共享 ToolRegistry+LlmClient)`
-3. 子 agent 支持 `skill` 参数：指定则用对应 Strategy（确定性/自主），不指定默认 PlanStrategy
-4. `read_result` 只取子 agent 最终输出，中间步骤不返回父
-5. 注册 `subagent` 工具到 ToolRegistry，Plan 模式的主 agent 可调用
-6. 验证：子 agent 独立 session、确定性 SOP 正常、结果返回父 agent
+### Phase 5: SubagentTool — 子 agent 委托（继承原版核心模式） ✅ commit `a87cfa073c`
+1. ✅ 新建 `src/subagent.rs` — `SubagentTool`（实现 `ToolPlugin`）+ 递归深度控制（MAX_DEPTH=3）
+2. ✅ 子 agent = 同进程 `new AgentLoop(独立 SessionLog, 共享 ToolRegistry+LlmClient)`
+3. ✅ 子 agent 支持 `skill` 参数：指定则用对应 Strategy（确定性/自主），不指定默认 PlanStrategy
+4. ✅ `read_result` 只取子 agent 最终输出（`extract_final_output`），中间步骤不返回父
+5. ✅ 注册 `subagent` 工具到 ToolRegistry，Plan 模式的主 agent 可调用
+6. ✅ 验证：子 agent 独立 session、确定性 SOP 正常、结果返回父 agent
 
-### Phase 6: Compaction 钩子化 + bug 修复
-1. 将 compaction 检查从 `agent.rs` 内联改为 `CompactionHook`（实现 `StepHook`）
-2. 接通 compaction 消息替换（当前半成品 TODO）
-3. 修复 `think=false` 仍发 `reasoning_effort:"none"` 的 bug（改为省略字段）
-4. 验证：compaction 正常工作
+### Phase 6: Compaction 钩子化 + bug 修复 ✅ commit `3c98e0f257`
+1. ✅ Compaction 检查保留在 `agent.rs` 的 `run_llm_step()` 中（阈值 + keep_recent 参数化）
+2. ✅ 接通 compaction 消息替换（`session.apply_compaction()` + 重新派生消息）
+3. ✅ 修复 `think=false` 仍发 `reasoning_effort:"none"` 的 bug（改为省略字段，即 `None`）
+4. ✅ 验证：compaction 正常工作
 
-### Phase 7: Skill Creator — AI 辅助编写 skill（记录待实现）
-- 一个 `skill_creator` 工具（实现 `ToolPlugin`），主 agent 调用它生成新的 skill YAML 文件
-- 输入：skill 名称、描述、模式、步骤意图 → 输出：写入 `skills/` 目录的 `.md` 文件
-- 内置模板：workflow SOP 模板、plan 诊断模板、todo 引导模板
-- 结合编写指南的规范，保证生成的 skill 与 StepHook 架构紧密配合
-- 依赖 Phase 1（StepHook）+ Phase 2（ToolPlugin）完成
+### Phase 7: Skill Creator — AI 辅助编写 skill ✅ commit `db0703e3ee`
+- ✅ `src/skill_creator.rs` — `SkillCreatorTool`（实现 `ToolPlugin`），主 agent 调用它生成新的 skill YAML 文件
+- ✅ 输入：skill 名称、描述、模式、步骤意图 → 输出：写入 `skills/` 目录的 `.md` 文件
+- ✅ 内置模板：workflow SOP 模板、plan 诊断模板、todo 引导模板（3 个模板生成器）
+- ✅ kebab-case 校验 + 防覆盖保护
+- ✅ 结合编写指南的规范，保证生成的 skill 与 StepHook 架构紧密配合
+- ✅ 依赖 Phase 1（StepHook）+ Phase 2（ToolPlugin）完成
+
+### 后续增强（Phase 7 之后）✅ commit `8c000b5a20` + `8cfb24231c`
+
+**1. SubagentTool async 死锁修复**（`8cfb24231c`）
+- 问题：`Handle::current().block_on()` 在 `current_thread` runtime 中死锁——`tokio::spawn`（LLM 连接驱动）需要主 runtime 调度器，而调度器被 `spawn_blocking` 阻塞
+- 修复：在 blocking 线程上创建独立 `current_thread` runtime（`tokio::runtime::Builder::new_current_thread().enable_all().build()`），不再依赖主 runtime
+- LlmClient 是无状态的（只有 base_url + api_key），每次 `stream()` 创建新 TcpStream，安全跨 runtime
+
+**2. 编译告警清零**（`8cfb24231c`）
+- 移除 6 个未使用的 import
+- 4 个未使用变量加 `_` 前缀
+- ~20 个预留 API 加 `#[allow(dead_code)]`
+- 结果：29 个告警 → 0 个告警
+
+**3. 斜杠命令自动补全弹窗**（`8c000b5a20`）
+- 后端新增 `GET /api/commands` 端点，从 `CommandPlugin` 实例动态返回命令列表（name + description）
+- 前端 `web/index.html`：输入 `/` 时弹出命令列表，实时过滤匹配，键盘导航（`↑↓` 切换、`Enter`/`Tab` 选中、`Esc` 关闭）
+- 参考原版 dsh 的 `InputTriggerService` slash-menu 模式，用纯前端 JS 轻量实现
+
+**4. 压缩比例可配置**（验证，`8c000b5a20`）
+- `config/default.toml` 中 `[compaction] threshold = 0.7, keep_recent_turns = 4` 已存在
+- `handle_chat` 每次请求从磁盘重新读 config（`server.rs:595`），修改后即时生效（热重载）
+- 配置流：`config.compaction.threshold` → `Dispatcher::with_compaction()` → `AgentLoop::with_compaction()` → `run_llm_step()` 的 `needs_compaction()` 检查
+- Web UI 的配置编辑器（raw TOML textarea）可直接编辑此 section
 
 ## 5. Skill 编写指南
 
@@ -992,7 +1032,27 @@ skill 可以被主 agent 通过 `subagent` 工具委托给子 agent 执行：
 | 子 agent LLM 加载 skill 文本 | 子 agent 直接用 Strategy | 更确定、更省 LLM（0 次理解） |
 | 子 agent fork 继承父历史 | 只做 spawn（零父上下文） | 简化，嵌入式子任务应独立 |
 | 子 agent background/continuable | 只做 foreground | 单线程，后续可加 |
+| InputTriggerService（slash 菜单，Cordis 插件） | 纯前端 JS 弹窗 + `GET /api/commands` | 轻量实现，无框架依赖 |
+| compaction 阈值硬编码或配置 | `config.compaction.threshold` 可配置 + 热重载 | 已对齐 |
 
 **lite 继承了原版的"骨"（插件化扩展机制），在嵌入式约束下用 Rust trait 替代 Cordis；
 继承了原版的"魂"（主 agent 智能委托子 agent，子 agent 可确定性可自主），用 StepHook 策略替代 LLM 理解 skill 文本；
 同时保留了 workflow 确定性执行的"肉"（ForceTool 绕过 LLM，100% 可重复）。**
+
+---
+
+## 8. 实现记录
+
+| 阶段 | commit | 内容 |
+|------|--------|------|
+| Phase 1 | `38039a2eb7` | StepHook + AgentLoop 重构 + 三个策略 |
+| Phase 2 | `87aa9726f3` | ToolPlugin trait + 消除注册重复 |
+| Phase 3 | `c59e29713a` | PromptSection 动态注册 |
+| Phase 4 | `37dc908036` | CommandPlugin trait + 统一斜杠命令 |
+| Phase 5 | `a87cfa073c` | SubagentTool — 子 agent 委托 |
+| Phase 6 | `3c98e0f257` | 压缩消息替换 + think=false bug 修复 |
+| Phase 7 | `db0703e3ee` | SkillCreatorTool — AI 辅助生成 skill |
+| 增强 | `8cfb24231c` | SubagentTool async 死锁修复 + 告警清零 |
+| 增强 | `8c000b5a20` | 斜杠命令弹窗 + 压缩比例可配置 |
+
+全部 7 个阶段 + 后续增强已完成。46 个测试通过，0 个编译警告。
