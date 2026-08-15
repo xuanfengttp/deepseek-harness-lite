@@ -4,8 +4,9 @@ reference/
 # Original opencode skills (from upstream dsh, not used by lite)
 .opencode/
 
-# Design document (confidential, local only)
+# Design documents (local only, not tracked)
 DESIGN-lite.md
+DESIGN-UNIFIED.md
 
 # Rust build artifacts
 target/
