@@ -1538,7 +1538,7 @@ function handleEvent(event, showTraj) {
       break;
     case 'tool_call':
       addTrajCell('tool', 'TOOL', event.name, JSON.stringify(event.arguments,null,2));
-      addChatToolCall(event.name, JSON.stringify(event.arguments,null,2), false);
+      addChatToolCall(event.name, JSON.stringify(event.arguments,null,2), false, event.call_id);
       sessionStats.toolCallStartTime = Date.now();
       break;
     case 'tool_result':
@@ -1548,8 +1548,13 @@ function handleEvent(event, showTraj) {
         sessionStats.toolMs += Date.now() - sessionStats.toolCallStartTime;
         sessionStats.toolCallStartTime = 0;
       }
-      if (currentToolCallEl) {
-        const body = currentToolCallEl.querySelector('.ctc-body');
+      // Match result to tool call card by call_id (falls back to currentToolCallEl)
+      const chatInner = document.querySelector('.chat-inner');
+      const targetCard = event.call_id && chatInner
+        ? chatInner.querySelector('.chat-tool-call[data-call-id="' + CSS.escape(event.call_id) + '"]')
+        : currentToolCallEl;
+      if (targetCard) {
+        const body = targetCard.querySelector('.ctc-body');
         if (body) {
           const label = document.createElement('div');
           label.className = 'ctc-result-label';
@@ -1559,8 +1564,8 @@ function handleEvent(event, showTraj) {
           pre.textContent = event.content;
           body.appendChild(pre);
         }
-        if (event.is_error) currentToolCallEl.classList.add('error');
-        currentToolCallEl = null;
+        if (event.is_error) targetCard.classList.add('error');
+        if (targetCard === currentToolCallEl) currentToolCallEl = null;
       }
       break;
     case 'turn_start':
@@ -1574,6 +1579,12 @@ function handleEvent(event, showTraj) {
     case 'step_start':
       sessionStats.steps++;
       sessionStats.stepStartTime = Date.now();
+      // Each step gets its own assistant bubble — reset so the next
+      // assistant_message creates a new message element, not reusing
+      // the previous step's bubble. This keeps tool calls inline between
+      // their originating assistant message and the next step's message.
+      currentAssistantEl = null;
+      currentAssistantText = '';
       updateStatsBar();
       break;
     case 'step_end': break;
@@ -1641,13 +1652,16 @@ function renderChatFromHistory(messages) {
       if (msg.tool_calls && msg.tool_calls.length > 0) {
         for (const tc of msg.tool_calls) {
           const argsStr = tc.arguments ? JSON.stringify(tc.arguments, null, 2) : '';
-          addChatToolCall(tc.name, argsStr, false);
+          addChatToolCall(tc.name, argsStr, false, tc.id);
         }
       }
     } else if (msg.role === 'tool') {
-      // Tool result: attach to the most recent tool call card
-      if (currentToolCallEl) {
-        const body = currentToolCallEl.querySelector('.ctc-body');
+      // Match tool result to its tool call card by call_id
+      const targetCard = msg.call_id
+        ? chat.querySelector('.chat-tool-call[data-call-id="' + CSS.escape(msg.call_id) + '"]')
+        : currentToolCallEl;
+      if (targetCard) {
+        const body = targetCard.querySelector('.ctc-body');
         if (body) {
           const label = document.createElement('div');
           label.className = 'ctc-result-label';
@@ -1657,14 +1671,16 @@ function renderChatFromHistory(messages) {
           pre.textContent = msg.content;
           body.appendChild(pre);
         }
-        if (msg.is_error) currentToolCallEl.classList.add('error');
-        currentToolCallEl = null;
+        if (msg.is_error) targetCard.classList.add('error');
+        // Only clear currentToolCallEl if it was the matched card
+        if (targetCard === currentToolCallEl) currentToolCallEl = null;
       } else {
         // No matching tool call card — render as standalone result card
         addChatToolCall(msg.is_error ? 'Error' : 'Result', msg.content, msg.is_error);
       }
     }
   }
+  currentToolCallEl = null;
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
 }
 
@@ -1801,11 +1817,12 @@ function addTrajTurnHeader(turn) {
 
 // ── Collapsible tool calls in chat view (matching original dsh style) ──
 let currentToolCallEl = null;
-function addChatToolCall(name, args, isError) {
+function addChatToolCall(name, args, isError, callId) {
   const chat = document.querySelector('.chat-inner');
   if (!chat) return;
   const el = document.createElement('div');
   el.className = 'chat-tool-call' + (isError ? ' error' : '');
+  if (callId) el.dataset.callId = callId;
   const argsPreview = truncate(args, 60);
   el.innerHTML = `<div class="ctc-header"><span class="ctc-chevron">▶</span><span class="ctc-name">${esc(name)}</span><span class="ctc-args">${esc(argsPreview)}</span></div><div class="ctc-body">${args ? '<div class="ctc-result-label">参数</div><pre>' + esc(args) + '</pre>' : ''}</div>`;
   el.querySelector('.ctc-header').onclick = () => el.classList.toggle('expanded');

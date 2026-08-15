@@ -710,8 +710,8 @@ fn format_loop_event(event: &LoopEvent) -> String {
             format!(r#"{{"type":"assistant_message","content":"{escaped}","tool_calls":[{}]}}"#, tc_json.join(","))
         }
         LoopEvent::ToolCall { call } => {
-            format!(r#"{{"type":"tool_call","name":"{}","arguments":{}}}"#,
-                escape_json_string(&call.name), call.arguments)
+            format!(r#"{{"type":"tool_call","call_id":"{}","name":"{}","arguments":{}}}"#,
+                escape_json_string(&call.id), escape_json_string(&call.name), call.arguments)
         }
         LoopEvent::ToolResult { call_id, content, is_error } => {
             let escaped = escape_json_string(content);
