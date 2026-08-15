@@ -230,6 +230,11 @@ pub fn register_builtins(registry: &mut ToolRegistry, config: &crate::types::Con
         registry.register(Box::new(memory::MemoryWriteTool { store: store.clone() }));
         registry.register(Box::new(memory::MemoryRecallTool { store }));
     }
+
+    // Register the skill creator tool (always available).
+    registry.register(Box::new(crate::skill_creator::SkillCreatorTool {
+        skills_dir: config.skill.dir.clone(),
+    }));
 }
 
 /// Register the subagent tool, sharing all currently-registered tools with it.
