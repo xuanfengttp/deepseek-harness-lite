@@ -65,3 +65,21 @@ file_search = true
 memory = true
 ssh_exec = false
 todo = true
+
+# SSH device targets — persistent interactive sessions for network elements.
+# Each target stays connected across multiple commands (background session).
+# Enable ssh_exec above, then define devices here or pass params at call time.
+#
+# [[ssh.targets]]
+# name = "core-router"
+# host = "192.168.1.1"
+# port = 22
+# user = "admin"
+# password = "admin123"
+#
+# [[ssh.targets]]
+# name = "edge-switch"
+# host = "192.168.1.2"
+# port = 22
+# user = "admin"
+# password = "admin123"

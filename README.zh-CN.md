@@ -93,7 +93,7 @@ keep_recent_turns = 4     # 始终保留最近 N 个 turn 不被摘要
 | `file_read` | 读取文件内容 |
 | `file_write` | 写入文件 |
 | `file_search` | Glob 模式文件搜索 |
-| `ssh_exec` | SSH 命令执行，持久连接池（占位） |
+| `ssh_exec` | 通过持久 SSH 会话在远程网元设备上执行命令（连接复用，交互式查询） |
 | `memory_*` | 长期记忆读取 / 写入 / 回忆 |
 | `todo_write` | 多步操作任务跟踪 |
 | `subagent` | 委托子任务给子 agent（零父上下文，maxDepth=3） |
@@ -163,6 +163,7 @@ keep_recent_turns = 4     # 始终保留最近 N 个 turn 不被摘要
 | `commands` | `CommandPlugin` trait + 内置斜杠命令 | interaction/commands |
 | `subagent` | `SubagentTool` — 子 agent 委托（零父上下文，maxDepth=3） | subagent capability |
 | `skill_creator` | `SkillCreatorTool` — AI 辅助生成 skill 文件 |（新增）|
+| `ssh` | 持久 SSH 会话 — 网元设备后台连接池 |（新增）|
 | `policy` | 允许/拒绝权限检查 | sandbox-policy |
 | `skill` | 声明式 skill 加载（YAML + MD） | skill/skill + skill-filesystem |
 | `agent` | Turn/step 驱动 + 钩子集成 + 压缩 | core/agent-loop |
@@ -227,6 +228,16 @@ context_window = 8192
 threshold = 0.7           # 消息超过 context_window 的 70% 时触发压缩
 keep_recent_turns = 4
 
+[tools]
+ssh_exec = true            # 启用 SSH 工具
+
+[[ssh.targets]]            # 预配置设备目标（持久会话）
+name = "core-router"
+host = "192.168.1.1"
+port = 22
+user = "admin"
+password = "admin123"
+
 [skill]
 dir = "skills"
 ```
@@ -254,8 +265,9 @@ dir = "skills"
 | **统一 6** | **压缩消息替换 + think bug 修复** | **✅ 完成** |
 | **统一 7** | **SkillCreatorTool — AI 辅助生成 skill** | **✅ 完成** |
 | **7 后增强** | **斜杠命令自动补全弹窗 + 压缩比例可配置** | **✅ 完成** |
-| P7 | SSH 客户端 | 🔄 下一步 |
-| P8 | 体积 + 内存优化 | 计划中 |
+| P7 | SSH 持久交互式会话 | ✅ 完成 |
+| **7 后增强+** | **Workflow+Subagent skill 示例 + 压缩 GUI 滑块 + SSH 工具开关** | **✅ 完成** |
+| P8 | 体积 + 内存优化 | ✅ 已验证（二进制 2.71 MB） |
 
 ### 斜杠命令自动补全
 

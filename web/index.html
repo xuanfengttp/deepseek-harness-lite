@@ -902,6 +902,10 @@ body {
             <div><div class="setting-label" data-i18n="tool_memory">记忆</div><div class="setting-hint" data-i18n="tool_memory_hint">长期 KV 存储（读/写/检索）</div></div>
             <div class="toggle-switch" id="toggle-memory" onclick="toggleTool('memory',this)"></div>
           </div>
+          <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
+            <div><div class="setting-label">SSH 远程执行</div><div class="setting-hint">持久交互式 SSH 会话，连接网元设备执行命令。需重启生效。</div></div>
+            <div class="toggle-switch" id="toggle-ssh_exec" onclick="toggleTool('ssh_exec',this)"></div>
+          </div>
           <div class="config-status" id="tools-config-status"></div>
           <div class="btn-row">
             <button class="btn btn-primary" onclick="saveToolConfig()" data-i18n="save">保存</button>
@@ -918,6 +922,30 @@ body {
               <button class="btn btn-secondary" style="height:36px;white-space:nowrap" onclick="chooseConfigPath()"><span data-i18n="change">修改</span></button>
             </div>
             <div id="cfg-path-hint" style="font-size:12px;color:var(--label-tertiary);margin-top:6px"></div>
+          </div>
+          <div class="setting-row">
+            <div class="section-title">上下文压缩</div>
+            <div class="section-desc">当对话消息超过上下文窗口的阈值比例时，自动将较早的对话摘要为一条消息。修改后即时生效。</div>
+            <div style="margin-top:10px">
+              <div class="setting-label">压缩阈值 <span style="color:var(--label-tertiary);font-weight:400">— 消息占上下文窗口的比例超过此值时触发</span></div>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+                <input type="range" id="cfg-compaction-threshold" min="0.3" max="0.95" step="0.05" value="0.7" style="flex:1;cursor:pointer" oninput="updateThresholdLabel(this.value)">
+                <span id="threshold-value-label" style="font-family:var(--font-code);font-size:14px;color:var(--accent);min-width:42px;text-align:right">70%</span>
+              </div>
+              <div style="font-size:12px;color:var(--label-tertiary);margin-top:4px">小上下文模型建议 0.6（早点压缩）｜大上下文模型建议 0.8（晚点压缩）</div>
+            </div>
+            <div style="margin-top:14px">
+              <div class="setting-label">保留最近轮次 <span style="color:var(--label-tertiary);font-weight:400">— 始终保留最近 N 轮对话不被摘要</span></div>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+                <input type="range" id="cfg-compaction-keep" min="1" max="10" step="1" value="4" style="flex:1;cursor:pointer" oninput="updateKeepLabel(this.value)">
+                <span id="keep-value-label" style="font-family:var(--font-code);font-size:14px;color:var(--accent);min-width:42px;text-align:right">4 轮</span>
+              </div>
+              <div style="font-size:12px;color:var(--label-tertiary);margin-top:4px">长流程 SOP 建议保留 4-6 轮，确保最近结果可供 llm_judge 引用</div>
+            </div>
+            <div style="margin-top:14px">
+              <button class="btn btn-primary" onclick="saveCompactionConfig()">保存压缩设置</button>
+              <span class="config-status" id="compaction-config-status" style="margin-left:10px"></span>
+            </div>
           </div>
           <div class="setting-row">
             <div class="section-title" data-i18n="raw_config">原始配置</div>
@@ -2147,16 +2175,53 @@ async function loadConfig() {
       }
     }
     if (cfg.tools) {
-      ['shell','file_read','file_write','file_search','memory'].forEach(t => {
+      ['shell','file_read','file_write','file_search','memory','ssh_exec'].forEach(t => {
         const el = document.getElementById(`toggle-${t}`);
         if (el) el.classList.toggle('on', !!cfg.tools[t]);
       });
+    }
+    if (cfg.compaction) {
+      const thresholdEl = document.getElementById('cfg-compaction-threshold');
+      const keepEl = document.getElementById('cfg-compaction-keep');
+      if (thresholdEl) {
+        thresholdEl.value = cfg.compaction.threshold || 0.7;
+        updateThresholdLabel(thresholdEl.value);
+      }
+      if (keepEl) {
+        keepEl.value = cfg.compaction.keep_recent_turns || 4;
+        updateKeepLabel(keepEl.value);
+      }
     }
     loadPresets(cfg);
   } catch(e) {
     console.error('loadConfig', e);
     const statusEl = document.getElementById('model-config-status');
     if (statusEl) showModelConfigStatus('⚠ 无法连接服务器: ' + e.message, 'err');
+  }
+}
+
+// ── Compaction config helpers ──
+function updateThresholdLabel(val) {
+  const el = document.getElementById('threshold-value-label');
+  if (el) el.textContent = Math.round(parseFloat(val) * 100) + '%';
+}
+function updateKeepLabel(val) {
+  const el = document.getElementById('keep-value-label');
+  if (el) el.textContent = val + ' 轮';
+}
+async function saveCompactionConfig() {
+  const threshold = parseFloat(document.getElementById('cfg-compaction-threshold').value) || 0.7;
+  const keep = parseInt(document.getElementById('cfg-compaction-keep').value) || 4;
+  const cfg = { compaction: { threshold, keep_recent_turns: keep } };
+  try {
+    await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
+    const statusEl = document.getElementById('compaction-config-status');
+    if (statusEl) { statusEl.textContent = '✓ 已保存，即时生效'; statusEl.className = 'config-status ok'; }
+    // Also reload the raw config editor so it reflects the change.
+    loadConfigFile();
+  } catch(e) {
+    const statusEl = document.getElementById('compaction-config-status');
+    if (statusEl) { statusEl.textContent = '✗ 保存失败: ' + e.message; statusEl.className = 'config-status err'; }
   }
 }
 
@@ -2259,7 +2324,7 @@ async function savePresets() {
 
 async function saveToolConfig(silent) {
   const tools = {};
-  ['shell','file_read','file_write','file_search','memory'].forEach(t => {
+  ['shell','file_read','file_write','file_search','memory','ssh_exec'].forEach(t => {
     tools[t] = document.getElementById(`toggle-${t}`).classList.contains('on');
   });
   try {

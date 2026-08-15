@@ -12,6 +12,7 @@
 pub mod shell;
 pub mod file;
 pub mod memory;
+pub mod ssh;
 
 use crate::types::*;
 use crate::policy::Policy;
@@ -230,6 +231,16 @@ pub fn register_builtins(registry: &mut ToolRegistry, config: &crate::types::Con
         registry.register(Box::new(memory::MemoryReadTool { store: store.clone() }));
         registry.register(Box::new(memory::MemoryWriteTool { store: store.clone() }));
         registry.register(Box::new(memory::MemoryRecallTool { store }));
+    }
+    if config.tools.ssh_exec {
+        let ssh_tool = ssh::SshExecTool::new(config.ssh.targets.clone());
+        if config.ssh.targets.is_empty() {
+            log::info!("SSH tool registered (no pre-configured targets — pass host/user at call time)");
+        } else {
+            log::info!("SSH tool registered ({} targets: {})", config.ssh.targets.len(),
+                config.ssh.targets.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(", "));
+        }
+        registry.register(Box::new(ssh_tool));
     }
 
     // Register the skill creator tool (always available).

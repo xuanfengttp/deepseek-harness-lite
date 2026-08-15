@@ -93,7 +93,7 @@ Changes take effect on the next chat request (hot-reload — no restart needed).
 | `file_read` | Read file contents |
 | `file_write` | Write to files |
 | `file_search` | Glob-pattern file search |
-| `ssh_exec` | SSH command execution via persistent connection pool (placeholder) |
+| `ssh_exec` | Execute commands on remote network elements via persistent SSH sessions (connection reuse, interactive queries) |
 | `memory_*` | Long-term memory read / write / recall |
 | `todo_write` | Task tracking for multi-step operations |
 | `subagent` | Delegate a sub-task to a child agent (zero parent context, maxDepth=3) |
@@ -163,6 +163,7 @@ User input
 | `commands` | `CommandPlugin` trait + built-in slash commands | interaction/commands |
 | `subagent` | `SubagentTool` — child agent delegation (zero parent context, maxDepth=3) | subagent capability |
 | `skill_creator` | `SkillCreatorTool` — AI-assisted skill file generation | (new) |
+| `ssh` | Persistent SSH sessions — background connection pool for network elements | (new) |
 | `policy` | Allow/deny permission checks | sandbox-policy |
 | `skill` | Declarative skill loading (YAML + MD) | skill/skill + skill-filesystem |
 | `agent` | Turn/step driver with hook integration + compaction | core/agent-loop |
@@ -227,6 +228,16 @@ context_window = 8192
 threshold = 0.7           # compact when messages exceed 70% of context_window
 keep_recent_turns = 4
 
+[tools]
+ssh_exec = true            # enable the SSH tool
+
+[[ssh.targets]]            # pre-configured device targets (persistent sessions)
+name = "core-router"
+host = "192.168.1.1"
+port = 22
+user = "admin"
+password = "admin123"
+
 [skill]
 dir = "skills"
 ```
@@ -254,8 +265,9 @@ The unified plugin化 architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**
 | **Unified 6** | **Compaction message replacement + think bug fix** | **✅ Done** |
 | **Unified 7** | **SkillCreatorTool — AI-assisted skill generation** | **✅ Done** |
 | **Post-7** | **Slash command autocomplete popup + compaction ratio config** | **✅ Done** |
-| P7 | SSH client | 🔄 Next |
-| P8 | Size + memory optimization | Planned |
+| P7 | SSH persistent interactive sessions | ✅ Done |
+| **Post-7+** | **Workflow+Subagent skill examples + compaction GUI slider + SSH tool toggle** | **✅ Done** |
+| P8 | Size + memory optimization | ✅ Verified (2.71 MB binary) |
 
 ### Slash command autocomplete
 

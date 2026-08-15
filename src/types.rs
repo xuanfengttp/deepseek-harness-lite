@@ -154,6 +154,9 @@ pub struct Config {
     pub skill: SkillConfig,
     pub trajectory: TrajectoryConfig,
     pub tools: ToolsConfig,
+    /// Optional SSH target presets for persistent device sessions.
+    #[serde(default)]
+    pub ssh: SshConfig,
 }
 
 /// A named model preset for hot-switching in the chat UI.
@@ -234,6 +237,36 @@ pub struct ToolsConfig {
     pub ssh_exec: bool,
     pub memory: bool,
     pub todo: bool,
+}
+
+/// SSH configuration — named device targets for persistent interactive sessions.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SshConfig {
+    /// Named SSH targets. Each target is a persistent connection that stays
+    /// open across multiple commands, enabling interactive device queries.
+    #[serde(default)]
+    pub targets: Vec<SshTarget>,
+}
+
+/// One SSH device target — a persistent connection to a network element.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SshTarget {
+    /// Friendly name for this device (used as the `target` parameter in ssh_exec).
+    pub name: String,
+    /// Host address (IP or hostname).
+    pub host: String,
+    /// SSH port (default 22).
+    #[serde(default = "default_ssh_port")]
+    pub port: u16,
+    /// SSH username.
+    pub user: String,
+    /// SSH password (plaintext — embedded device, no key agent needed).
+    #[serde(default)]
+    pub password: String,
+}
+
+fn default_ssh_port() -> u16 {
+    22
 }
 
 /// Execution mode declared by a skill or chosen at runtime.

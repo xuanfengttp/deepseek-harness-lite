@@ -209,29 +209,165 @@ steps:
 
 ---
 
-## 5. 与 Subagent 配合
+## 5. Workflow + Subagent 协同模式
 
-主 agent（plan 模式）可以委托子 agent 执行 skill：
+这是 dsh-lite 的核心设计模式：主 agent（plan 模式，智能规划）委托子 agent
+执行特定 skill。主 agent 决定"做什么、给谁做"，子 agent 决定"怎么做"。
+
+### 5.1 协同架构
+
+```
+主 agent (plan, think=true)
+  │  智能规划：分析任务 → 决定委托策略
+  │
+  ├─ subagent #1 (skill: "health-check", workflow)
+  │    确定性 SOP：固定命令序列，0 次 LLM 理解，100% 可重复
+  │    → 返回设备健康报告
+  │
+  ├─ subagent #2 (skill: "health-check", workflow)
+  │    同样的 SOP，不同设备
+  │    → 返回设备健康报告
+  │
+  └─ subagent #3 (无 skill, plan)
+       自主探索：LLM 自由排查
+       → 返回诊断结论
+  │
+  └─ 主 agent 汇总所有子 agent 结果 → 生成最终报告
+```
+
+### 5.2 两种委托策略
+
+**策略 A：确定性委托**（指定 workflow skill）
+
+适用于已知流程、固定步骤的任务（巡检、备份、配置核查）。
+子 agent 用 `WorkflowStrategy`，tool 步绕过 LLM（0 次调用），judge 步单次 LLM。
 
 ```json
-// 确定性 SOP（子 agent 用 WorkflowStrategy，0 次 LLM 理解）
 {"tool": "subagent", "arguments": {
-  "description": "接口健康检查",
-  "prompt": "检查 192.168.1.1 的 eth0 接口健康状态",
-  "skill": "interface-health-check"
-}}
-
-// 自主诊断（子 agent 用 PlanStrategy）
-{"tool": "subagent", "arguments": {
-  "description": "丢包根因诊断",
-  "prompt": "诊断 192.168.1.1 eth0 丢包根因，自主排查"
+  "description": "health check 192.168.1.1",
+  "prompt": "对设备 192.168.1.1 执行标准健康检查，报告 CPU、内存、接口、服务状态。",
+  "skill": "health-check"
 }}
 ```
 
-**最佳实践**：
-- 已知问题 → `subagent` + 指定 workflow skill（确定性、省 LLM）
-- 未知问题 → `subagent` 不指定 skill（自主探索）
-- 批量巡检 → 主 agent 循环调用 `subagent` + workflow skill
+**策略 B：自主探索委托**（不指定 skill）
+
+适用于未知问题、需要 LLM 自主推理的任务（根因诊断、异常排查）。
+子 agent 用 `PlanStrategy`，每步都调 LLM，自由探索。
+
+```json
+{"tool": "subagent", "arguments": {
+  "description": "丢包根因诊断",
+  "prompt": "设备 192.168.1.1 的 eth0 接口出现间歇性丢包，2 小时前开始。自主排查：检查接口统计、路由、ARP、CPU 负载、日志。报告根因和修复建议。"
+}}
+```
+
+### 5.3 主 agent 的 skill 怎么写
+
+主 agent 的 skill 是 `plan` 模式，`tools_allow` 必须包含 `subagent`。
+body（Markdown 正文）是主 agent 的 persona，告诉它如何编排委托。
+
+**示例：批量巡检编排 skill**（`skills/batch-inspection.md`）
+
+```yaml
+---
+name: batch-inspection
+description: 批量巡检编排 — 主 agent 规划检查哪些设备，委托子 agent 执行健康检查 SOP
+mode: plan
+think: true
+tools:
+  allow: [shell, file_read, memory_read, memory_write, todo_write, subagent]
+---
+# 批量巡检编排
+
+你是网络运维协调员。
+
+## 工作流程
+1. 确定巡检目标设备列表
+2. 用 todo_write 创建巡检任务清单（每台设备一个任务）
+3. 对每台设备调用 subagent，指定 skill: "health-check"
+4. 收集所有子 agent 的结果
+5. 汇总生成巡检报告
+
+## 委托方式
+对每台设备调用：
+{"tool": "subagent", "arguments": {
+  "description": "health check <设备IP>",
+  "prompt": "对设备 <设备IP> 执行标准健康检查",
+  "skill": "health-check"
+}}
+```
+
+**要点**：
+- `mode: plan` — 主 agent 需要智能规划（决定检查哪些设备、如何汇总）
+- `think: true` — 编排需要推理
+- `tools_allow` 包含 `subagent` — 这是委托的关键
+- body 里明确告诉主 agent "调用 subagent 并指定 skill"
+- 主 agent 自己不执行诊断命令，只做编排 + 汇总
+
+### 5.4 子 agent 的 skill 怎么写
+
+子 agent 的 skill 可以是 `workflow`（确定性）或 `plan`（自主），取决于任务性质。
+
+**确定性 SOP skill**（子 agent 用 workflow，见第 2 节）
+
+```yaml
+---
+name: health-check
+mode: workflow
+think: false
+tools:
+  allow: [shell, ssh_exec]
+steps:
+  - id: cpu_mem
+    tool: shell
+    args: { command: "uname -a" }
+  - id: interface
+    tool: shell
+    args: { command: "ip addr" }
+  - id: summarize
+    llm_judge: "汇总健康检查结果，标注异常项"
+    input: "{{steps.cpu_mem.result}}\n{{steps.interface.result}}"
+---
+```
+
+**关键**：子 agent 的 skill 不需要包含 `subagent` 工具（子 agent 一般不继续委托）。
+
+### 5.5 协同模式速查
+
+| 场景 | 主 agent skill | 子 agent skill | LLM 调用 |
+|------|---------------|---------------|----------|
+| 批量巡检 | plan + subagent | workflow（health-check） | 主每步 1 次 + 子 judge 步各 1 次 |
+| 故障诊断 | plan + subagent | plan（interface-diagnostics） | 主 + 子都每步 1 次 |
+| 配置核查 | plan + subagent | workflow（config-audit） | 主每步 1 次 + 子 judge 步 1 次 |
+| 未知异常排查 | plan + subagent | 无 skill（默认 plan） | 主 + 子都每步 1 次 |
+
+### 5.6 示例 skill 文件
+
+项目 `skills/` 目录包含 4 个示例 skill，覆盖所有协同模式：
+
+| 文件 | 模式 | 角色 | 用途 |
+|------|------|------|------|
+| `health-check.md` | workflow | 子 agent | 确定性健康检查 SOP |
+| `interface-diagnostics.md` | plan | 子 agent | 接口故障自主诊断 |
+| `batch-inspection.md` | plan | 主 agent | 批量巡检编排（委托 health-check） |
+| `fault-triage.md` | plan | 主 agent | 故障分诊（委托诊断 + 执行修复） |
+
+### 5.7 编写检查清单
+
+写主 agent 编排 skill 时检查：
+- [ ] `mode: plan`（编排需要智能规划）
+- [ ] `think: true`（编排需要推理）
+- [ ] `tools_allow` 包含 `subagent`
+- [ ] body 明确说明委托策略（指定哪个 skill / 不指定）
+- [ ] body 给出 subagent 调用 JSON 示例
+- [ ] body 说明如何汇总子 agent 结果
+
+写子 agent 执行 skill 时检查：
+- [ ] 根据确定性需求选 `workflow` 或 `plan`
+- [ ] `tools_allow` 精确限定（不需要 `subagent`）
+- [ ] workflow 的 steps 覆盖完整流程
+- [ ] 最后一步用 `llm_judge` 汇总输出（子 agent 只返回最终输出）
 
 ---
 
