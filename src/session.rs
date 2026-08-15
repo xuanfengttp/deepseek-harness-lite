@@ -140,7 +140,9 @@ impl SessionLog {
         self.events.is_empty()
     }
 
-    /// Serialize the session log to bytes (bincode) for flash persistence.
+    /// Serialize the session log to JSON for flash persistence.
+    /// JSON is forward-compatible: #[serde(default)] fields in SessionEvent
+    /// and TokenUsage allow old logs to load with defaults for new fields.
     pub fn serialize(&self) -> Vec<u8> {
         let snapshot = SessionSnapshot {
             next_seq: self.next_seq,
@@ -148,12 +150,26 @@ impl SessionLog {
             current_turn: self.current_turn,
             current_step: self.current_step,
         };
-        bincode::serialize(&snapshot).unwrap_or_default()
+        serde_json::to_vec(&snapshot).unwrap_or_default()
     }
 
-    /// Deserialize from bytes and restore a session log.
+    /// Deserialize from JSON and restore a session log.
+    /// Falls back to bincode for legacy files saved by older binary versions.
     pub fn deserialize(data: &[u8], max_in_memory: usize) -> Option<Self> {
-        let snapshot: SessionSnapshot = bincode::deserialize(data).ok()?;
+        // Try JSON first (current format).
+        if let Ok(snapshot) = serde_json::from_slice::<SessionSnapshot>(data) {
+            return Self::from_snapshot(snapshot, max_in_memory);
+        }
+        // Fallback: try bincode (legacy format from older binary versions).
+        // This handles old files that were saved before the JSON migration.
+        // New struct fields get serde defaults, so this should work for most cases.
+        if let Ok(snapshot) = bincode::deserialize::<SessionSnapshot>(data) {
+            return Self::from_snapshot(snapshot, max_in_memory);
+        }
+        None
+    }
+
+    fn from_snapshot(snapshot: SessionSnapshot, max_in_memory: usize) -> Option<Self> {
         let mut events = VecDeque::with_capacity(snapshot.events.len().min(max_in_memory));
         for e in snapshot.events {
             events.push_back(e);

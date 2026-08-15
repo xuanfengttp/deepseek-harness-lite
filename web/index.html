@@ -1061,7 +1061,13 @@ async function loadActiveHistory() {
           llmMs: histData.stats.llmMs || 0,
           toolMs: histData.stats.toolMs || 0,
           stepStartTime: 0,
-          toolCallStartTime: 0
+          toolCallStartTime: 0,
+          ttftMs: histData.stats.ttftMs || 0,
+          ttftSteps: histData.stats.ttftSteps || 0,
+          decodeMs: histData.stats.decodeMs || 0,
+          decodeTokens: histData.stats.decodeTokens || 0,
+          cacheHitTokens: histData.stats.cacheHitTokens || 0,
+          cacheMissTokens: histData.stats.cacheMissTokens || 0
         };
         sessionStatsMap[active.id] = { ...sessionStats };
         updateStatsBar();
