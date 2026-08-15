@@ -1,11 +1,11 @@
 ---
 name: health-check
-description: Run a deterministic health check SOP on the device — CPU, memory, interface, service status (auto-detects Windows/Linux)
-whenToUse: For routine inspection or when asked to check device health
+description: Run a deterministic health check SOP on the local device — CPU, memory, interface, service status (auto-detects Windows/Linux)
+whenToUse: For routine inspection of the local device or when asked to check device health
 mode: workflow
 think: false
 tools:
-  allow: [shell, ssh_exec]
+  allow: [shell]
 steps:
   - id: cpu_mem
     tool: shell
@@ -30,6 +30,8 @@ steps:
 
 # Health Check SOP
 
-This skill runs a fixed sequence of diagnostic commands and summarizes the results.
+This skill runs a fixed sequence of diagnostic commands on the **local device** and summarizes the results.
 Commands try Windows first (ver/wmic/ipconfig/sc), fall back to Linux (uname/df/ip/systemctl).
 No exploration needed — the steps are deterministic.
+
+For **remote** device health checks via SSH, use the `remote-health-check` skill instead.

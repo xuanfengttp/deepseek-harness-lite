@@ -257,6 +257,66 @@ steps:
 <Description of this guided procedure.>
 ```
 
+### Template E: SSH Remote Device (Workflow SOP)
+
+For skills that connect to network devices via persistent SSH sessions.
+Use `ssh_exec` with a pre-configured `target` name. The SSH connection
+persists across steps — no reconnection overhead.
+
+```yaml
+---
+name: <name>
+description: <description>
+mode: workflow
+think: false
+tools:
+  allow: [ssh_exec]
+variables:
+  target: "core-router"
+steps:
+  - id: show_version
+    tool: ssh_exec
+    args:
+      command: "show version"
+      target: "{{target}}"
+  - id: show_interface
+    tool: ssh_exec
+    args:
+      command: "show ip interface brief"
+      target: "{{target}}"
+  - id: show_counters
+    tool: ssh_exec
+    args:
+      command: "show interfaces stats"
+      target: "{{target}}"
+  - id: analyze
+    llm_judge: |
+      Analyze the network device output. Report:
+      1. Device model and version
+      2. Interface status summary (up/down count)
+      3. Anomalies (if any)
+      4. Recommendations
+    input: |
+      show version:
+      {{steps.show_version.result}}
+
+      show ip interface brief:
+      {{steps.show_interface.result}}
+
+      show interfaces stats:
+      {{steps.show_counters.result}}
+---
+<Description of this remote device SOP.>
+```
+
+**SSH-specific notes:**
+- `target` must match a name in config `ssh.targets` (or use inline host/user/password)
+- SSH sessions persist — sequential commands reuse the same connection
+- For plan-mode SSH skills, list common `show` commands in the persona body
+  (small models don't know device-specific command syntax)
+- Always `show version` first to determine device model, then choose
+  appropriate command syntax (Cisco vs Huawei vs Juniper)
+
 ## Quality Checklist
 
 Before writing the file, verify:

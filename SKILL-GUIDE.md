@@ -499,3 +499,213 @@ compaction:
 | `/help` | 查看帮助 |
 
 命令列表由后端 `CommandPlugin` 动态注册，前端通过 `GET /api/commands` 获取，新增命令只需实现 `CommandPlugin` trait 并注册。
+
+---
+
+## 9. SSH 远程设备操作
+
+dsh-lite 内置 `ssh_exec` 工具，用于通过持久 SSH 会话在远程网络设备上执行命令。
+这是 lite 的核心特性——连接网元设备（路由器、交换机、防火墙）执行诊断和配置操作。
+
+### 9.1 配置 SSH 设备
+
+**方式一：设置面板（推荐）**
+
+打开设置 → 工具页签 → 打开 SSH 开关 → 在展开的设备管理区添加设备：
+- 名称（如 `core-router`）
+- 地址（如 `192.168.1.1`）
+- 端口（默认 22）
+- 用户名 / 密码
+
+设备信息保存在 `config.yaml` 的 `ssh.targets` 段，可在设置面板直接增删改。
+
+**方式二：编辑配置文件**
+
+```yaml
+# config.yaml
+tools:
+  ssh_exec: true              # 必须启用 SSH 工具
+
+ssh:
+  targets:
+    - name: core-router
+      host: 192.168.1.1
+      port: 22
+      user: admin
+      password: admin123
+    - name: edge-switch
+      host: 192.168.1.2
+      port: 22
+      user: admin
+      password: admin123
+```
+
+> SSH 工具开关需要重启生效（注册时机在启动时）。设备列表修改即时生效（热重载）。
+
+### 9.2 两种调用方式
+
+**方式一：按名称调用（推荐，用预配置设备）**
+
+```json
+{
+  "tool": "ssh_exec",
+  "arguments": {
+    "command": "show interface brief",
+    "target": "core-router"
+  }
+}
+```
+
+LLM 只需知道设备名称，不需要知道 IP/密码——凭据从配置中自动读取。
+
+**方式二：内联调用（临时设备）**
+
+```json
+{
+  "tool": "ssh_exec",
+  "arguments": {
+    "command": "show version",
+    "host": "10.0.0.1",
+    "user": "admin",
+    "password": "admin123",
+    "port": 22
+  }
+}
+```
+
+适用于未预配置的临时设备。`port` 可省略（默认 22）。
+
+### 9.3 持久会话特性
+
+SSH 连接是**持久的**——同一条 `ssh_exec` 调用之间复用连接，不重新握手：
+
+```
+ssh_exec target=core-router "show version"     → 建立连接，执行命令
+ssh_exec target=core-router "show interface"   → 复用连接，执行命令
+ssh_exec target=core-router "show ip route"    → 复用连接，执行命令
+```
+
+这意味着：
+- **连续查询同一设备非常快**（无重复握手开销）
+- **交互式命令可用**（如进入特权模式后执行后续命令）
+- **不同设备的连接独立**（core-router 和 edge-switch 各一条连接）
+
+### 9.4 在 skill 中使用 SSH
+
+**Workflow skill（确定性 SOP）**
+
+```yaml
+---
+name: remote-interface-check
+description: 远程检查网络设备接口状态（SSH 连接设备执行 show 命令）
+mode: workflow
+think: false
+tools:
+  allow: [ssh_exec]
+variables:
+  target: "core-router"
+steps:
+  - id: show_version
+    tool: ssh_exec
+    args:
+      command: "show version"
+      target: "{{target}}"
+  - id: show_interface
+    tool: ssh_exec
+    args:
+      command: "show ip interface brief"
+      target: "{{target}}"
+  - id: show_counters
+    tool: ssh_exec
+    args:
+      command: "show interfaces stats"
+      target: "{{target}}"
+  - id: analyze
+    llm_judge: |
+      分析以下网络设备输出，报告：
+      1. 设备型号和版本
+      2. 接口状态摘要（up/down 数量）
+      3. 异常接口（如有）
+      4. 建议
+    input: |
+      show version:
+      {{steps.show_version.result}}
+
+      show ip interface brief:
+      {{steps.show_interface.result}}
+
+      show interfaces stats:
+      {{steps.show_counters.result}}
+---
+远程网络设备接口状态检查 SOP。
+```
+
+**Plan skill（自主探索）**
+
+```yaml
+---
+name: remote-troubleshoot
+description: 远程登录网络设备自主排查故障
+mode: plan
+think: true
+tools:
+  allow: [ssh_exec, memory_read, memory_write]
+variables:
+  target: "core-router"
+---
+你是网络设备故障排查工程师。
+
+## 工作流程
+1. 用 ssh_exec 连接设备 {{target}}，执行 show version 确认设备型号
+2. 根据用户描述的故障现象，选择合适的 show 命令排查
+3. 分析输出，定位根因
+4. 记录诊断结论到 memory（供后续会话参考）
+
+## 常用命令参考
+- `show interface brief` — 接口概览
+- `show ip route` — 路由表
+- `show arp` — ARP 表
+- `show running-config` — 当前配置
+- `show log | tail 50` — 最近日志
+
+## 注意
+- SSH 会话持久，连续命令无需重新连接
+- 优先用 target 名称调用（凭据从配置读取）
+- 不确定设备型号时先 show version，再选合适的命令语法
+```
+
+**主 agent + 子 agent 协同（批量巡检多台设备）**
+
+```yaml
+---
+name: batch-remote-check
+description: 批量 SSH 巡检多台网络设备
+mode: plan
+think: true
+tools:
+  allow: [ssh_exec, todo_write, subagent, memory_read, memory_write]
+---
+你是网络运维协调员。
+
+## 工作流程
+1. 确定巡检设备列表
+2. 用 todo_write 创建任务清单（每台设备一个任务）
+3. 对每台设备调用 subagent，指定 skill: "remote-interface-check"
+4. 收集所有子 agent 结果，生成汇总报告
+
+## 委托方式
+{"tool": "subagent", "arguments": {
+  "description": "check <设备名>",
+  "prompt": "检查设备 <设备名> 的接口状态。设备名称作为 target 参数传入 ssh_exec。",
+  "skill": "remote-interface-check"
+}}
+```
+
+### 9.5 SSH skill 编写要点
+
+- **tools.allow 必须包含 `ssh_exec`**
+- **变量参数化 target**：`variables: { target: "core-router" }`，同 SOP 复用到不同设备
+- **workflow 的 ssh_exec 步用 `{{target}}` 插值**：`args: { command: "show version", target: "{{target}}" }`
+- **plan 模式在 persona 中写常用命令参考**：小模型不知道网络设备的 show 命令，需要列出
+- **先 show version 再选命令语法**：不同厂商命令不同（Cisco vs Huawei vs Juniper）
+- **子 agent 的 skill 里 target 通过 variables 传入**：主 agent 在 prompt 中指定设备名
