@@ -429,6 +429,22 @@ async fn handle_request(
             handle_command(req, state).await
         }
 
+        // List available slash commands (for frontend autocomplete popup)
+        (Method::GET, "/api/commands") => {
+            let plugins = crate::commands::register_builtins();
+            let commands_json: Vec<serde_json::Value> = plugins
+                .iter()
+                .map(|p| {
+                    serde_json::json!({
+                        "name": p.name(),
+                        "description": p.description(),
+                    })
+                })
+                .collect();
+            let json = serde_json::to_string(&commands_json).unwrap_or_else(|_| "[]".into());
+            serve_json(&json)
+        }
+
         // Fetch available models from the LLM endpoint (OpenAI-compatible /v1/models)
         // Accepts {base_url, api_key} from the request body so it always uses
         // the values the user just typed in the settings panel — not the

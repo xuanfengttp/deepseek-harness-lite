@@ -490,6 +490,34 @@ body {
   padding: 0 4px; min-height: 24px; max-height: 200px;
 }
 .input-card textarea::placeholder { color: var(--label-caption); user-select: none; }
+
+/* ─── Slash command popup ───────────────────────────────────────────── */
+.cmd-popup {
+  position: absolute; bottom: 100%; left: 0; right: 0;
+  margin-bottom: 6px; max-height: 280px; overflow-y: auto;
+  background: var(--bg-layer-1); border: 1px solid var(--border-l2);
+  border-radius: 12px; box-shadow: var(--shadow-l3);
+  z-index: 50; display: none;
+}
+.cmd-popup.visible { display: block; }
+.cmd-popup-header {
+  padding: 8px 14px 4px; font-size: 12px; color: var(--label-caption);
+  font-weight: 500; user-select: none;
+}
+.cmd-list { list-style: none; margin: 0; padding: 4px 6px 8px; }
+.cmd-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 8px; cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.cmd-item:hover, .cmd-item.active { background: var(--bg-hover); }
+.cmd-item.active { background: var(--accent-light); }
+.cmd-item-name {
+  font-family: var(--font-code); font-size: 14px; font-weight: 600;
+  color: var(--accent); min-width: 80px;
+}
+.cmd-item-desc { font-size: 13px; color: var(--label-secondary); }
+.cmd-popup-empty { padding: 12px 14px; font-size: 13px; color: var(--label-caption); }
 .input-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 4px 2px; }
 .model-select {
   border: none; border-radius: 8px; outline: none;
@@ -719,7 +747,11 @@ body {
     </div>
     <div class="input-area">
       <div class="input-card">
-        <textarea id="input" data-i18n-placeholder="input_placeholder" placeholder="发送消息..." onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <div class="cmd-popup" id="cmd-popup">
+          <div class="cmd-popup-header">可用命令</div>
+          <ul class="cmd-list" id="cmd-list"></ul>
+        </div>
+        <textarea id="input" data-i18n-placeholder="input_placeholder" placeholder="发送消息..." onkeydown="handleKey(event)" oninput="autoResize(this);handleInputChange(this)"></textarea>
         <div class="input-row">
           <select id="model-preset" class="model-select hidden" title="Model preset"></select>
           <div class="context-ring" id="context-ring">
@@ -1192,8 +1224,117 @@ function switchSkill() {
   document.getElementById('active-skill-name').textContent = sel.value;
 }
 
+// ─── Slash command popup ─────────────────────────────────────────────
+let commandList = [];   // [{name, description}] fetched from /api/commands
+let cmdPopupOpen = false;
+let cmdActiveIndex = 0;
+let cmdFiltered = [];   // filtered candidates currently shown
+
+/** Fetch the command list from the backend (called once on page load). */
+async function loadCommands() {
+  try {
+    const res = await fetch('/api/commands');
+    commandList = await res.json();
+  } catch(e) { console.error('loadCommands', e); commandList = []; }
+}
+
+/** Called on every input change — detect "/" prefix and show/hide popup. */
+function handleInputChange(el) {
+  const val = el.value;
+  // Open popup when the text starts with "/" and cursor is on the first line.
+  if (val.startsWith('/') && !val.includes('\n')) {
+    const query = val.slice(1).toLowerCase(); // text after "/"
+    cmdFiltered = commandList.filter(c =>
+      c.name.startsWith(query) || c.name.includes(query)
+    );
+    cmdActiveIndex = 0;
+    renderCmdPopup();
+  } else {
+    closeCmdPopup();
+  }
+}
+
+/** Render the popup list from cmdFiltered. */
+function renderCmdPopup() {
+  const popup = document.getElementById('cmd-popup');
+  const list = document.getElementById('cmd-list');
+  if (cmdFiltered.length === 0) {
+    list.innerHTML = '<div class="cmd-popup-empty">无匹配命令</div>';
+    popup.classList.add('visible');
+    cmdPopupOpen = true;
+    return;
+  }
+  list.innerHTML = cmdFiltered.map((c, i) =>
+    `<li class="cmd-item${i === cmdActiveIndex ? ' active' : ''}" data-index="${i}" onmousedown="cmdSelect(${i});return false">` +
+    `<span class="cmd-item-name">/${c.name}</span>` +
+    `<span class="cmd-item-desc">${c.description}</span></li>`
+  ).join('');
+  popup.classList.add('visible');
+  cmdPopupOpen = true;
+}
+
+/** Close the popup. */
+function closeCmdPopup() {
+  document.getElementById('cmd-popup').classList.remove('visible');
+  cmdPopupOpen = false;
+}
+
+/** Select a command from the filtered list — insert into textarea. */
+function cmdSelect(index) {
+  if (index < 0 || index >= cmdFiltered.length) return;
+  const cmd = cmdFiltered[index];
+  const input = document.getElementById('input');
+  // Replace the "/" + partial text with "/" + command name + " "
+  input.value = '/' + cmd.name + ' ';
+  input.focus();
+  autoResize(input);
+  closeCmdPopup();
+  // Move cursor to end
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
 // ─── Chat ──────────────────────────────────────────────────────────────
-function handleKey(e) { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+function handleKey(e) {
+  // When popup is open, intercept navigation keys.
+  if (cmdPopupOpen) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (cmdFiltered.length > 0) {
+        cmdActiveIndex = (cmdActiveIndex + 1) % cmdFiltered.length;
+        renderCmdPopup();
+      }
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (cmdFiltered.length > 0) {
+        cmdActiveIndex = (cmdActiveIndex - 1 + cmdFiltered.length) % cmdFiltered.length;
+        renderCmdPopup();
+      }
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (cmdFiltered.length > 0) {
+        cmdSelect(cmdActiveIndex);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeCmdPopup();
+      return;
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (cmdFiltered.length > 0) {
+        cmdSelect(cmdActiveIndex);
+      }
+      return;
+    }
+  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
 function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,200)+'px'; }
 
 async function sendMessage() {
@@ -2375,6 +2516,7 @@ heroTemplate = _heroEl ? _heroEl.outerHTML : '<div class="hero" id="hero"><h2 da
 loadSessions();
 loadSkills();
 loadModelPresets();
+loadCommands();
 loadConfig().then(() => loadActiveHistory());
 updateStatsBar();
 // Wire context ring click
