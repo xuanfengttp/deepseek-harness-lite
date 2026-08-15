@@ -1138,6 +1138,7 @@ async function sendMessage() {
   if (hero) hero.remove();
 
   addMessage('user', msg);
+  addTrajCell('user', 'USER', truncate(msg, 80), '');
   input.value = ''; input.style.height = '44px';
   isStreaming = true;
   setSendButtonMode('stop');
@@ -1440,9 +1441,14 @@ function handleEvent(event, showTraj) {
       break;
     case 'assistant_message':
       if (!currentAssistantEl) currentAssistantEl = addMessage('assistant','');
-      if (event.content) { currentAssistantText = event.content; currentAssistantEl.querySelector('.bubble').innerHTML = renderMd(event.content); }
+      if (event.content) {
+        currentAssistantText = event.content;
+        currentAssistantEl.querySelector('.bubble').innerHTML = renderMd(event.content);
+        // Add ASSISTANT trajectory row showing the model's reasoning/output
+        addTrajCell('message', 'ASSISTANT', truncate(event.content, 80), '');
+      }
       if (event.tool_calls) event.tool_calls.forEach(tc => {
-        addTrajCell('message', 'ASSISTANT', tc.name, '');
+        addTrajCell('tool', 'TOOL', tc.name, JSON.stringify(tc.arguments,null,2));
         addChatToolCall(tc.name, JSON.stringify(tc.arguments,null,2), false);
       });
       // Track LLM time: step_start → assistant_message
@@ -1667,20 +1673,25 @@ function switchSection(name) {
 }
 
 // ─── Config API ────────────────────────────────────────────────────────
+// Fetch config and apply context_window immediately (needed before stats restore).
+// Form fields are only populated if the settings elements exist.
 async function loadConfig() {
   try {
     const res = await fetch('/api/config');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const cfg = await res.json();
     if (cfg.model) {
-      document.getElementById('cfg-base-url').value = cfg.model.base_url || '';
-      document.getElementById('cfg-api-key').value = cfg.model.api_key || '';
-      document.getElementById('cfg-model').value = cfg.model.model || '';
-      document.getElementById('cfg-context-window').value = cfg.model.context_window || '';
       configContextWindow = cfg.model.context_window || 8192;
       updateContextRing();
-      document.getElementById('cfg-max-tokens').value = cfg.model.max_tokens || '';
-      document.getElementById('cfg-temperature').value = cfg.model.temperature || '';
+      const el = document.getElementById('cfg-base-url');
+      if (el) {
+        el.value = cfg.model.base_url || '';
+        document.getElementById('cfg-api-key').value = cfg.model.api_key || '';
+        document.getElementById('cfg-model').value = cfg.model.model || '';
+        document.getElementById('cfg-context-window').value = cfg.model.context_window || '';
+        document.getElementById('cfg-max-tokens').value = cfg.model.max_tokens || '';
+        document.getElementById('cfg-temperature').value = cfg.model.temperature || '';
+      }
     }
     if (cfg.tools) {
       ['shell','file_read','file_write','file_search','memory'].forEach(t => {
@@ -1691,7 +1702,8 @@ async function loadConfig() {
     loadPresets(cfg);
   } catch(e) {
     console.error('loadConfig', e);
-    showModelConfigStatus('⚠ 无法连接服务器: ' + e.message, 'err');
+    const statusEl = document.getElementById('model-config-status');
+    if (statusEl) showModelConfigStatus('⚠ 无法连接服务器: ' + e.message, 'err');
   }
 }
 
@@ -2051,7 +2063,7 @@ heroTemplate = _heroEl ? _heroEl.outerHTML : '<div class="hero" id="hero"><h2 da
 loadSessions();
 loadSkills();
 loadModelPresets();
-loadActiveHistory();
+loadConfig().then(() => loadActiveHistory());
 updateStatsBar();
 // Wire context ring click
 const _ctxTrigger = document.getElementById('ctx-trigger');
