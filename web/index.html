@@ -274,21 +274,49 @@ body {
 .bubble strong { font-weight: 600; }
 .bubble a { color: var(--accent); }
 
-/* ── Trajectory: top preview + simple one-row-per-action (matching original dsh) ── */
+/* ── Trajectory: 3-lane preview (Input/Model/Tools) + one-row-per-action ── */
 .traj-preview {
-  display: flex; align-items: center; box-sizing: border-box;
-  height: 44px; padding: 0 8px; gap: 2px; flex-shrink: 0;
-  border-bottom: 1px solid var(--border-l2); background: var(--bg-layer-2); overflow: hidden;
+  display: grid; grid-template-columns: 44px minmax(0, 1fr);
+  height: 50px; flex-shrink: 0; overflow: hidden;
+  border-bottom: 1px solid var(--border-l2); background: var(--bg-layer-2);
 }
-.traj-preview .tp-label { flex: none; width: 32px; font-size: 9px; color: var(--label-caption); text-align: right; padding-right: 4px; line-height: 1; }
-.traj-preview .tp-track { flex: 1; display: flex; align-items: center; gap: 2px; height: 100%; min-width: 0; }
-.traj-preview .tp-bar { height: 8px; border-radius: 1px; min-width: 3px; opacity: 0.78; flex-shrink: 0; }
-.traj-preview .tp-bar[data-kind="user"] { background: var(--accent); opacity: 1; }
-.traj-preview .tp-bar[data-kind="message"] { background: #6366f1; opacity: 1; }
-.traj-preview .tp-bar[data-kind="tool"] { background: var(--amber); opacity: 1; }
-.traj-preview .tp-bar[data-kind="error"] { background: var(--red); opacity: 1; }
+.traj-preview .tp-labels {
+  position: relative; border-right: 1px solid var(--border-l1);
+  color: var(--label-caption); font-size: 10px; line-height: 1;
+}
+.traj-preview .tp-labels span {
+  position: absolute; right: 3px; display: flex; align-items: center;
+  justify-content: flex-end; height: 8px; text-align: right;
+}
+.traj-preview .tp-labels span:nth-child(1) { top: 7px; }
+.traj-preview .tp-labels span:nth-child(2) { top: 21px; }
+.traj-preview .tp-labels span:nth-child(3) { top: 35px; }
+.traj-preview .tp-track {
+  position: relative; overflow: hidden;
+}
+.traj-preview .tp-lane {
+  position: absolute; left: 0; right: 0; height: 8px;
+}
+.traj-preview .tp-lane-0 { top: 7px; }
+.traj-preview .tp-lane-1 { top: 21px; }
+.traj-preview .tp-lane-2 { top: 35px; }
+.traj-preview .tp-bar {
+  position: absolute; height: 8px; min-width: 3px; border-radius: 1px; opacity: 1;
+}
+.traj-preview .tp-bar[data-kind="user"] { background: var(--accent); }
 .traj-preview .tp-bar[data-kind="system"] { background: var(--label-tertiary); }
-.traj-preview .tp-empty { font-size: 11px; color: var(--label-caption); }
+.traj-preview .tp-bar[data-kind="message"] { background: #6366f1; }
+.traj-preview .tp-bar[data-kind="tool"] { background: var(--amber); }
+.traj-preview .tp-bar[data-kind="result"] { background: var(--amber); opacity: 0.6; }
+.traj-preview .tp-bar[data-kind="error"] { background: var(--red); }
+.traj-preview .tp-empty {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 11px; color: var(--label-caption);
+}
+.traj-preview .tp-turn-line {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: var(--border-l2); pointer-events: none;
+}
 
 .traj-row {
   display: flex; align-items: center; box-sizing: border-box;
@@ -649,7 +677,7 @@ body {
       </div>
       <div class="traj-inner hidden" id="traj-inner">
         <div class="traj-preview" id="traj-preview">
-          <div class="tp-label">events</div>
+          <div class="tp-labels"><span>Input</span><span>Model</span><span>Tools</span></div>
           <div class="tp-track" id="tp-track"><span class="tp-empty">No events yet</span></div>
         </div>
         <div id="traj-list"></div>
@@ -1297,18 +1325,21 @@ function updateStatsBar() {
   if (!bar) return;
   const groups = [];
   if (sessionStats.steps > 0) {
-    groups.push(sessionStats.turns + ' 轮 / ' + sessionStats.steps + ' 步');
+    // Group 1: counts
+    groups.push(sessionStats.turns + ' 轮 · ' + sessionStats.steps + ' 步');
+    // Group 2: durations
     const durations = [];
     if (sessionStats.llmMs > 0) durations.push('LLM ' + formatDuration(sessionStats.llmMs));
-    if (sessionStats.toolMs > 0) durations.push('工具 ' + formatDuration(sessionStats.toolMs));
+    if (sessionStats.toolMs > 0) durations.push('工具调用 ' + formatDuration(sessionStats.toolMs));
     if (durations.length > 0) groups.push(durations.join(' · '));
   }
+  // Group 3: tokens
   if (sessionStats.totalInputTokens > 0 || sessionStats.totalOutputTokens > 0) {
-    groups.push(formatTokens(sessionStats.totalInputTokens) + ' in / ' + formatTokens(sessionStats.totalOutputTokens) + ' out');
+    groups.push('输入 ' + formatTokens(sessionStats.totalInputTokens) + ' tok · 输出 ' + formatTokens(sessionStats.totalOutputTokens) + ' tok');
   }
   if (!showStats || groups.length === 0) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
   bar.style.display = '';
-  bar.innerHTML = groups.map((g, i) => (i > 0 ? '<span class="sep">|</span> ' : '') + '<span>' + g + '</span>').join('');
+  bar.innerHTML = groups.map(function(g, i) { return (i > 0 ? '<span class="sep">|</span> ' : '') + '<span>' + g + '</span>'; }).join('');
 }
 function formatTokens(n) {
   if (n < 1000) return String(n);
@@ -1599,14 +1630,44 @@ function updateTrajPreview() {
   if (!track) return;
   const rows = document.querySelectorAll('#traj-list .traj-row');
   if (rows.length === 0) { track.innerHTML = '<span class="tp-empty">No events yet</span>'; return; }
-  // Show up to 80 bars; each bar is a colored block for one event
-  const maxBars = 80;
+  // Lane assignment matching original dsh:
+  //   lane 0 = Input (user, system)
+  //   lane 1 = Model (message/assistant)
+  //   lane 2 = Tools (tool, result, error)
+  function laneFor(kind) {
+    if (kind === 'tool' || kind === 'result' || kind === 'error') return 2;
+    if (kind === 'message') return 1;
+    return 0; // user, system
+  }
+  const n = rows.length;
+  const maxBars = 60;
   const recent = Array.from(rows).slice(-maxBars);
-  track.innerHTML = recent.map(r => {
+  const offset = n - recent.length;
+  const barW = 100 / Math.max(n, maxBars);
+  // Build 3 lane containers
+  let html = '';
+  // Turn boundary lines
+  const turnRows = Array.from(rows).map((r, i) => ({ row: r, idx: i })).filter(x => x.row.hasAttribute('data-turn-start'));
+  for (const t of turnRows) {
+    const left = (t.idx - offset) * barW;
+    if (left >= 0 && left <= 100) html += '<span class="tp-turn-line" style="left:' + left.toFixed(1) + '%"></span>';
+  }
+  // Lane containers
+  html += '<div class="tp-lane tp-lane-0"></div><div class="tp-lane tp-lane-1"></div><div class="tp-lane tp-lane-2"></div>';
+  track.innerHTML = html;
+  // Append bars to their lane
+  const lanes = [track.querySelector('.tp-lane-0'), track.querySelector('.tp-lane-1'), track.querySelector('.tp-lane-2')];
+  recent.forEach((r, i) => {
     const kind = r.dataset.kind || 'system';
-    const err = r.classList.contains('error') ? ' data-kind="error"' : ` data-kind="${kind}"`;
-    return `<span class="tp-bar"${err}></span>`;
-  }).join('');
+    const lane = laneFor(kind);
+    const left = (i + offset - offset) * barW;
+    const bar = document.createElement('span');
+    bar.className = 'tp-bar';
+    bar.dataset.kind = kind;
+    bar.style.left = left.toFixed(1) + '%';
+    bar.style.width = (barW * 0.85).toFixed(1) + '%';
+    lanes[lane].appendChild(bar);
+  });
 }
 
 function addTrajTurnHeader(turn) {
