@@ -192,7 +192,7 @@ async fn handle_request(
             serve_json(r#"{"ok":true}"#)
         }
 
-        // Get session history (messages for display)
+        // Get session history (messages + stats + trajectory for display)
         (Method::GET, "/api/sessions/history") => {
             // Parse id from query string
             let uri = req.uri().to_string();
@@ -201,12 +201,14 @@ async fn handle_request(
                 .and_then(|s| s.split('&').next())
                 .unwrap_or("");
             if id.is_empty() {
-                return Ok(serve_json(r#"{"messages":[]}"#));
+                return Ok(serve_json(r#"{"messages":[],"stats":null,"trajectory":[]}"#));
             }
             let mut mgr = state.session_mgr.lock().await;
             // Always switch to the requested session so active_messages()
             // returns the correct session's history.
             mgr.switch(id);
+
+            // Build messages for chat display
             let messages: Vec<serde_json::Value> = mgr.active_messages()
                 .unwrap_or_default()
                 .into_iter()
@@ -222,7 +224,138 @@ async fn handle_request(
                     }),
                 })
                 .collect();
-            serve_json(&serde_json::to_string(&serde_json::json!({"messages": messages})).unwrap_or_else(|_| r#"{"messages":[]}"#.into()))
+
+            // Build stats + trajectory by replaying session events
+            let mut stats = serde_json::json!({
+                "turns": 0, "steps": 0,
+                "totalInputTokens": 0, "totalOutputTokens": 0, "latestInputTokens": 0,
+                "llmMs": 0, "toolMs": 0,
+                "startTime": 0
+            });
+            let mut trajectory: Vec<serde_json::Value> = Vec::new();
+            let mut step_start_time: u64 = 0;
+            let mut tool_call_time: u64 = 0;
+            let mut turn_start_time: u64 = 0;
+            let mut current_turn: u64 = 0;
+
+            if let Some(log) = mgr.active() {
+                for event in log.events() {
+                    match event {
+                        SessionEvent::TurnStart { turn } => {
+                            current_turn = *turn;
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+                            turn_start_time = now;
+                            if stats["startTime"].as_u64() == Some(0) {
+                                stats["startTime"] = serde_json::json!(now);
+                            }
+                            stats["turns"] = serde_json::json!(stats["turns"].as_u64().unwrap_or(0) + 1);
+                            trajectory.push(serde_json::json!({
+                                "type": "turn_start", "turn": turn
+                            }));
+                        }
+                        SessionEvent::StepStart { .. } => {
+                            stats["steps"] = serde_json::json!(stats["steps"].as_u64().unwrap_or(0) + 1);
+                            step_start_time = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+                            trajectory.push(serde_json::json!({
+                                "type": "step_start"
+                            }));
+                        }
+                        SessionEvent::StepEnd { .. } => {
+                            trajectory.push(serde_json::json!({
+                                "type": "step_end"
+                            }));
+                        }
+                        SessionEvent::UserMessage { content } => {
+                            trajectory.push(serde_json::json!({
+                                "type": "user_message", "content": content
+                            }));
+                        }
+                        SessionEvent::AssistantMessage { content, tool_calls, usage } => {
+                            // Track LLM time
+                            if step_start_time > 0 {
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_millis() as u64)
+                                    .unwrap_or(0);
+                                stats["llmMs"] = serde_json::json!(stats["llmMs"].as_u64().unwrap_or(0) + (now - step_start_time));
+                                step_start_time = 0;
+                            }
+                            // Track usage
+                            if let Some(u) = usage {
+                                stats["latestInputTokens"] = serde_json::json!(u.prompt_tokens);
+                                stats["totalInputTokens"] = serde_json::json!(stats["totalInputTokens"].as_u64().unwrap_or(0) + u.prompt_tokens);
+                                stats["totalOutputTokens"] = serde_json::json!(stats["totalOutputTokens"].as_u64().unwrap_or(0) + u.completion_tokens);
+                                trajectory.push(serde_json::json!({
+                                    "type": "usage",
+                                    "prompt_tokens": u.prompt_tokens,
+                                    "completion_tokens": u.completion_tokens
+                                }));
+                            }
+                            // Tool calls in the assistant message
+                            for tc in tool_calls {
+                                trajectory.push(serde_json::json!({
+                                    "type": "tool_call",
+                                    "name": tc.name,
+                                    "arguments": tc.arguments
+                                }));
+                                tool_call_time = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_millis() as u64)
+                                    .unwrap_or(0);
+                            }
+                            if !content.is_empty() {
+                                trajectory.push(serde_json::json!({
+                                    "type": "assistant_message", "content": content
+                                }));
+                            }
+                        }
+                        SessionEvent::ToolCall { call } => {
+                            trajectory.push(serde_json::json!({
+                                "type": "tool_call",
+                                "name": call.name,
+                                "arguments": call.arguments
+                            }));
+                            tool_call_time = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+                        }
+                        SessionEvent::ToolResult { call_id: _, content, is_error } => {
+                            if tool_call_time > 0 {
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .map(|d| d.as_millis() as u64)
+                                    .unwrap_or(0);
+                                stats["toolMs"] = serde_json::json!(stats["toolMs"].as_u64().unwrap_or(0) + (now - tool_call_time));
+                                tool_call_time = 0;
+                            }
+                            trajectory.push(serde_json::json!({
+                                "type": "tool_result",
+                                "content": content,
+                                "is_error": is_error
+                            }));
+                        }
+                        SessionEvent::TurnEnd { .. } => {
+                            trajectory.push(serde_json::json!({
+                                "type": "turn_end"
+                            }));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            serve_json(&serde_json::to_string(&serde_json::json!({
+                "messages": messages,
+                "stats": stats,
+                "trajectory": trajectory
+            })).unwrap_or_else(|_| r#"{"messages":[],"stats":null,"trajectory":[]}"#.into()))
         }
 
         // List model presets (for hot-switch dropdown in chat UI)

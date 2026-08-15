@@ -943,7 +943,27 @@ async function switchSession(id) {
     setView('chat');
     currentAssistantEl = null;
     currentAssistantText = '';
-    restoreSessionStats(id);
+    // Apply server-provided stats (survives page reload)
+    if (histData.stats) {
+      sessionStats = {
+        turns: histData.stats.turns || 0,
+        steps: histData.stats.steps || 0,
+        latestInputTokens: histData.stats.latestInputTokens || 0,
+        totalInputTokens: histData.stats.totalInputTokens || 0,
+        totalOutputTokens: histData.stats.totalOutputTokens || 0,
+        startTime: histData.stats.startTime || 0,
+        llmMs: histData.stats.llmMs || 0,
+        toolMs: histData.stats.toolMs || 0,
+        stepStartTime: 0,
+        toolCallStartTime: 0
+      };
+      sessionStatsMap[id] = { ...sessionStats };
+      updateStatsBar();
+      updateContextRing();
+    } else {
+      restoreSessionStats(id);
+    }
+    // Rebuild chat messages
     if (histData.messages && histData.messages.length > 0) {
       histData.messages.forEach(msg => {
         if (msg.role === 'user') addMessage('user', msg.content);
@@ -952,6 +972,10 @@ async function switchSession(id) {
     } else {
       document.querySelector('.chat-inner').innerHTML = heroTemplate;
       applyI18n();
+    }
+    // Rebuild trajectory from server events
+    if (histData.trajectory && histData.trajectory.length > 0) {
+      replayTrajectory(histData.trajectory);
     }
     await loadSessions();
   } catch(e) { console.error('switchSession', e); }
@@ -967,12 +991,34 @@ async function loadActiveHistory() {
     if (active && active.event_count > 0) {
       const histRes = await fetch('/api/sessions/history?id=' + encodeURIComponent(active.id));
       const histData = await histRes.json();
+      // Apply server-provided stats
+      if (histData.stats) {
+        sessionStats = {
+          turns: histData.stats.turns || 0,
+          steps: histData.stats.steps || 0,
+          latestInputTokens: histData.stats.latestInputTokens || 0,
+          totalInputTokens: histData.stats.totalInputTokens || 0,
+          totalOutputTokens: histData.stats.totalOutputTokens || 0,
+          startTime: histData.stats.startTime || 0,
+          llmMs: histData.stats.llmMs || 0,
+          toolMs: histData.stats.toolMs || 0,
+          stepStartTime: 0,
+          toolCallStartTime: 0
+        };
+        sessionStatsMap[active.id] = { ...sessionStats };
+        updateStatsBar();
+        updateContextRing();
+      }
       if (histData.messages && histData.messages.length > 0) {
         document.querySelector('.chat-inner').innerHTML = '';
         histData.messages.forEach(msg => {
           if (msg.role === 'user') addMessage('user', msg.content);
           else if (msg.role === 'assistant' && msg.content) addMessage('assistant', msg.content);
         });
+      }
+      // Rebuild trajectory
+      if (histData.trajectory && histData.trajectory.length > 0) {
+        replayTrajectory(histData.trajectory);
       }
     }
   } catch(e) { console.error('loadActiveHistory', e); }
@@ -1346,7 +1392,42 @@ function clearTrajectory() {
   const list = document.getElementById('traj-list');
   if (list) list.innerHTML = '';
   trajCellIndex = 0;
+  trajCurrentTurn = 0;
   updateTrajPreview();
+}
+
+// Replay server-provided trajectory events to rebuild the trajectory view
+function replayTrajectory(events) {
+  // Don't call handleEvent — that would also affect stats and chat.
+  // Only rebuild trajectory rows.
+  for (const ev of events) {
+    switch (ev.type) {
+      case 'turn_start':
+        trajTurnStartTime = Date.now();
+        addTrajTurnHeader(ev.turn);
+        break;
+      case 'step_start':
+        break;
+      case 'step_end':
+        break;
+      case 'user_message':
+        addTrajCell('user', 'USER', ev.content ? truncate(ev.content, 80) : '', '');
+        break;
+      case 'assistant_message':
+        addTrajCell('message', 'ASSISTANT', ev.content ? truncate(ev.content, 80) : '', '');
+        break;
+      case 'tool_call':
+        addTrajCell('tool', 'TOOL', ev.name || '', ev.arguments ? JSON.stringify(ev.arguments, null, 2) : '');
+        break;
+      case 'tool_result':
+        addTrajCell('result', ev.is_error ? 'ERROR' : 'RESULT', '', ev.content || '', ev.is_error);
+        break;
+      case 'usage':
+        break;
+      case 'turn_end':
+        break;
+    }
+  }
 }
 
 function handleEvent(event, showTraj) {
@@ -1452,7 +1533,7 @@ function addTrajCell(kind, tagLabel, text, detail, isError) {
   if (!list) return;
   trajCellIndex++;
   const elapsed = trajTurnStartTime ? ((Date.now() - trajTurnStartTime) / 1000).toFixed(1) + 's' : '';
-  const tagClass = kind === 'tool' ? 'tag-tool' : kind === 'error' ? 'tag-error' : kind === 'message' ? 'tag-message' : kind === 'result' ? (isError ? 'tag-error' : 'tag-result') : 'tag-system';
+  const tagClass = kind === 'tool' ? 'tag-tool' : kind === 'error' ? 'tag-error' : kind === 'message' ? 'tag-message' : kind === 'result' ? (isError ? 'tag-error' : 'tag-result') : kind === 'user' ? 'tag-user' : 'tag-system';
   const el = document.createElement('div');
   el.className = 'traj-row' + (isError ? ' error' : '');
   el.dataset.kind = kind === 'result' ? (isError ? 'error' : 'tool') : kind;
