@@ -12,17 +12,17 @@ DeepSeek Harness Lite（`dsh-lite`）是对 DeepSeek Harness 核心架构的全�
 
 ## 核心特性
 
-### 三模式任务分发
+### 统一 Agent Loop + 策略钩子
 
-每个请求根据当前激活 skill 声明的执行模式进行路由：
+每个请求都走同一个 Agent Loop。激活 skill 声明的执行模式决定哪个 `StepHook` 策略控制每步行为——没有独立的分发路径，没有绕过的代码路径：
 
-| 模式 | 确定性 | LLM 使用 | 机制 |
+| 模式 | 确定性 | LLM 使用 | 钩子行为 |
 |---|---|---|---|
-| `workflow` | 最高（SOP） | 极少——仅判断步骤 | 绕过 agent loop，直接执行固定工具步骤 |
-| `todo` | 中等（agent 引导） | 每步引导 | agent loop 运行，但受 skill 步骤序列约束 |
-| `plan` | 低（探索） | 完整推理 | agent 自由规划、执行工具、根据结果重新规划 |
+| `workflow` | 最高（SOP） | 极少——仅判断步骤 | `ForceTool` 跳过 LLM 调用，在循环内直接执行工具 |
+| `todo` | 中等（agent 引导） | 每步引导 | `Proceed(Some(guidance))`——LLM 在 skill 约束的上下文中推理 |
+| `plan` | 低（探索） | 完整推理 | `Proceed(None)`——agent 自由规划、执行工具、根据结果重新规划 |
 
-这避免了对确定性操作运行完整 agent loop 的开销，将 LLM 推理能力保留给真正不确定的任务。
+这避免了确定性操作的 LLM 调用开销，将推理能力保留给真正不确定的任务。新增模式或行为只需实现 `StepHook` trait——无需修改核心循环代码。
 
 ### Think 字段
 
@@ -169,7 +169,7 @@ Skill 中可用 `ssh_exec` 配合 `target` 名称或内联 `host`/`user`/`passwo
 |---|---|---|---|
 | `plan` | `Proceed(None)` | 每步完整推理 | LLM 驱动 |
 | `todo` | `Proceed(Some(guidance))` | 每步带引导 | 中等 |
-| `workflow`（tool） | `ForceTool(call)` | **0 次调用**——绕过 LLM | 100% 可重复 |
+| `workflow`（tool） | `ForceTool(call)` | **0 次调用**——钩子直供 | 100% 可重复 |
 | `workflow`（llm_judge） | `ForceLlm(prompt)` | 单次调用，独立上下文 | 高 |
 
 ### 五个扩展点
@@ -269,7 +269,7 @@ dsh-lite --skill interface-diagnostics "eth0 is down"
 ```
 
 agent 从 `config/default.yaml` 加载配置，扫描 `skills/` 目录的 skill 文件，
-通过激活 skill 的模式分发请求。
+通过激活 skill 的模式驱动 AgentLoop 执行请求。
 
 配置：
 
@@ -309,7 +309,7 @@ skill:
 |---|---|---|
 | P0 | 脚手架 + 交叉编译 | ✅ 完成 |
 | P1 | 核心 agent loop（plan 模式） | ✅ 完成 |
-| P2 | 三模式分发（workflow/todo/plan） | ✅ 完成 |
+| P2 | 三种执行模式（workflow/todo/plan） | ✅ 完成 |
 | P3 | Skill 系统完善 | ✅ 完成 |
 | P4 | 记忆 + 压缩 + 持久化 | ✅ 完成 |
 | P5 | 会话管理（多会话 + offloading） | ✅ 完成 |

@@ -12,17 +12,17 @@ The result is a single static binary with a ~6 MB runtime memory footprint, desi
 
 ## Key features
 
-### Tri-mode task dispatch
+### Unified agent loop with strategy hooks
 
-Every request is routed by the active skill's declared execution mode:
+Every request runs through a single agent loop. The active skill's declared execution mode selects which `StepHook` strategy controls each step — no separate dispatch paths, no bypassed code paths:
 
-| Mode | Determinism | LLM usage | Mechanism |
+| Mode | Determinism | LLM usage | Hook behavior |
 |---|---|---|---|
-| `workflow` | Highest (SOP) | Minimal — only for judgment steps | Bypasses the agent loop; runs fixed tool steps directly |
-| `todo` | Medium (agent-guided) | Per-step guidance | Agent loop runs with skill-constrained step sequence |
-| `plan` | Low (exploration) | Full reasoning | Agent plans, executes tools, re-plans based on results |
+| `workflow` | Highest (SOP) | Minimal — only for judgment steps | `ForceTool` skips the LLM call, runs the tool directly within the loop |
+| `todo` | Medium (agent-guided) | Per-step guidance | `Proceed(Some(guidance))` — LLM reasons with skill-constrained context |
+| `plan` | Low (exploration) | Full reasoning | `Proceed(None)` — LLM plans, executes tools, re-plans based on results |
 
-This avoids the overhead of the full agent loop for deterministic operations, reserving LLM reasoning for genuinely uncertain tasks.
+This avoids LLM calls for deterministic operations, reserving reasoning for genuinely uncertain tasks. New modes or behaviors are added by implementing the `StepHook` trait — no core loop changes.
 
 ### Think field
 
@@ -169,7 +169,7 @@ User input
 |---|---|---|---|
 | `plan` | `Proceed(None)` | Full reasoning each step | LLM-driven |
 | `todo` | `Proceed(Some(guidance))` | Per-step with guidance | Medium |
-| `workflow` (tool) | `ForceTool(call)` | **0 calls** — bypassed | 100% repeatable |
+| `workflow` (tool) | `ForceTool(call)` | **0 calls** — hook-supplied | 100% repeatable |
 | `workflow` (llm_judge) | `ForceLlm(prompt)` | Single call, independent context | High |
 
 ### Five extension points
@@ -269,7 +269,7 @@ dsh-lite --skill interface-diagnostics "eth0 is down"
 ```
 
 The agent loads config from `config/default.yaml`, scans `skills/` for skill
-files, and dispatches requests through the active skill's mode.
+files, and drives the agent loop through the active skill's mode.
 
 Configuration:
 
@@ -309,7 +309,7 @@ The unified plugin architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**. A
 |---|---|---|
 | P0 | Scaffold + cross-compilation | ✅ Done |
 | P1 | Core agent loop (plan mode) | ✅ Done |
-| P2 | Tri-mode dispatch (workflow/todo/plan) | ✅ Done |
+| P2 | Three execution modes (workflow/todo/plan) | ✅ Done |
 | P3 | Skill system completion | ✅ Done |
 | P4 | Memory + compaction + persistence | ✅ Done |
 | P5 | Session management (multi-session + offloading) | ✅ Done |

@@ -16,7 +16,7 @@ dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个
 剩余上下文越少 → 执行效果越差。分层设计通过以下方式化解这个矛盾：
 
 - **固定成本极低**：identity + rules + tool guidance 总计 ~200-300 tokens
-- **按需注入**：workflow 模式的 tool 步不发系统提示词（ForceTool 绕过 LLM）
+- **按需注入**：workflow 模式的 tool 步不发系统提示词（ForceTool 跳过 LLM 调用）
 - **行为规则 > 描述**：每个工具注入 1 句"怎么用"的行为规则，而非"是什么"的描述
 - **变量插值**：`{{cwd}}`、`{{model}}` 运行时自动注入，不需要 LLM 探索
 
@@ -75,7 +75,7 @@ dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个
 | workflow 模式 + 短提示词 | 0 (tool) + 1 (judge) | **100%** (tool 步) | 低 |
 | plan 编排 + workflow 子 agent | 主每步 + 子 judge | 高 | 中 |
 
-**workflow 模式是小模型的杀手锏**：tool 步 ForceTool 绕过 LLM（0 智力需求），
+**workflow 模式是小模型的杀手锏**：tool 步 ForceTool 跳过 LLM（0 智力需求），
 judge 步 ForceLlm 独立上下文（不受对话历史污染）。系统提示词对 workflow
 步骤完全无影响（不发给 LLM）。
 
@@ -313,7 +313,7 @@ steps:
 **策略 A：确定性委托**（指定 workflow skill）
 
 适用于已知流程、固定步骤的任务（巡检、备份、配置核查）。
-子 agent 用 `WorkflowStrategy`，tool 步绕过 LLM（0 次调用），judge 步单次 LLM。
+子 agent 用 `WorkflowStrategy`，tool 步跳过 LLM（0 次调用），judge 步单次 LLM。
 
 ```json
 {"tool": "subagent", "arguments": {
