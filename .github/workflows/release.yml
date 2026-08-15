@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g. 0.1.0-rc.6)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ── Linux musl builds (run on ubuntu, use zig for cross-compile) ──
+  linux:
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-musl
+            arch: arm64
+          - target: armv7-unknown-linux-musleabihf
+            arch: armv7hf
+          - target: armv7-unknown-linux-musleabi
+            arch: armv7sf
+          - target: x86_64-unknown-linux-musl
+            arch: x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install zig
+        uses: mlugg/setup-zig@v1
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild
+
+      - name: Build
+        run: cargo zigbuild --release --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          ARCH="${{ matrix.arch }}"
+          PKG="dsh-lite-${{ github.ref_name || github.event.inputs.version }}-linux-${ARCH}"
+          mkdir -p "${PKG}"
+          cp target/${{ matrix.target }}/release/dsh-lite "${PKG}/"
+          cp config/default.yaml "${PKG}/config.yaml"
+          cp -r skills "${PKG}/"
+          cp README.md "${PKG}/"
+          tar czf "${PKG}.tar.gz" "${PKG}"
+          echo "PACKAGE=${PKG}.tar.gz" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-lite-linux-${{ matrix.arch }}
+          path: "*.tar.gz"
+
+  # ── Windows build (native MSVC) ──
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ver = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "${{ github.event.inputs.version }}" }
+          $pkg = "dsh-lite-$ver-windows-x86_64"
+          New-Item -ItemType Directory -Force -Path $pkg
+          Copy-Item "target\x86_64-pc-windows-msvc\release\dsh-lite.exe" "$pkg\"
+          Copy-Item "config\default.yaml" "$pkg\config.yaml"
+          Copy-Item -Recurse "skills" "$pkg\skills"
+          Copy-Item "README.md" "$pkg\"
+          Compress-Archive -Path "$pkg\*" -DestinationPath "$pkg.zip" -Force
+          Write-Output "PACKAGE=$pkg.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-lite-windows-x86_64
+          path: "*.zip"
+
+  # ── Create GitHub Release ──
+  release:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || github.event.inputs.version }}
+          name: dsh-lite ${{ github.ref_name || github.event.inputs.version }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+          body: |
+            ## dsh-lite ${{ github.ref_name || github.event.inputs.version }}
+
+            ### Downloads
+            | Platform | File | Architecture |
+            |----------|------|-------------|
+            | Windows | `*.zip` | x86_64 |
+            | Linux (musl static) | `*.tar.gz` | arm64 / armv7hf / armv7sf / x86_64 |
+
+            ### Quick start
+            1. Download and extract the archive for your platform
+            2. Edit `config.yaml` — set your LLM endpoint and API key
+            3. Run `dsh-lite` (or `dsh-lite.exe` on Windows)
+            4. Open `http://127.0.0.1:3081` in your browser
+
+            All Linux binaries are **statically linked** (musl) — no runtime dependencies.
+            Binary size ~2.6 MB. See README.md for full documentation.

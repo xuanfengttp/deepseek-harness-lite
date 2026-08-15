@@ -208,7 +208,7 @@ Skill 中可用 `ssh_exec` 配合 `target` 名称或内联 `host`/`user`/`passwo
 ## 构建
 
 ```sh
-# 前置条件：Rust 1.75+，可选 cargo-zigbuild + zig 用于交叉编译
+# 前置条件：Rust 1.75+，cargo-zigbuild + zig 用于交叉编译
 
 # 本机构建
 cargo build --release
@@ -218,16 +218,40 @@ cargo build --release
 cargo zigbuild --release --target aarch64-unknown-linux-musl
 cargo zigbuild --release --target armv7-unknown-linux-musleabihf
 cargo zigbuild --release --target armv7-unknown-linux-musleabi
+cargo zigbuild --release --target x86_64-unknown-linux-musl
 ```
 
 支持的目标平台：
 
-| 目标 | 架构 |
-|---|---|
-| `x86_64-unknown-linux-musl` | x86_64（开发） |
-| `aarch64-unknown-linux-musl` | ARM 64 位 |
-| `armv7-unknown-linux-musleabihf` | ARMv7 硬浮点 |
-| `armv7-unknown-linux-musleabi` | ARMv7 软浮点 |
+| 目标 | 平台 | 二进制大小 |
+|---|---|---|
+| `x86_64-pc-windows-msvc` | Windows x86_64 | ~2.7 MB |
+| `aarch64-unknown-linux-musl` | Linux ARM64（静态） | ~2.7 MB |
+| `armv7-unknown-linux-musleabihf` | Linux ARMv7 硬浮点（静态） | ~2.9 MB |
+| `armv7-unknown-linux-musleabi` | Linux ARMv7 软浮点（静态） | ~2.9 MB |
+| `x86_64-unknown-linux-musl` | Linux x86_64（静态） | ~3.2 MB |
+
+所有 Linux 二进制均为 musl 静态链接——无运行时依赖，开箱即用。工具链安装见 [cross/README.md](cross/README.md)。
+
+## 发布
+
+推送版本标签即可触发自动多平台构建和 GitHub Release：
+
+```sh
+git tag v0.1.0-rc.6
+git push origin v0.1.0-rc.6
+```
+
+CI 工作流（`.github/workflows/release.yml`）并行构建全部 5 个目标，每个打包包含 `config.yaml` + `skills/` + `README.md`，并创建 GitHub Release 供下载。
+
+本地打包用 `packages.ps1` 脚本：
+
+```pwsh
+pwsh -File packages.ps1 -Version 0.1.0-rc.6
+# → release-packages/dsh-lite-0.1.0-rc.6-{平台}.{zip|tar.gz}
+```
+
+完整发布流程见 [RELEASE.md](RELEASE.md)。
 
 ## 运行
 

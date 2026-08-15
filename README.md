@@ -208,7 +208,7 @@ User input
 ## Build
 
 ```sh
-# Prerequisites: Rust 1.75+, optionally cargo-zigbuild + zig for cross-compilation
+# Prerequisites: Rust 1.75+, cargo-zigbuild + zig for cross-compilation
 
 # Native build
 cargo build --release
@@ -218,16 +218,40 @@ cargo build --release
 cargo zigbuild --release --target aarch64-unknown-linux-musl
 cargo zigbuild --release --target armv7-unknown-linux-musleabihf
 cargo zigbuild --release --target armv7-unknown-linux-musleabi
+cargo zigbuild --release --target x86_64-unknown-linux-musl
 ```
 
 Supported targets:
 
-| Target | Architecture |
-|---|---|
-| `x86_64-unknown-linux-musl` | x86_64 (development) |
-| `aarch64-unknown-linux-musl` | ARM 64-bit |
-| `armv7-unknown-linux-musleabihf` | ARMv7 hard-float |
-| `armv7-unknown-linux-musleabi` | ARMv7 soft-float |
+| Target | Platform | Binary size |
+|---|---|---|
+| `x86_64-pc-windows-msvc` | Windows x86_64 | ~2.7 MB |
+| `aarch64-unknown-linux-musl` | Linux ARM64 (static) | ~2.7 MB |
+| `armv7-unknown-linux-musleabihf` | Linux ARMv7 hard-float (static) | ~2.9 MB |
+| `armv7-unknown-linux-musleabi` | Linux ARMv7 soft-float (static) | ~2.9 MB |
+| `x86_64-unknown-linux-musl` | Linux x86_64 (static) | ~3.2 MB |
+
+All Linux binaries are statically linked (musl) — no runtime dependencies. See [cross/README.md](cross/README.md) for toolchain setup.
+
+## Release
+
+Push a version tag to trigger automated multi-platform builds and GitHub Release:
+
+```sh
+git tag v0.1.0-rc.6
+git push origin v0.1.0-rc.6
+```
+
+The CI workflow (`.github/workflows/release.yml`) builds all 5 targets in parallel, packages each with `config.yaml` + `skills/` + `README.md`, and creates a GitHub Release with downloadable archives.
+
+For local packaging, use the `packages.ps1` script:
+
+```pwsh
+pwsh -File packages.ps1 -Version 0.1.0-rc.6
+# → release-packages/dsh-lite-0.1.0-rc.6-{platform}.{zip|tar.gz}
+```
+
+See [RELEASE.md](RELEASE.md) for the full release workflow.
 
 ## Run
 
