@@ -96,6 +96,9 @@ pub enum SessionEvent {
     ToolResult { call_id: CallId, content: String, is_error: bool },
     TodoWrite { todos: Vec<String> },
     RequestHeader { model: String },
+    /// A compaction summary that replaced older events. Derives into a
+    /// single User message containing the summary text.
+    CompactionSummary { summary: String },
 }
 
 /// Why a turn ended. Merge-extensible: new variants don't break old logs.

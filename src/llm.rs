@@ -350,7 +350,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
             stream: true,
             max_tokens: request.max_tokens,
             temperature: request.temperature,
-            reasoning_effort: if request.think { Some("high".to_string()) } else { Some("none".to_string()) },
+            reasoning_effort: if request.think { Some("high".to_string()) } else { None },
         }
     }
 

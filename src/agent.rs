@@ -246,7 +246,7 @@ impl AgentLoop {
         }
 
         // Check if compaction is needed before building the request.
-        let messages = self.session.derive_messages();
+        let mut messages = self.session.derive_messages();
         let message_count = messages.len();
         if crate::compaction::needs_compaction(
             message_count,
@@ -271,7 +271,12 @@ impl AgentLoop {
                     result.turns_compacted,
                     result.summary.len()
                 );
-                // TODO: replace older messages in the session log with the summary.
+                // Replace older events with the summary, keeping recent events.
+                let keep_events = self.keep_recent_turns * 6;
+                self.session.apply_compaction(result.summary, keep_events);
+                // Re-derive messages after compaction for the LLM request.
+                messages = self.session.derive_messages();
+                log::info!("Post-compaction message count: {}", messages.len());
             }
         }
 

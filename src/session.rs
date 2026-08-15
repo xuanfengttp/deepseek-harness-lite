@@ -139,6 +139,15 @@ impl SessionLog {
                 SessionEvent::ToolResult { call_id, content, is_error } => {
                     pending_tool_results.push((call_id.clone(), content.clone(), *is_error));
                 }
+                SessionEvent::CompactionSummary { summary } => {
+                    // Flush pending tool results, then emit summary as a user message.
+                    for (call_id, content, is_error) in pending_tool_results.drain(..) {
+                        messages.push(Message::Tool { call_id, content, is_error });
+                    }
+                    messages.push(Message::User {
+                        content: format!("[Previous conversation summary]\n{summary}"),
+                    });
+                }
                 _ => {}
             }
         }
@@ -154,6 +163,40 @@ impl SessionLog {
     /// Iterate over all in-memory events (for trajectory / persistence).
     pub fn events(&self) -> impl Iterator<Item = &SessionEvent> {
         self.events.iter()
+    }
+
+    /// Apply compaction: replace older events with a summary message.
+    ///
+    /// Takes a summary string and the number of recent events to keep.
+    /// All older events are discarded and replaced with a single
+    /// `CompactionSummary` event containing the summary text.
+    /// The `keep_recent` most recent events are preserved.
+    pub fn apply_compaction(&mut self, summary: String, keep_recent: usize) {
+        if self.events.len() <= keep_recent {
+            return; // Not enough events to compact.
+        }
+
+        // Collect the recent events to keep.
+        let recent: Vec<SessionEvent> = self.events
+            .iter()
+            .rev()
+            .take(keep_recent)
+            .rev()
+            .cloned()
+            .collect();
+
+        // Clear and rebuild: summary first, then recent events.
+        self.events.clear();
+        self.events.push_back(SessionEvent::CompactionSummary { summary });
+        for event in recent {
+            self.events.push_back(event);
+        }
+
+        log::info!(
+            "Compaction applied: {} events → 1 summary + {} recent",
+            self.events.len(),
+            keep_recent
+        );
     }
 
     /// Current turn number.
@@ -365,5 +408,46 @@ mod tests {
         log.append(SessionEvent::UserMessage { content: "This is a test message with enough characters".into() });
         let tokens = log.estimated_tokens();
         assert!(tokens > 0);
+    }
+
+    #[test]
+    fn apply_compaction_replaces_old_events() {
+        let mut log = SessionLog::new(128);
+        // Add 10 user messages.
+        for i in 0..10 {
+            log.append(SessionEvent::UserMessage { content: format!("msg {i}") });
+        }
+        assert_eq!(log.len(), 10);
+
+        // Compact: keep 3 recent, replace rest with summary.
+        log.apply_compaction("Summary of old messages".into(), 3);
+
+        // Should have: 1 summary + 3 recent = 4 events.
+        assert_eq!(log.len(), 4);
+
+        // Derived messages: summary (as User) + 3 recent User messages = 4.
+        let msgs = log.derive_messages();
+        assert_eq!(msgs.len(), 4);
+        // First message should be the summary.
+        if let Message::User { content } = &msgs[0] {
+            assert!(content.contains("Summary of old messages"));
+        } else {
+            panic!("Expected first message to be summary User message");
+        }
+        // Last 3 should be msg 7, 8, 9.
+        if let Message::User { content } = &msgs[3] {
+            assert_eq!(content, "msg 9");
+        } else {
+            panic!("Expected last message to be msg 9");
+        }
+    }
+
+    #[test]
+    fn apply_compaction_noop_when_few_events() {
+        let mut log = SessionLog::new(128);
+        log.append(SessionEvent::UserMessage { content: "only one".into() });
+        log.apply_compaction("summary".into(), 5);
+        // Should not compact (only 1 event, keep 5).
+        assert_eq!(log.len(), 1);
     }
 }
