@@ -662,7 +662,8 @@ async fn handle_chat(
 
     let llm = crate::llm::LlmClient::new(&config.model);
     let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model)
-        .with_compaction(config.compaction.threshold, config.compaction.keep_recent_turns);
+        .with_compaction(config.compaction.threshold, config.compaction.keep_recent_turns)
+        .with_custom_prompt(config.prompt.custom.clone());
 
     // Create SSE stream.
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<LoopEvent>(128);

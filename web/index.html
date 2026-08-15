@@ -914,6 +914,18 @@ body {
               <span class="config-status" id="compaction-config-status" style="margin-left:10px"></span>
             </div>
           </div>
+          <!-- Custom system prompt -->
+          <div class="setting-row">
+            <div class="section-title" data-i18n="custom_prompt">系统提示词</div>
+            <div class="section-desc" data-i18n="custom_prompt_hint">自定义系统提示词，注入到角色和规则之间。支持 {{cwd}} 和 {{model}} 变量。留空则不注入。修改后即时生效。</div>
+            <div style="margin-top:10px">
+              <textarea class="setting-input" id="cfg-custom-prompt" rows="4" placeholder="例如：你是 ACME 公司的网络运维助手，始终用中文回答。" style="width:100%;resize:vertical;font-family:var(--font-code);font-size:13px;line-height:1.5;min-height:80px"></textarea>
+            </div>
+            <div style="margin-top:10px">
+              <button class="btn btn-primary" onclick="saveCustomPrompt()" data-i18n="save">保存</button>
+              <span class="config-status" id="custom-prompt-status" style="margin-left:10px"></span>
+            </div>
+          </div>
           <!-- Config file path -->
           <div class="setting-row">
             <div class="setting-label" data-i18n="config_path">配置文件路径</div>
@@ -2203,6 +2215,11 @@ async function loadConfig() {
         updateKeepLabel(keepEl.value);
       }
     }
+    // Load custom system prompt
+    if (cfg.prompt) {
+      const promptEl = document.getElementById('cfg-custom-prompt');
+      if (promptEl) promptEl.value = cfg.prompt.custom || '';
+    }
     // Load SSH devices
     renderSshDevices(cfg.ssh && cfg.ssh.targets ? cfg.ssh.targets : []);
   } catch(e) {
@@ -2444,6 +2461,19 @@ async function saveCompactionConfig() {
   }
 }
 
+async function saveCustomPrompt() {
+  const text = document.getElementById('cfg-custom-prompt').value || '';
+  const cfg = { prompt: { custom: text } };
+  try {
+    await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
+    const statusEl = document.getElementById('custom-prompt-status');
+    if (statusEl) { statusEl.textContent = '✓ 已保存，即时生效'; statusEl.className = 'config-status ok'; }
+  } catch(e) {
+    const statusEl = document.getElementById('custom-prompt-status');
+    if (statusEl) { statusEl.textContent = '✗ 保存失败: ' + e.message; statusEl.className = 'config-status err'; }
+  }
+}
+
 function showStatusMsg(elId, msg, type) {
   const el = document.getElementById(elId);
   if (!el) return;
@@ -2641,6 +2671,7 @@ const I18N = {
     tool_file_search:'文件搜索', tool_file_search_hint:'Glob 模式文件搜索',
     tool_memory:'记忆', tool_memory_hint:'长期 KV 存储（读/写/检索）',
     config_path:'配置文件路径', config_path_hint:'配置文件的加载位置。默认在可执行文件旁。修改后重启生效。',
+    custom_prompt:'系统提示词', custom_prompt_hint:'自定义系统提示词，注入到角色和规则之间。支持 {{cwd}} 和 {{model}} 变量。留空则不注入。修改后即时生效。',
     change:'修改',
     saved_restart:'已保存，对话时即时生效。', save_failed:'保存失败：',
     language_hint:'选择界面语言。',
@@ -2673,6 +2704,7 @@ const I18N = {
     tool_file_search:'File Search', tool_file_search_hint:'Glob-pattern file search',
     tool_memory:'Memory', tool_memory_hint:'Long-term KV store (read/write/recall)',
     config_path:'Config File Path', config_path_hint:'Where the config file is loaded from. Default: next to the executable. Changes apply after restart.',
+    custom_prompt:'System Prompt', custom_prompt_hint:'Custom system prompt injected between persona and behavior rules. Supports {{cwd}} and {{model}} variables. Leave empty to omit. Takes effect immediately.',
     change:'Change',
     saved_restart:'Saved. Takes effect on next message.', save_failed:'Save failed: ',
     language_hint:'Choose the interface language.',

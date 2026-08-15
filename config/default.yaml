@@ -52,6 +52,12 @@ compaction:
 skill:
   dir: "skills"
 
+# Custom system prompt — injected between persona and behavior rules.
+# Supports {{cwd}} and {{model}} interpolation. Leave empty to omit.
+# Example: "You are a network operations assistant for ACME Corp. Always respond in Chinese."
+prompt:
+  custom: ""
+
 trajectory:
   enabled: false
 

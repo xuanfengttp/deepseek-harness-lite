@@ -159,6 +159,9 @@ pub struct Config {
     pub skill: SkillConfig,
     pub trajectory: TrajectoryConfig,
     pub tools: ToolsConfig,
+    /// Optional custom system prompt text injected into the prompt assembly.
+    #[serde(default)]
+    pub prompt: PromptConfig,
     /// Optional SSH target presets for persistent device sessions.
     #[serde(default)]
     pub ssh: SshConfig,
@@ -231,6 +234,14 @@ pub struct SkillConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct TrajectoryConfig {
     pub enabled: bool,
+}
+
+/// Custom system prompt injected between persona and behavior rules.
+/// Empty string = no custom section. Content supports {{cwd}}/{{model}} interpolation.
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
+pub struct PromptConfig {
+    #[serde(default)]
+    pub custom: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

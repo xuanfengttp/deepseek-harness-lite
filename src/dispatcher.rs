@@ -39,6 +39,7 @@ pub struct Dispatcher {
     context_window: usize,
     compaction_threshold: f32,
     keep_recent_turns: usize,
+    custom_prompt: String,
 }
 
 impl Dispatcher {
@@ -58,6 +59,7 @@ impl Dispatcher {
             context_window: model_config.context_window,
             compaction_threshold: 0.7,
             keep_recent_turns: 3,
+            custom_prompt: String::new(),
         }
     }
 
@@ -65,6 +67,12 @@ impl Dispatcher {
     pub fn with_compaction(mut self, threshold: f32, keep_recent: usize) -> Self {
         self.compaction_threshold = threshold;
         self.keep_recent_turns = keep_recent;
+        self
+    }
+
+    /// Set custom system prompt from config.
+    pub fn with_custom_prompt(mut self, prompt: String) -> Self {
+        self.custom_prompt = prompt;
         self
     }
 
@@ -112,7 +120,8 @@ impl Dispatcher {
             temperature: self.temperature,
         })
         .with_hooks(hooks)
-        .with_compaction(self.compaction_threshold, self.keep_recent_turns);
+        .with_compaction(self.compaction_threshold, self.keep_recent_turns)
+        .with_custom_prompt(self.custom_prompt.clone());
 
         let result = agent_loop.run_turn(user_message, skill, event_tx).await;
 

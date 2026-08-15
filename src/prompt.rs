@@ -40,22 +40,25 @@ pub const ORDER_IDENTITY: i32 = -100;
 pub const ORDER_PERSONA: i32 = 0;
 pub const ORDER_RULES: i32 = 10;
 pub const ORDER_TOOLS: i32 = 100;
+pub const ORDER_CUSTOM: i32 = 5;
 
 /// Universal behavior rules for all agents (order=10).
 /// Short, high-signal rules that prevent the most common small-model mistakes.
 const BEHAVIOR_RULES: &str = "## Rules\n\n- Check command exit codes; investigate failures before proceeding.\n- Verify facts with tools; do not guess or fabricate.\n- Be concise; answer the question directly.";
 
-/// Build prompt sections from a skill and available tools.
+/// Build prompt sections from a skill, available tools, and optional custom prompt.
 ///
 /// Returns dynamic sections that `assemble()` will sort and join.
 /// The layered design mirrors dsh's section-based architecture:
 ///   1. Identity (fixed, ~20 tokens)
 ///   2. Persona (skill body, variable)
-///   3. Behavior rules (fixed, ~80 tokens)
-///   4. Tool guidance (per-tool behavior rules, ~15 tokens/tool)
+///   3. Custom prompt (user-defined, order=5, between persona and rules)
+///   4. Behavior rules (fixed, ~80 tokens)
+///   5. Tool guidance (per-tool behavior rules, ~15 tokens/tool)
 pub fn build_sections(
     skill: &Skill,
     all_tools: &[ToolDefinition],
+    custom_prompt: &str,
 ) -> (Vec<PromptSection>, Vec<ToolDefinition>) {
     let mut sections: Vec<PromptSection> = Vec::new();
 
@@ -75,14 +78,24 @@ pub fn build_sections(
         });
     }
 
-    // Layer 3: Behavior rules (order=10, always present, ~80 tokens).
+    // Layer 3: Custom system prompt (order=5, user-defined from settings panel).
+    // Injected between persona and behavior rules. Supports {{cwd}}/{{model}}.
+    if !custom_prompt.is_empty() {
+        sections.push(PromptSection {
+            name: "custom-prompt".into(),
+            order: ORDER_CUSTOM,
+            text: custom_prompt.into(),
+        });
+    }
+
+    // Layer 4: Behavior rules (order=10, always present, ~80 tokens).
     sections.push(PromptSection {
         name: "behavior-rules".into(),
         order: ORDER_RULES,
         text: BEHAVIOR_RULES.into(),
     });
 
-    // Layer 4: Tool guidance (order=100, one behavior rule per allowed tool).
+    // Layer 5: Tool guidance (order=100, one behavior rule per allowed tool).
     // Uses `guidance` (HOW to use) not `description` (WHAT it does).
     // Description stays in the tool schema sent separately to the LLM.
     let allowed_tools = filter_tools(all_tools, &skill.tools_allow);
@@ -133,13 +146,13 @@ pub fn assemble_sections(
     AssembledPrompt { system, tools }
 }
 
-/// Assemble the system prompt from the active skill and available tools.
+/// Assemble the system prompt from the active skill, available tools, and custom prompt.
 ///
-/// Convenience function: builds sections from skill + tools, then assembles.
-/// This preserves backward compatibility with the original assemble() signature.
+/// Convenience function: builds sections from skill + tools + custom, then assembles.
 pub fn assemble(
     skill: &Skill,
     all_tools: &[ToolDefinition],
+    custom_prompt: &str,
     extra_variables: &HashMap<String, String>,
 ) -> AssembledPrompt {
     // Merge variables: skill variables first, then extras override.
@@ -148,7 +161,7 @@ pub fn assemble(
         vars.insert(k.clone(), v.clone());
     }
 
-    let (sections, allowed_tools) = build_sections(skill, all_tools);
+    let (sections, allowed_tools) = build_sections(skill, all_tools, custom_prompt);
     assemble_sections(sections, allowed_tools, &vars)
 }
 
@@ -212,7 +225,7 @@ mod tests {
             make_tool("file_read", "Read a file"),
             make_tool("file_write", "Write a file"),
         ];
-        let prompt = assemble(&skill, &tools, &HashMap::new());
+        let prompt = assemble(&skill, &tools, "", &HashMap::new());
         // Persona present.
         assert!(prompt.system.contains("diagnostic agent"));
         // Tool guidance uses behavior rules (guidance), not descriptions.
@@ -226,7 +239,7 @@ mod tests {
     #[test]
     fn includes_harness_identity_and_rules() {
         let skill = make_skill("diag", "You are a diagnostic agent.", vec![]);
-        let prompt = assemble(&skill, &[], &HashMap::new());
+        let prompt = assemble(&skill, &[], "", &HashMap::new());
         // Identity section (order=-100) should be present.
         assert!(prompt.system.contains("You are an AI agent."));
         assert!(prompt.system.contains("{{cwd}}")); // uninterpolated when no vars provided
@@ -246,7 +259,7 @@ mod tests {
     fn interpolates_variables() {
         let mut skill = make_skill("diag", "Device model: {{device_model}}", vec![]);
         skill.variables.insert("device_model".into(), "AX-200".into());
-        let prompt = assemble(&skill, &[], &HashMap::new());
+        let prompt = assemble(&skill, &[], "", &HashMap::new());
         assert!(prompt.system.contains("AX-200"));
         assert!(!prompt.system.contains("{{device_model}}"));
     }
@@ -256,7 +269,7 @@ mod tests {
         let skill = make_skill("diag", "You are a diagnostic agent.", vec![]);
         let mut extra = HashMap::new();
         extra.insert("cwd".into(), "/tmp/work".into());
-        let prompt = assemble(&skill, &[], &extra);
+        let prompt = assemble(&skill, &[], "", &extra);
         assert!(prompt.system.contains("/tmp/work"));
         assert!(!prompt.system.contains("{{cwd}}"));
     }
@@ -265,7 +278,7 @@ mod tests {
     fn empty_allow_list_returns_all_tools() {
         let skill = make_skill("diag", "body", vec![]);
         let tools = vec![make_tool("shell", "x"), make_tool("file_read", "y")];
-        let prompt = assemble(&skill, &tools, &HashMap::new());
+        let prompt = assemble(&skill, &tools, "", &HashMap::new());
         assert_eq!(prompt.tools.len(), 2);
     }
 

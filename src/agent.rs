@@ -82,6 +82,8 @@ pub struct AgentLoop {
     compaction_threshold: f32,
     /// Number of recent turns to keep during compaction.
     keep_recent_turns: usize,
+    /// Custom system prompt from config (injected between persona and rules).
+    custom_prompt: String,
     /// Step hooks — control execution flow (strategy, compaction, etc.).
     hooks: Vec<Box<dyn StepHook>>,
 }
@@ -103,6 +105,7 @@ impl AgentLoop {
             context_window: model_config.context_window,
             compaction_threshold: 0.7,
             keep_recent_turns: 3,
+            custom_prompt: String::new(),
             hooks: Vec::new(),
         }
     }
@@ -117,6 +120,12 @@ impl AgentLoop {
     pub fn with_compaction(mut self, threshold: f32, keep_recent: usize) -> Self {
         self.compaction_threshold = threshold;
         self.keep_recent_turns = keep_recent;
+        self
+    }
+
+    /// Set custom system prompt from config.
+    pub fn with_custom_prompt(mut self, prompt: String) -> Self {
+        self.custom_prompt = prompt;
         self
     }
 
@@ -145,7 +154,7 @@ impl AgentLoop {
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| ".".into()));
         runtime_vars.insert("model".into(), self.model.clone());
-        let assembled = prompt::assemble(skill, &all_tools, &runtime_vars);
+        let assembled = prompt::assemble(skill, &all_tools, &self.custom_prompt, &runtime_vars);
 
         // Loop: steps continue as long as hooks say Continue.
         loop {

@@ -175,7 +175,8 @@ async fn async_main() -> ExitCode {
     let session = session_mgr.take_active().unwrap_or_else(|| SessionLog::new(512));
     let llm = LlmClient::new(&config.model);
     let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model)
-        .with_compaction(config.compaction.threshold, config.compaction.keep_recent_turns);
+        .with_compaction(config.compaction.threshold, config.compaction.keep_recent_turns)
+        .with_custom_prompt(config.prompt.custom.clone());
 
     // If a prompt was passed on the CLI, run one turn immediately.
     let cli_prompt: Option<String> = env::args().nth(1).filter(|a| !a.starts_with('-'));
