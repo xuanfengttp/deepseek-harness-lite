@@ -1527,10 +1527,8 @@ function handleEvent(event, showTraj) {
         // Add ASSISTANT trajectory row showing the model's reasoning/output
         addTrajCell('message', 'ASSISTANT', truncate(event.content, 80), '');
       }
-      if (event.tool_calls) event.tool_calls.forEach(tc => {
-        addTrajCell('tool', 'TOOL', tc.name, JSON.stringify(tc.arguments,null,2));
-        addChatToolCall(tc.name, JSON.stringify(tc.arguments,null,2), false);
-      });
+      // Do NOT create tool call cards here — the tool_call events that follow
+      // will create them in the correct order with matching tool_result events.
       // Track LLM time: step_start → assistant_message
       if (sessionStats.stepStartTime) {
         sessionStats.llmMs += Date.now() - sessionStats.stepStartTime;

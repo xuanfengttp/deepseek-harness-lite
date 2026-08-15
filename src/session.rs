@@ -83,23 +83,31 @@ impl SessionLog {
 
     /// Derive the model-facing message history from surface events.
     ///
-    /// Only `UserMessage`, `AssistantMessage`, and `ToolResult` contribute.
-    /// `AssistantChunk` is trajectory-only (raw stream fidelity for UI) and
-    /// does NOT appear in derived history — the assembled `AssistantMessage`
-    /// carries the full content.
+    /// Events arrive in chronological order: UserMessage, AssistantMessage,
+    /// ToolCall, ToolResult, then another AssistantMessage (next step), etc.
+    /// Tool results must follow the assistant message that triggered them,
+    /// in the correct order — NOT all accumulated at the end.
     pub fn derive_messages(&self) -> Vec<Message> {
         let mut messages = Vec::new();
-        // Collect pending tool results to attach after the next assistant message
-        // that triggered them. The model expects tool results as separate messages
-        // following the assistant message containing the tool calls.
+        // Collect tool results that belong to the current assistant step.
+        // They are flushed as Tool messages before the next User/Assistant message.
         let mut pending_tool_results: Vec<(CallId, String, bool)> = Vec::new();
 
         for event in &self.events {
             match event {
                 SessionEvent::UserMessage { content } => {
+                    // Flush any pending tool results before the next user message.
+                    for (call_id, content, is_error) in pending_tool_results.drain(..) {
+                        messages.push(Message::Tool { call_id, content, is_error });
+                    }
                     messages.push(Message::User { content: content.clone() });
                 }
                 SessionEvent::AssistantMessage { content, tool_calls, .. } => {
+                    // Flush tool results from the PREVIOUS step before this new
+                    // assistant message (tool results belong between steps).
+                    for (call_id, content, is_error) in pending_tool_results.drain(..) {
+                        messages.push(Message::Tool { call_id, content, is_error });
+                    }
                     messages.push(Message::Assistant {
                         content: content.clone(),
                         tool_calls: tool_calls.clone(),
@@ -112,7 +120,7 @@ impl SessionLog {
             }
         }
 
-        // Append accumulated tool results as Tool messages.
+        // Flush any remaining tool results (e.g. after the last assistant step).
         for (call_id, content, is_error) in pending_tool_results {
             messages.push(Message::Tool { call_id, content, is_error });
         }
@@ -262,5 +270,54 @@ mod tests {
         let msgs = log.derive_messages();
         assert_eq!(msgs.len(), 2);
         assert!(matches!(msgs[1], Message::Tool { .. }));
+    }
+
+    #[test]
+    fn tool_results_interleaved_between_steps() {
+        // Multi-step: assistant step1 → tool result → assistant step2 → tool result → assistant final.
+        // Tool results must appear AFTER the assistant that triggered them, BEFORE the next assistant.
+        let mut log = SessionLog::new(128);
+        log.begin_turn();
+        log.append(SessionEvent::UserMessage { content: "do two things".into() });
+        log.begin_step();
+        log.append(SessionEvent::AssistantMessage {
+            content: "doing first thing".into(),
+            tool_calls: vec![ToolCall { id: "c1".into(), name: "tool_a".into(), arguments: serde_json::json!({}) }],
+            usage: None, ttft_ms: 0, decode_ms: 0,
+        });
+        log.append(SessionEvent::ToolResult { call_id: "c1".into(), content: "result_a".into(), is_error: false });
+        log.end_step();
+        log.begin_step();
+        log.append(SessionEvent::AssistantMessage {
+            content: "doing second thing".into(),
+            tool_calls: vec![ToolCall { id: "c2".into(), name: "tool_b".into(), arguments: serde_json::json!({}) }],
+            usage: None, ttft_ms: 0, decode_ms: 0,
+        });
+        log.append(SessionEvent::ToolResult { call_id: "c2".into(), content: "result_b".into(), is_error: false });
+        log.end_step();
+        log.begin_step();
+        log.append(SessionEvent::AssistantMessage {
+            content: "done".into(),
+            tool_calls: vec![],
+            usage: None, ttft_ms: 0, decode_ms: 0,
+        });
+        log.end_step();
+        log.end_turn(TurnEndReason::Completed);
+
+        let msgs = log.derive_messages();
+        // Expected order:
+        // 0: User
+        // 1: Assistant("doing first thing", [c1])
+        // 2: Tool(c1, "result_a")
+        // 3: Assistant("doing second thing", [c2])
+        // 4: Tool(c2, "result_b")
+        // 5: Assistant("done")
+        assert_eq!(msgs.len(), 6);
+        assert!(matches!(msgs[0], Message::User { .. }));
+        assert!(matches!(msgs[1], Message::Assistant { .. }));
+        assert!(matches!(msgs[2], Message::Tool { .. }));
+        assert!(matches!(msgs[3], Message::Assistant { .. }));
+        assert!(matches!(msgs[4], Message::Tool { .. }));
+        assert!(matches!(msgs[5], Message::Assistant { .. }));
     }
 }
