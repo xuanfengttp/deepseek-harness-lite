@@ -1,6 +1,6 @@
 [package]
 name = "deepseek-harness-lite"
-version = "0.1.0"
+version = "0.1.0-rc.6"
 edition = "2021"
 description = "Lightweight embedded agent harness for network element devices"
 license = "MIT"
