@@ -165,6 +165,7 @@ impl Dispatcher {
 
                     let request = crate::llm::LlmRequest {
                         model: self.model.clone(),
+                        system: String::new(),
                         messages: judge_messages,
                         tools: vec![],
                         max_tokens: self.max_tokens,

@@ -19,6 +19,8 @@ use tokio::sync::mpsc;
 /// Parameters for a single streaming completion request.
 pub struct LlmRequest {
     pub model: String,
+    /// System prompt (prepended to messages as a system-role message).
+    pub system: String,
     pub messages: Vec<Message>,
     pub tools: Vec<ToolDefinition>,
     pub max_tokens: usize,
@@ -287,37 +289,50 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
 
     /// Build the OpenAI-compatible request body from our internal types.
     fn build_request_body(&self, request: &LlmRequest) -> ChatCompletionRequest {
-        let messages: Vec<ApiMessage> = request.messages.iter().map(|m| match m {
-            Message::User { content } => ApiMessage {
-                role: "user",
-                content: content.clone(),
+        let mut messages: Vec<ApiMessage> = Vec::new();
+        // Prepend system message if non-empty (skill persona + tool guidance).
+        if !request.system.is_empty() {
+            messages.push(ApiMessage {
+                role: "system",
+                content: request.system.clone(),
                 tool_calls: None,
                 tool_call_id: None,
-            },
-            Message::Assistant { content, tool_calls } => ApiMessage {
-                role: "assistant",
-                content: content.clone(),
-                tool_calls: if tool_calls.is_empty() {
-                    None
-                } else {
-                    Some(tool_calls.iter().map(|tc| ApiToolCall {
-                        id: tc.id.clone(),
-                        kind: "function",
-                        function: ApiFunction {
-                            name: tc.name.clone(),
-                            arguments: tc.arguments.to_string(),
-                        },
-                    }).collect())
-                },
-                tool_call_id: None,
-            },
-            Message::Tool { call_id, content, .. } => ApiMessage {
-                role: "tool",
-                content: content.clone(),
-                tool_calls: None,
-                tool_call_id: Some(call_id.clone()),
-            },
-        }).collect();
+            });
+        }
+        // Append conversation messages.
+        for m in &request.messages {
+            match m {
+                Message::User { content } => messages.push(ApiMessage {
+                    role: "user",
+                    content: content.clone(),
+                    tool_calls: None,
+                    tool_call_id: None,
+                }),
+                Message::Assistant { content, tool_calls } => messages.push(ApiMessage {
+                    role: "assistant",
+                    content: content.clone(),
+                    tool_calls: if tool_calls.is_empty() {
+                        None
+                    } else {
+                        Some(tool_calls.iter().map(|tc| ApiToolCall {
+                            id: tc.id.clone(),
+                            kind: "function",
+                            function: ApiFunction {
+                                name: tc.name.clone(),
+                                arguments: tc.arguments.to_string(),
+                            },
+                        }).collect())
+                    },
+                    tool_call_id: None,
+                }),
+                Message::Tool { call_id, content, .. } => messages.push(ApiMessage {
+                    role: "tool",
+                    content: content.clone(),
+                    tool_calls: None,
+                    tool_call_id: Some(call_id.clone()),
+                }),
+            }
+        }
 
         let tools: Vec<ApiTool> = request.tools.iter().map(|t| ApiTool {
             kind: "function",

@@ -117,6 +117,7 @@ pub async fn compact(
 
     let request = LlmRequest {
         model: model.to_string(),
+        system: String::new(),
         messages: vec![
             Message::User {
                 content: format!("{summary_instruction}\n\n--- CONVERSATION TO SUMMARIZE ---\n\n{conversation_text}"),

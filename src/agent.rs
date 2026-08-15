@@ -151,6 +151,7 @@ impl AgentLoop {
             // Build and send the LLM request.
             let request = LlmRequest {
                 model: self.model.clone(),
+                system: assembled.system.clone(),
                 messages,
                 tools: assembled.tools.clone(),
                 max_tokens: self.max_tokens,
