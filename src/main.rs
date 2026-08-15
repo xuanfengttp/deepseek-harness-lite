@@ -20,6 +20,7 @@ mod dispatcher;
 mod tools;
 mod hooks;
 mod strategies;
+mod commands;
 
 use crate::types::*;
 use crate::session::SessionLog;
