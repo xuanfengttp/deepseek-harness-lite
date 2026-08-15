@@ -70,15 +70,15 @@ The append-only event log is the single source of truth for model context. `deri
 
 For small models with limited context windows, compaction is a core feature, not an optional add-on. When derived messages exceed a configurable threshold fraction of the context window, older turns are summarized into a single message using an independent context (the summary request does not include the conversation being summarized).
 
-The threshold is configurable in `config/default.toml`:
+The threshold is configurable in `config/default.yaml`:
 
-```toml
-[compaction]
-threshold = 0.7           # compact when messages exceed 70% of context_window
-keep_recent_turns = 4     # always keep the latest N turns unsummarized
+```yaml
+compaction:
+  threshold: 0.7           # compact when messages exceed 70% of context_window
+  keep_recent_turns: 4     # always keep the latest N turns unsummarized
 ```
 
-Changes take effect on the next chat request (hot-reload — no restart needed). The config editor in the web UI provides raw TOML editing for this and all other settings.
+Changes take effect on the next chat request (hot-reload — no restart needed). The web UI settings panel provides compaction sliders and a button to open the config file in the system editor.
 
 ### Two-layer memory
 
@@ -97,7 +97,6 @@ Changes take effect on the next chat request (hot-reload — no restart needed).
 | `memory_*` | Long-term memory read / write / recall |
 | `todo_write` | Task tracking for multi-step operations |
 | `subagent` | Delegate a sub-task to a child agent (zero parent context, maxDepth=3) |
-| `skill_creator` | AI-assisted skill file generation (workflow/todo/plan templates) |
 
 Tools are `ToolPlugin` trait implementations registered through `register_builtins()`. Adding a tool means implementing the trait + one registration line — no core code changes. Tools run through a 3-stage pipeline: **check** (permission + validation) → **execute** (with timeout) → **result** (truncation + normalization).
 
@@ -162,7 +161,6 @@ User input
 | `tools` | `ToolPlugin` trait + `ToolRegistry` + 3-stage execution pipeline | core/tools |
 | `commands` | `CommandPlugin` trait + built-in slash commands | interaction/commands |
 | `subagent` | `SubagentTool` — child agent delegation (zero parent context, maxDepth=3) | subagent capability |
-| `skill_creator` | `SkillCreatorTool` — AI-assisted skill file generation | (new) |
 | `ssh` | Persistent SSH sessions — background connection pool for network elements | (new) |
 | `policy` | Allow/deny permission checks | sandbox-policy |
 | `skill` | Declarative skill loading (YAML + MD) | skill/skill + skill-filesystem |
@@ -212,41 +210,42 @@ dsh-lite "check interface status"
 dsh-lite --skill interface-diagnostics "eth0 is down"
 ```
 
-The agent loads config from `config/default.toml`, scans `skills/` for skill
+The agent loads config from `config/default.yaml`, scans `skills/` for skill
 files, and dispatches requests through the active skill's mode.
 
 Configuration:
 
-```toml
-# config/default.toml
-[model]
-base_url = "http://127.0.0.1:8080/v1"
-model = "your-model"
-context_window = 8192
+```yaml
+# config/default.yaml
+model:
+  base_url: "http://127.0.0.1:8080/v1"
+  model: "your-model"
+  context_window: 8192
 
-[compaction]
-threshold = 0.7           # compact when messages exceed 70% of context_window
-keep_recent_turns = 4
+compaction:
+  threshold: 0.7
+  keep_recent_turns: 4
 
-[tools]
-ssh_exec = true            # enable the SSH tool
+tools:
+  ssh_exec: true
 
-[[ssh.targets]]            # pre-configured device targets (persistent sessions)
-name = "core-router"
-host = "192.168.1.1"
-port = 22
-user = "admin"
-password = "admin123"
+ssh:
+  targets:
+    - name: core-router
+      host: 192.168.1.1
+      port: 22
+      user: admin
+      password: admin123
 
-[skill]
-dir = "skills"
+skill:
+  dir: skills
 ```
 
-The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming). All config changes are hot-reloaded on the next chat request — no restart needed. The web UI's settings panel provides a raw TOML editor for live editing.
+The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming). All config changes are hot-reloaded on the next chat request — no restart needed. The config file can be opened in system editor via the settings panel.
 
 ## Project status
 
-The unified plugin化 architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**. All extension points are implemented and tested: `StepHook`, `ToolPlugin`, `PromptSection`, `CommandPlugin`, `SubagentTool`, `SkillCreatorTool`. 46 tests pass, 0 compiler warnings.
+The unified plugin化 architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**. All extension points are implemented and tested: `StepHook`, `ToolPlugin`, `PromptSection`, `CommandPlugin`, `SubagentTool`. 44 tests pass, 0 compiler warnings.
 
 | Phase | Content | Status |
 |---|---|---|
@@ -263,11 +262,11 @@ The unified plugin化 architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**
 | **Unified 4** | **CommandPlugin trait + unified slash commands** | **✅ Done** |
 | **Unified 5** | **SubagentTool — child agent delegation** | **✅ Done** |
 | **Unified 6** | **Compaction message replacement + think bug fix** | **✅ Done** |
-| **Unified 7** | **SkillCreatorTool — AI-assisted skill generation** | **✅ Done** |
+| **Unified 7** | **Skill creator skill file — AI-guided skill generation via plan-mode skill** | **✅ Done** |
 | **Post-7** | **Slash command autocomplete popup + compaction ratio config** | **✅ Done** |
 | P7 | SSH persistent interactive sessions | ✅ Done |
 | **Post-7+** | **Workflow+Subagent skill examples + compaction GUI slider + SSH tool toggle** | **✅ Done** |
-| P8 | Size + memory optimization | ✅ Verified (2.71 MB binary) |
+| P8 | Size + memory optimization | ✅ Verified (2.64 MB binary) |
 
 ### Slash command autocomplete
 

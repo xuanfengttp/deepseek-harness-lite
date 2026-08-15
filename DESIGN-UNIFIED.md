@@ -1,8 +1,9 @@
 # 统一插件化架构设计（兼容合一方案）
 
-> **实现状态：7 个阶段全部完成（✅）。** 46 个测试通过，0 个编译警告。
+> **实现状态：7 个阶段全部完成（✅）。** 44 个测试通过，0 个编译警告。
 > Phase 1-7 完成于 commit `38039a2eb7` → `8cfb24231c`；
-> 后续增强（斜杠命令弹窗 + 压缩比例可配置）完成于 `8c000b5a20`。
+> 后续增强（斜杠命令弹窗 + 压缩比例可配置）完成于 `8c000b5a20`；
+> 设置面板重设计 + YAML 配置 + skill_creator 转为 skill 文件完成于 `5fec787`。
 >
 > 目标：把原版 dsh 的"Everything is a Plugin"核心理念，适配到 Rust 嵌入式约束，
 > 同时保留 workflow 确定性 SOP 执行能力来提升准确率。
@@ -31,7 +32,7 @@
 - 系统提示 → `PromptSection` 动态注册
 - 斜杠命令 → `CommandPlugin` trait + `handle_command` 遍历插件列表
 - Agent loop → `Vec<Box<dyn StepHook>>`，5 个扩展点全部可用
-- 子 agent → `SubagentTool`（Phase 5），skill 生成 → `SkillCreatorTool`（Phase 7）
+- 子 agent → `SubagentTool`（Phase 5），skill 生成 → `skills/skill-creator.md`（plan 模式 skill 文件，Phase 7 重构后）
 
 ### 1.3 用户诉求
 - 需要确定性 SOP/workflow 提升执行准确率（部分场景是固定流程，不能让 LLM 自由发挥）
@@ -672,17 +673,20 @@ name: health-check
 description: 设备健康检查标准流程
 mode: workflow
 think: false
-tools_allow: [shell]
+tools:
+  allow: [shell]
+variables:
+  target: "192.168.1.1"
 steps:
   - id: ping
-    action: { tool: shell, args: { command: "ping -c 5 {{target}}" } }
+    tool: shell
+    args: { command: "ping -c 5 {{target}}" }
   - id: cpu
-    action: { tool: shell, args: { command: "top -bn1 | head -5" } }
+    tool: shell
+    args: { command: "top -bn1 | head -5" }
   - id: analyze
-    action:
-      tool: llm_judge
-      prompt: "分析设备健康状态，输出正常/警告/故障 + 原因"
-      input: "ping:\n{{steps.ping.result}}\n\ncpu:\n{{steps.cpu.result}}"
+    llm_judge: "分析设备健康状态，输出正常/警告/故障 + 原因"
+    input: "ping:\n{{steps.ping.result}}\n\ncpu:\n{{steps.cpu.result}}"
 ---
 设备健康检查 SOP。
 ```
@@ -757,11 +761,11 @@ steps:
 3. ✅ 修复 `think=false` 仍发 `reasoning_effort:"none"` 的 bug（改为省略字段，即 `None`）
 4. ✅ 验证：compaction 正常工作
 
-### Phase 7: Skill Creator — AI 辅助编写 skill ✅ commit `db0703e3ee`
-- ✅ `src/skill_creator.rs` — `SkillCreatorTool`（实现 `ToolPlugin`），主 agent 调用它生成新的 skill YAML 文件
-- ✅ 输入：skill 名称、描述、模式、步骤意图 → 输出：写入 `skills/` 目录的 `.md` 文件
-- ✅ 内置模板：workflow SOP 模板、plan 诊断模板、todo 引导模板（3 个模板生成器）
-- ✅ kebab-case 校验 + 防覆盖保护
+### Phase 7: Skill Creator — AI 辅助编写 skill ✅ commit `db0703e3ee` → 重构为 skill 文件 `5fec787`
+- ✅ ~~`src/skill_creator.rs` — `SkillCreatorTool`（实现 `ToolPlugin`）~~ → 已重构为 `skills/skill-creator.md`（plan 模式 skill 文件）
+- ✅ 主 agent 通过 `file_write` 工具直接写 `.md` 文件到 `skills/` 目录，不再依赖编译进二进制的代码工具
+- ✅ 内置模板：workflow SOP 模板、plan 诊断模板、todo 引导模板、subagent 编排模板（4 个模板在 skill body 中描述）
+- ✅ kebab-case 校验 + 防覆盖保护（由 skill body 中的检查清单指导 agent 执行）
 - ✅ 结合编写指南的规范，保证生成的 skill 与 StepHook 架构紧密配合
 - ✅ 依赖 Phase 1（StepHook）+ Phase 2（ToolPlugin）完成
 
@@ -784,10 +788,30 @@ steps:
 - 参考原版 dsh 的 `InputTriggerService` slash-menu 模式，用纯前端 JS 轻量实现
 
 **4. 压缩比例可配置**（验证，`8c000b5a20`）
-- `config/default.toml` 中 `[compaction] threshold = 0.7, keep_recent_turns = 4` 已存在
+- `config/default.yaml` 中 `compaction: { threshold: 0.7, keep_recent_turns: 4 }` 已存在
 - `handle_chat` 每次请求从磁盘重新读 config（`server.rs:595`），修改后即时生效（热重载）
 - 配置流：`config.compaction.threshold` → `Dispatcher::with_compaction()` → `AgentLoop::with_compaction()` → `run_llm_step()` 的 `needs_compaction()` 检查
-- Web UI 的配置编辑器（raw TOML textarea）可直接编辑此 section
+- Web UI 设置面板「通用」页提供压缩滑块，或点「打开配置文件」用系统编辑器编辑 YAML
+
+### 设置面板重设计 + YAML 配置 ✅ commit `1f61e94` → `5fec787`
+
+**1. 配置格式 TOML → YAML**
+- `Cargo.toml`：`toml = "0.8"` → `serde_yaml = "0.9"`
+- `config/default.toml` → `config/default.yaml`
+- 所有 `toml::from_str`/`toml::to_string` 改为 `serde_yaml::` 等价
+
+**2. 设置面板 3 页签重构**
+- 通用：语言（pill 选择器）+ 外观（cube）+ 统计栏 + 压缩滑块 + 配置文件路径
+- 模型：provider-centric 折叠卡片（参考原版 dsh ModelsSection），收起显示密钥状态圆点，编辑展开 API Key + 可折叠自定义设置
+- 工具：每个工具一行开关，SSH 开关展开设备管理 UI（添加/编辑/删除设备目标）
+
+**3. 全局「打开配置文件」按钮**
+- 弹窗 header 右上角，调用 `POST /api/config/open`，后端用系统编辑器打开 YAML 文件
+- 界面不再承载原始配置编辑功能
+
+**4. skill_creator 从代码工具改为 skill 文件**
+- 删除 `src/skill_creator.rs`（465 行），移除所有注册和 policy 引用
+- 新增 `skills/skill-creator.md`（plan 模式 skill），agent 通过 `file_write` 生成 skill 文件
 
 ## 5. Skill 编写指南
 
@@ -810,61 +834,58 @@ name: interface-health-check
 description: 网络接口健康检查标准 SOP（ping + 接口状态 + 错误计数 + 分析）
 mode: workflow
 think: false
-tools_allow: [shell]
+tools:
+  allow: [shell]
 variables:
   target: "192.168.1.1"
   iface: "eth0"
 steps:
-  # Tool 步：确定执行，不调 LLM
+  # Tool 步：确定执行，不调 LLM（扁平结构，不要嵌套 action:）
   - id: ping
-    action:
-      tool: shell
-      args:
-        command: "ping -c 10 {{target}}"
+    tool: shell
+    args:
+      command: "ping -c 10 {{target}}"
     # when 条件：可选，满足才执行
     when: "steps.init.result length > 0"
 
   - id: interface_status
-    action:
-      tool: shell
-      args:
-        command: "ip link show {{iface}}"
+    tool: shell
+    args:
+      command: "ip link show {{iface}}"
 
   - id: error_counters
-    action:
-      tool: shell
-      args:
-        command: "ip -s link show {{iface}}"
+    tool: shell
+    args:
+      command: "ip -s link show {{iface}}"
 
-  # LlmJudge 步：单次 LLM 调用，独立上下文
+  # LlmJudge 步：单次 LLM 调用，独立上下文（llm_judge 直接在 step 下）
   - id: analyze
-    action:
-      tool: llm_judge
-      prompt: |
-        你是网络诊断专家。分析以下接口健康数据，输出：
-        1. 状态判定：正常 / 警告 / 故障
-        2. 关键指标摘要
-        3. 如有异常，说明可能原因和建议操作
-      input: |
-        Ping 结果:
-        {{steps.ping.result}}
+    llm_judge: |
+      你是网络诊断专家。分析以下接口健康数据，输出：
+      1. 状态判定：正常 / 警告 / 故障
+      2. 关键指标摘要
+      3. 如有异常，说明可能原因和建议操作
+    input: |
+      Ping 结果:
+      {{steps.ping.result}}
 
-        接口状态:
-        {{steps.interface_status.result}}
+      接口状态:
+      {{steps.interface_status.result}}
 
-        错误计数:
-        {{steps.error_counters.result}}
+      错误计数:
+      {{steps.error_counters.result}}
 ---
 网络接口健康检查 SOP。按步骤执行，最后由 LLM 综合分析。
 ```
 
 **编写要点**：
-- `tools_allow` 精确限定：只列该 SOP 用到的工具，减少 LLM 误调用的可能
+- `tools.allow` 精确限定：只列该 SOP 用到的工具，减少 LLM 误调用的可能
 - `variables` 定义可变参数：不同设备复用同一 SOP，只改变量
 - Tool 步的 `args` 支持 `{{var}}` 和 `{{steps.xxx.result}}` 插值
 - `when` 条件支持 `contains`、`length >`、`==`、`!=`、`and`、`or`、`not`
-- `llm_judge` 的 `prompt` 要明确输出格式，提高分析准确率
+- `llm_judge` 的 prompt 要明确输出格式，提高分析准确率
 - `think: false` 因为 workflow 不需要 LLM 推理（judge 步除外）
+- **步骤用扁平结构**（`tool:` / `llm_judge:` 直接在 step 下），不要用 `action: { tool: }` 嵌套结构
 
 ### 5.3 Plan 模式编写规范
 
@@ -876,7 +897,8 @@ name: fault-diagnosis
 description: 网络故障自主诊断（未知问题根因分析）
 mode: plan
 think: true
-tools_allow: [shell, file_read, memory_read, memory_write]
+tools:
+  allow: [shell, file_read, memory_read, memory_write]
 ---
 你是高级网络诊断工程师，负责网元设备的故障根因分析。
 
@@ -906,7 +928,7 @@ tools_allow: [shell, file_read, memory_read, memory_write]
 
 **编写要点**：
 - `think: true` 让 LLM 开启推理模式，提高复杂问题分析质量
-- `tools_allow` 给足工具，让 LLM 有探索空间
+- `tools.allow` 给足工具，让 LLM 有探索空间
 - persona body 要写**方法论**而非步骤（plan 模式 LLM 自主决定步骤）
 - 明确输出格式，减少 LLM 跑偏
 
@@ -920,21 +942,24 @@ name: config-audit
 description: 设备配置审计（按检查项逐项核查）
 mode: todo
 think: false
-tools_allow: [shell, file_read]
+tools:
+  allow: [shell, file_read]
 steps:
   - id: check_hostname
-    action: { tool: shell, args: { command: "hostname" } }
+    tool: shell
+    args: { command: "hostname" }
   - id: check_routing
-    action: { tool: shell, args: { command: "ip route show" } }
+    tool: shell
+    args: { command: "ip route show" }
   - id: check_firewall
-    action: { tool: shell, args: { command: "iptables -L -n" } }
+    tool: shell
+    args: { command: "iptables -L -n" }
   - id: check_services
-    action: { tool: shell, args: { command: "systemctl list-units --state=running" } }
+    tool: shell
+    args: { command: "systemctl list-units --state=running" }
   - id: summarize
-    action:
-      tool: llm_judge
-      prompt: "汇总配置审计结果，标注不合规项"
-      input: "{{steps.check_hostname.result}}\n{{steps.check_routing.result}}\n{{steps.check_firewall.result}}\n{{steps.check_services.result}}"
+    llm_judge: "汇总配置审计结果，标注不合规项"
+    input: "{{steps.check_hostname.result}}\n{{steps.check_routing.result}}\n{{steps.check_firewall.result}}\n{{steps.check_services.result}}"
 ---
 设备配置审计 SOP。逐项检查后汇总。
 ```
@@ -976,7 +1001,7 @@ skill 可以被主 agent 通过 `subagent` 工具委托给子 agent 执行：
 
 2. **plan 的 persona 要给方法论**：不是"检查网络"，而是"分层排查→假设验证→范围收窄"
 
-3. **tools_allow 要精确**：workflow 只给用到的工具；plan 给足探索空间
+3. **tools.allow 要精确**：workflow 只给用到的工具；plan 给足探索空间
 
 4. **variables 参数化**：同一 SOP 复用到不同设备，只改变量不改步骤
 
@@ -1054,5 +1079,7 @@ skill 可以被主 agent 通过 `subagent` 工具委托给子 agent 执行：
 | Phase 7 | `db0703e3ee` | SkillCreatorTool — AI 辅助生成 skill |
 | 增强 | `8cfb24231c` | SubagentTool async 死锁修复 + 告警清零 |
 | 增强 | `8c000b5a20` | 斜杠命令弹窗 + 压缩比例可配置 |
+| 重构 | `1f61e94` | 设置面板 3 页签 + TOML→YAML 配置 + 打开配置文件 |
+| 重构 | `5fec787` | skill_creator 从代码工具改为 skill 文件 + SKILL-GUIDE 格式修正 |
 
-全部 7 个阶段 + 后续增强已完成。46 个测试通过，0 个编译警告。
+全部 7 个阶段 + 后续增强 + 重构已完成。44 个测试通过，0 个编译警告。

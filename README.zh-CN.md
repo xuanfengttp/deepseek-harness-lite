@@ -70,15 +70,15 @@ Append-only 事件日志是模型上下文的唯一真相来源。`derive_messag
 
 对于上下文窗口有限的小模型，压缩是核心特性，而非可选附加。当派生消息超过上下文窗口的可配置阈值比例时，较早的 turn 会被摘要为一条消息，使用**独立上下文**（摘要请求不包含被摘要的对话本身）。
 
-阈值在 `config/default.toml` 中可配置：
+阈值在 `config/default.yaml` 中可配置：
 
-```toml
-[compaction]
-threshold = 0.7           # 消息超过 context_window 的 70% 时触发压缩
-keep_recent_turns = 4     # 始终保留最近 N 个 turn 不被摘要
+```yaml
+compaction:
+  threshold: 0.7           # 消息超过 context_window 的 70% 时触发压缩
+  keep_recent_turns: 4     # 始终保留最近 N 个 turn 不被摘要
 ```
 
-修改后在下一个 chat 请求即时生效（热重载——无需重启）。Web UI 的设置面板提供原始 TOML 编辑器，可实时编辑此配置及所有其他设置。
+修改后在下一个 chat 请求即时生效（热重载——无需重启）。Web UI 设置面板「通用」页提供压缩滑块，或点「打开配置文件」用系统编辑器编辑。
 
 ### 两层记忆
 
@@ -97,7 +97,6 @@ keep_recent_turns = 4     # 始终保留最近 N 个 turn 不被摘要
 | `memory_*` | 长期记忆读取 / 写入 / 回忆 |
 | `todo_write` | 多步操作任务跟踪 |
 | `subagent` | 委托子任务给子 agent（零父上下文，maxDepth=3） |
-| `skill_creator` | AI 辅助生成 skill 文件（workflow/todo/plan 模板） |
 
 工具是 `ToolPlugin` trait 实现，通过 `register_builtins()` 注册。新增工具只需实现 trait + 一行注册代码——无需修改核心代码。工具通过 3 阶段管线执行：**check**（权限 + 校验）→ **execute**（带超时）→ **result**（截断 + 归一化）。
 
@@ -162,7 +161,6 @@ keep_recent_turns = 4     # 始终保留最近 N 个 turn 不被摘要
 | `tools` | `ToolPlugin` trait + `ToolRegistry` + 3 阶段执行管线 | core/tools |
 | `commands` | `CommandPlugin` trait + 内置斜杠命令 | interaction/commands |
 | `subagent` | `SubagentTool` — 子 agent 委托（零父上下文，maxDepth=3） | subagent capability |
-| `skill_creator` | `SkillCreatorTool` — AI 辅助生成 skill 文件 |（新增）|
 | `ssh` | 持久 SSH 会话 — 网元设备后台连接池 |（新增）|
 | `policy` | 允许/拒绝权限检查 | sandbox-policy |
 | `skill` | 声明式 skill 加载（YAML + MD） | skill/skill + skill-filesystem |
@@ -212,41 +210,42 @@ dsh-lite "检查接口状态"
 dsh-lite --skill interface-diagnostics "eth0 is down"
 ```
 
-agent 从 `config/default.toml` 加载配置，扫描 `skills/` 目录的 skill 文件，
+agent 从 `config/default.yaml` 加载配置，扫描 `skills/` 目录的 skill 文件，
 通过激活 skill 的模式分发请求。
 
 配置：
 
-```toml
-# config/default.toml
-[model]
-base_url = "http://127.0.0.1:8080/v1"
-model = "your-model"
-context_window = 8192
+```yaml
+# config/default.yaml
+model:
+  base_url: "http://127.0.0.1:8080/v1"
+  model: "your-model"
+  context_window: 8192
 
-[compaction]
-threshold = 0.7           # 消息超过 context_window 的 70% 时触发压缩
-keep_recent_turns = 4
+compaction:
+  threshold: 0.7           # 消息超过 context_window 的 70% 时触发压缩
+  keep_recent_turns: 4
 
-[tools]
-ssh_exec = true            # 启用 SSH 工具
+tools:
+  ssh_exec: true            # 启用 SSH 工具
 
-[[ssh.targets]]            # 预配置设备目标（持久会话）
-name = "core-router"
-host = "192.168.1.1"
-port = 22
-user = "admin"
-password = "admin123"
+ssh:
+  targets:                  # 预配置设备目标（持久会话）
+    - name: core-router
+      host: 192.168.1.1
+      port: 22
+      user: admin
+      password: admin123
 
-[skill]
-dir = "skills"
+skill:
+  dir: skills
 ```
 
-模型端点为 OpenAI 兼容（`/v1/chat/completions`，支持流式）。所有配置修改在下一个 chat 请求时热重载——无需重启。Web UI 的设置面板提供原始 TOML 编辑器进行实时编辑。
+模型端点为 OpenAI 兼容（`/v1/chat/completions`，支持流式）。所有配置修改在下一个 chat 请求时热重载——无需重启。可通过设置面板「打开配置文件」按钮用系统编辑器编辑。
 
 ## 项目状态
 
-统一插件化架构（DESIGN-UNIFIED.md，7 个阶段）已**全部完成**。所有扩展点已实现并测试：`StepHook`、`ToolPlugin`、`PromptSection`、`CommandPlugin`、`SubagentTool`、`SkillCreatorTool`。46 个测试通过，0 个编译警告。
+统一插件化架构（DESIGN-UNIFIED.md，7 个阶段）已**全部完成**。所有扩展点已实现并测试：`StepHook`、`ToolPlugin`、`PromptSection`、`CommandPlugin`、`SubagentTool`。44 个测试通过，0 个编译警告。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
@@ -263,11 +262,11 @@ dir = "skills"
 | **统一 4** | **CommandPlugin trait + 统一斜杠命令** | **✅ 完成** |
 | **统一 5** | **SubagentTool — 子 agent 委托** | **✅ 完成** |
 | **统一 6** | **压缩消息替换 + think bug 修复** | **✅ 完成** |
-| **统一 7** | **SkillCreatorTool — AI 辅助生成 skill** | **✅ 完成** |
+| **统一 7** | **Skill creator skill 文件 — AI 引导生成 skill（plan 模式 skill）** | **✅ 完成** |
 | **7 后增强** | **斜杠命令自动补全弹窗 + 压缩比例可配置** | **✅ 完成** |
 | P7 | SSH 持久交互式会话 | ✅ 完成 |
 | **7 后增强+** | **Workflow+Subagent skill 示例 + 压缩 GUI 滑块 + SSH 工具开关** | **✅ 完成** |
-| P8 | 体积 + 内存优化 | ✅ 已验证（二进制 2.71 MB） |
+| P8 | 体积 + 内存优化 | ✅ 已验证（二进制 2.64 MB） |
 
 ### 斜杠命令自动补全
 
