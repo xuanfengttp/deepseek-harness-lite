@@ -2372,10 +2372,10 @@ function deleteProvider(idx) {
   if (!confirm('确定删除此提供商？')) return;
   providersData.splice(idx, 1);
   editingProviderIdx = -1;
+  renderProviderCards();
   // Save the updated models array
   const models = providersData.filter(x => !x.isDefault).map(x => ({name: x.name, base_url: x.base_url, api_key: x.api_key, model: x.model, context_window: x.context_window, max_tokens: x.max_tokens, temperature: x.temperature}));
   fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({models})}).then(() => {
-    loadConfig();
     loadModelPresets();
   });
 }
