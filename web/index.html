@@ -268,11 +268,33 @@ body {
 .bubble code { font-family: var(--font-code); font-size: 0.9em; }
 .bubble p { margin: 8px 0; }
 .bubble ul, .bubble ol { margin: 8px 0 8px 20px; }
+.bubble li { margin: 2px 0; }
 .bubble h1 { font-size: 20px; font-weight: 700; margin: 16px 0 8px; }
 .bubble h2 { font-size: 18px; font-weight: 700; margin: 14px 0 6px; }
 .bubble h3 { font-size: 16px; font-weight: 600; margin: 12px 0 4px; }
+.bubble h4 { font-size: 14px; font-weight: 600; margin: 10px 0 4px; }
 .bubble strong { font-weight: 600; }
-.bubble a { color: var(--accent); }
+.bubble em { font-style: italic; }
+.bubble a { color: var(--accent); text-decoration: underline; }
+.bubble blockquote {
+  border-left: 3px solid var(--border-l2); padding: 4px 12px; margin: 8px 0;
+  color: var(--label-secondary); background: var(--bg-platform); border-radius: 0 6px 6px 0;
+}
+.bubble hr {
+  border: none; border-top: 1px solid var(--border-l2); margin: 12px 0;
+}
+.bubble table {
+  border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px;
+  display: block; overflow-x: auto;
+}
+.bubble th, .bubble td {
+  border: 1px solid var(--border-l2); padding: 6px 10px; text-align: left;
+}
+.bubble th { background: var(--bg-platform); font-weight: 600; }
+.bubble pre[data-lang]::before {
+  content: attr(data-lang); display: block; font-size: 11px; color: var(--label-caption);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
+}
 
 /* ── Trajectory: 3-lane preview (Input/Model/Tools) + one-row-per-action ── */
 .traj-preview {
@@ -301,14 +323,16 @@ body {
 .traj-preview .tp-lane-1 { top: 21px; }
 .traj-preview .tp-lane-2 { top: 35px; }
 .traj-preview .tp-bar {
-  position: absolute; height: 8px; min-width: 3px; border-radius: 1px; opacity: 1;
+  position: absolute; height: 8px; min-width: 2px; border-radius: 1px;
+  opacity: 0.85;
 }
-.traj-preview .tp-bar[data-kind="user"] { background: var(--accent); }
+/* Colors matching original dsh TrajectoryTimeline.module.css */
+.traj-preview .tp-bar[data-kind="user"] { background: rgb(65, 118, 230); opacity: 1; }
 .traj-preview .tp-bar[data-kind="system"] { background: var(--label-tertiary); }
-.traj-preview .tp-bar[data-kind="message"] { background: #6366f1; }
-.traj-preview .tp-bar[data-kind="tool"] { background: var(--amber); }
-.traj-preview .tp-bar[data-kind="result"] { background: var(--amber); opacity: 0.6; }
-.traj-preview .tp-bar[data-kind="error"] { background: var(--red); }
+.traj-preview .tp-bar[data-kind="message"] { background: rgb(148, 116, 188); opacity: 1; }
+.traj-preview .tp-bar[data-kind="tool"] { background: rgb(221, 134, 41); opacity: 1; }
+.traj-preview .tp-bar[data-kind="result"] { background: rgb(221, 134, 41); opacity: 0.55; }
+.traj-preview .tp-bar[data-kind="error"] { background: rgb(242, 90, 90); opacity: 1; }
 .traj-preview .tp-empty {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
   font-size: 11px; color: var(--label-caption);
@@ -899,7 +923,7 @@ let currentTheme = 'system';
 let showTrajectory = false;
 let showStats = localStorage.getItem('dsh-stats') !== 'off';
 let currentPreset = '默认';
-let sessionStats = { turns: 0, steps: 0, latestInputTokens: 0, totalOutputTokens: 0, totalInputTokens: 0, startTime: 0, llmMs: 0, toolMs: 0, stepStartTime: 0, toolCallStartTime: 0 };
+let sessionStats = { turns: 0, steps: 0, latestInputTokens: 0, totalOutputTokens: 0, totalInputTokens: 0, startTime: 0, llmMs: 0, toolMs: 0, stepStartTime: 0, toolCallStartTime: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0 };
 let configContextWindow = 8192;
 let sessionStatsMap = {}; // per-session stats, keyed by session id
 let currentSessionId = null;
@@ -983,7 +1007,13 @@ async function switchSession(id) {
         llmMs: histData.stats.llmMs || 0,
         toolMs: histData.stats.toolMs || 0,
         stepStartTime: 0,
-        toolCallStartTime: 0
+        toolCallStartTime: 0,
+        ttftMs: histData.stats.ttftMs || 0,
+        ttftSteps: histData.stats.ttftSteps || 0,
+        decodeMs: histData.stats.decodeMs || 0,
+        decodeTokens: histData.stats.decodeTokens || 0,
+        cacheHitTokens: histData.stats.cacheHitTokens || 0,
+        cacheMissTokens: histData.stats.cacheMissTokens || 0
       };
       sessionStatsMap[id] = { ...sessionStats };
       updateStatsBar();
@@ -1320,6 +1350,12 @@ function formatDuration(ms) {
   return Math.floor(whole / 60) + 'm' + (whole % 60) + 's';
 }
 
+function formatTokensPerSecond(throughput) {
+  if (throughput < 1) return throughput.toFixed(2);
+  if (throughput < 100) return String(Math.round(throughput * 10) / 10);
+  return String(Math.round(throughput));
+}
+
 function updateStatsBar() {
   const bar = document.getElementById('stats-bar');
   if (!bar) return;
@@ -1332,9 +1368,23 @@ function updateStatsBar() {
     if (sessionStats.llmMs > 0) durations.push('LLM ' + formatDuration(sessionStats.llmMs));
     if (sessionStats.toolMs > 0) durations.push('工具调用 ' + formatDuration(sessionStats.toolMs));
     if (durations.length > 0) groups.push(durations.join(' · '));
+    // Group 3: speeds (TTFT average, tokens per second)
+    const speeds = [];
+    if (sessionStats.ttftSteps > 0) {
+      speeds.push('首 token 平均 ' + formatDuration(sessionStats.ttftMs / sessionStats.ttftSteps));
+    }
+    if (sessionStats.decodeMs > 0 && sessionStats.decodeTokens > 0) {
+      speeds.push(formatTokensPerSecond(sessionStats.decodeTokens / (sessionStats.decodeMs / 1000)) + ' tok/s');
+    }
+    if (speeds.length > 0) groups.push(speeds.join(' · '));
   }
-  // Group 3: tokens
+  // Group 4: cache hit + tokens (matching original dsh: cache hit %, then in/out tokens)
+  const billedInput = sessionStats.cacheHitTokens + sessionStats.cacheMissTokens;
   if (sessionStats.totalInputTokens > 0 || sessionStats.totalOutputTokens > 0) {
+    if (billedInput > 0) {
+      const cachePct = Math.round(sessionStats.cacheHitTokens / billedInput * 100);
+      groups.push('缓存命中 ' + cachePct + '%');
+    }
     groups.push('输入 ' + formatTokens(sessionStats.totalInputTokens) + ' tok · 输出 ' + formatTokens(sessionStats.totalOutputTokens) + ' tok');
   }
   if (!showStats || groups.length === 0) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
@@ -1540,6 +1590,19 @@ function handleEvent(event, showTraj) {
       sessionStats.latestInputTokens = event.prompt_tokens || 0;
       sessionStats.totalInputTokens += event.prompt_tokens || 0;
       sessionStats.totalOutputTokens += event.completion_tokens || 0;
+      // Cache tracking
+      sessionStats.cacheHitTokens += event.cache_hit_tokens || 0;
+      sessionStats.cacheMissTokens += event.cache_miss_tokens || 0;
+      // TTFT tracking: ttft_ms is wall time from step start to first token
+      if (event.ttft_ms && event.ttft_ms > 0) {
+        sessionStats.ttftMs += event.ttft_ms;
+        sessionStats.ttftSteps++;
+      }
+      // Decode tracking: decode_ms is wall time from first token to done
+      if (event.decode_ms && event.decode_ms > 0) {
+        sessionStats.decodeMs += event.decode_ms;
+        sessionStats.decodeTokens += event.completion_tokens || 0;
+      }
       updateStatsBar();
       updateContextRing();
       break;
@@ -1574,6 +1637,11 @@ function addTrajCell(kind, tagLabel, text, detail, isError) {
   const el = document.createElement('div');
   el.className = 'traj-row' + (isError ? ' error' : '');
   el.dataset.kind = kind === 'result' ? (isError ? 'error' : 'tool') : kind;
+  // Weight for proportional bar width in timeline preview.
+  // Based on content length: longer content = wider bar.
+  // Min weight 1 so short events are still visible.
+  const contentLen = (text || '').length + (detail || '').length;
+  el.dataset.weight = String(Math.max(1, Math.ceil(contentLen / 20)));
   // Add turn label on first row of a turn
   if (trajCurrentTurn > 0) {
     el.setAttribute('data-turn-start', '');
@@ -1639,34 +1707,42 @@ function updateTrajPreview() {
     if (kind === 'message') return 1;
     return 0; // user, system
   }
-  const n = rows.length;
-  const maxBars = 60;
+  // Use proportional widths: each bar's width is proportional to its content weight.
+  // This auto-scales: a turn with lots of input gets wider bars, short events get thin bars.
+  const maxBars = 80;
   const recent = Array.from(rows).slice(-maxBars);
-  const offset = n - recent.length;
-  const barW = 100 / Math.max(n, maxBars);
-  // Build 3 lane containers
-  let html = '';
-  // Turn boundary lines
-  const turnRows = Array.from(rows).map((r, i) => ({ row: r, idx: i })).filter(x => x.row.hasAttribute('data-turn-start'));
-  for (const t of turnRows) {
-    const left = (t.idx - offset) * barW;
-    if (left >= 0 && left <= 100) html += '<span class="tp-turn-line" style="left:' + left.toFixed(1) + '%"></span>';
-  }
-  // Lane containers
-  html += '<div class="tp-lane tp-lane-0"></div><div class="tp-lane tp-lane-1"></div><div class="tp-lane tp-lane-2"></div>';
+  // Calculate total weight for proportional positioning
+  const weights = recent.map(r => parseInt(r.dataset.weight || '1', 10));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  if (totalWeight === 0) { track.innerHTML = '<span class="tp-empty">No events yet</span>'; return; }
+  // Build lane containers and turn boundary lines
+  let html = '<div class="tp-lane tp-lane-0"></div><div class="tp-lane tp-lane-1"></div><div class="tp-lane tp-lane-2"></div>';
+  // Turn boundary lines (positioned proportionally)
+  let cumWeight = 0;
+  recent.forEach((r, i) => {
+    if (r.hasAttribute('data-turn-start') && i > 0) {
+      const leftPct = cumWeight / totalWeight * 100;
+      html += '<span class="tp-turn-line" style="left:' + leftPct.toFixed(2) + '%"></span>';
+    }
+    cumWeight += weights[i];
+  });
   track.innerHTML = html;
-  // Append bars to their lane
+  // Append bars to their lane, positioned proportionally
   const lanes = [track.querySelector('.tp-lane-0'), track.querySelector('.tp-lane-1'), track.querySelector('.tp-lane-2')];
+  cumWeight = 0;
   recent.forEach((r, i) => {
     const kind = r.dataset.kind || 'system';
     const lane = laneFor(kind);
-    const left = (i + offset - offset) * barW;
+    const w = weights[i];
+    const leftPct = cumWeight / totalWeight * 100;
+    const widthPct = Math.max(0.5, w / totalWeight * 100 * 0.9); // min 0.5% visibility, 90% to leave gap
     const bar = document.createElement('span');
     bar.className = 'tp-bar';
     bar.dataset.kind = kind;
-    bar.style.left = left.toFixed(1) + '%';
-    bar.style.width = (barW * 0.85).toFixed(1) + '%';
+    bar.style.left = leftPct.toFixed(2) + '%';
+    bar.style.width = widthPct.toFixed(2) + '%';
     lanes[lane].appendChild(bar);
+    cumWeight += w;
   });
 }
 
@@ -1698,19 +1774,65 @@ function addChatToolCall(name, args, isError) {
 // ─── Markdown ──────────────────────────────────────────────────────────
 function renderMd(md) {
   if (!md) return '';
-  let h = esc(md);
-  h = h.replace(/```(\w*)\n([\s\S]*?)```/g, (m,l,c)=>`<pre><code>${c}</code></pre>`);
-  h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
-  h = h.replace(/^### (.+)$/gm,'<h3>$1</h3>');
-  h = h.replace(/^## (.+)$/gm,'<h2>$1</h2>');
-  h = h.replace(/^# (.+)$/gm,'<h1>$1</h1>');
-  h = h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-  h = h.replace(/^\- (.+)$/gm,'<li>$1</li>');
-  h = h.replace(/(<li>.*<\/li>\n?)+/g,'<ul>$&</ul>');
-  h = h.replace(/\n\n/g,'</p><p>');
-  h = '<p>'+h+'</p>';
-  h = h.replace(/<p>\s*<\/p>/g,'');
-  h = h.replace(/<p>(<pre>)/g,'$1').replace(/(<\/pre>)<\/p>/g,'$1');
+  // Extract code blocks first (protect them from further processing)
+  const codeBlocks = [];
+  h = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push('<pre data-lang="' + esc(lang) + '"><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>');
+    return '\u0000CODE' + idx + '\u0000';
+  });
+  // Extract inline code (protect)
+  const inlineCodes = [];
+  h = h.replace(/`([^`\n]+)`/g, (m, code) => {
+    const idx = inlineCodes.length;
+    inlineCodes.push('<code>' + esc(code) + '</code>');
+    return '\u0000INLINE' + idx + '\u0000';
+  });
+  // Escape HTML
+  h = esc(h);
+  // Tables (GFM): | col | col |\n|---|---|\n| cell | cell |
+  h = h.replace(/^(\|[^\n]+\|\s*\n\|[\s\-:|]+\|\s*\n(?:\|[^\n]+\|\s*\n?)+)/gm, (m) => {
+    const lines = m.trim().split('\n');
+    const headers = lines[0].split('|').slice(1, -1).map(s => s.trim());
+    const rows = lines.slice(2).map(line => line.split('|').slice(1, -1).map(s => s.trim()));
+    let html = '<table><thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>';
+    for (const row of rows) {
+      html += '<tr>' + row.map(c => '<td>' + c + '</td>').join('') + '</tr>';
+    }
+    return html + '</tbody></table>';
+  });
+  // Headings
+  h = h.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+  h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // Horizontal rule
+  h = h.replace(/^---+\s*$/gm, '<hr>');
+  // Blockquote
+  h = h.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+  h = h.replace(/(<blockquote>.*<\/blockquote>\n?)+/g, (m) => m.replace(/\n/g, ''));
+  // Unordered list
+  h = h.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>');
+  h = h.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+  // Ordered list
+  h = h.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
+  h = h.replace(/(<oli>.*<\/oli>\n?)+/g, (m) => '<ol>' + m.replace(/<\/?oli>/g, (t) => t === '<oli>' ? '<li>' : '</li>') + '</ol>');
+  // Links [text](url)
+  h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // Bold + italic
+  h = h.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  h = h.replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, '<em>$1</em>');
+  // Paragraphs (double newline = paragraph break)
+  h = h.replace(/\n\n/g, '</p><p>');
+  h = '<p>' + h + '</p>';
+  h = h.replace(/<p>\s*<\/p>/g, '');
+  // Don't wrap block elements in <p>
+  h = h.replace(/<p>(<(?:pre|ul|ol|h[1-6]|blockquote|hr|table))/g, '$1');
+  h = h.replace(/(<\/(?:pre|ul|ol|h[1-6]|blockquote|table)>)<\/p>/g, '$1');
+  // Restore code blocks
+  h = h.replace(/\u0000CODE(\d+)\u0000/g, (m, i) => codeBlocks[parseInt(i)]);
+  h = h.replace(/\u0000INLINE(\d+)\u0000/g, (m, i) => inlineCodes[parseInt(i)]);
   return h;
 }
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }

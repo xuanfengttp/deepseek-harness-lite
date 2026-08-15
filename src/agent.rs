@@ -45,7 +45,16 @@ pub enum LoopEvent {
     /// A turn ended.
     TurnEnd { turn: u64, reason: TurnEndReason },
     /// Token usage reported by the model after an assistant message.
-    Usage { prompt_tokens: u64, completion_tokens: u64 },
+    Usage {
+        prompt_tokens: u64,
+        completion_tokens: u64,
+        cache_hit_tokens: u64,
+        cache_miss_tokens: u64,
+        /// Wall time from step start to first token (TTFT), in milliseconds.
+        ttft_ms: u64,
+        /// Wall time from first token to done (decode), in milliseconds.
+        decode_ms: u64,
+    },
     /// An error occurred.
     Error { message: String },
 }
@@ -163,10 +172,16 @@ impl AgentLoop {
             let mut tool_calls: Vec<ToolCall> = Vec::new();
             let mut had_error = false;
             let mut captured_usage: Option<TokenUsage> = None;
+            let step_start = std::time::Instant::now();
+            let mut first_token_time: Option<std::time::Instant> = None;
+            let mut done_time: Option<std::time::Instant> = None;
 
             while let Some(event) = stream_rx.recv().await {
                 match event {
                     StreamEvent::Delta(text) => {
+                        if first_token_time.is_none() {
+                            first_token_time = Some(std::time::Instant::now());
+                        }
                         full_content.push_str(&text);
                         let _ = event_tx.send(LoopEvent::Delta { text }).await;
                     }
@@ -175,6 +190,7 @@ impl AgentLoop {
                         tool_calls.push(tc);
                     }
                     StreamEvent::Done { content, tool_calls: tc, usage } => {
+                        done_time = Some(std::time::Instant::now());
                         // Use the accumulated content from Done (authoritative).
                         if !content.is_empty() {
                             full_content = content;
@@ -182,9 +198,15 @@ impl AgentLoop {
                         tool_calls = tc;
                         // Capture token usage for the stats footer.
                         if let Some(u) = &usage {
+                            let ttft = first_token_time.map(|t| t.duration_since(step_start).as_millis() as u64).unwrap_or(0);
+                            let decode = first_token_time.and_then(|ft| done_time.map(|dt| dt.duration_since(ft).as_millis() as u64)).unwrap_or(0);
                             let _ = event_tx.send(LoopEvent::Usage {
                                 prompt_tokens: u.prompt_tokens,
                                 completion_tokens: u.completion_tokens,
+                                cache_hit_tokens: u.cache_hit_tokens,
+                                cache_miss_tokens: u.cache_miss_tokens,
+                                ttft_ms: ttft,
+                                decode_ms: decode,
                             }).await;
                         }
                         captured_usage = usage;
@@ -211,10 +233,14 @@ impl AgentLoop {
 
             // Record the assistant message.
             let usage = captured_usage;
+            let ttft = first_token_time.map(|t| t.duration_since(step_start).as_millis() as u64).unwrap_or(0);
+            let decode = first_token_time.and_then(|ft| done_time.map(|dt| dt.duration_since(ft).as_millis() as u64)).unwrap_or(0);
             self.session.append(SessionEvent::AssistantMessage {
                 content: full_content.clone(),
                 tool_calls: tool_calls.clone(),
                 usage,
+                ttft_ms: ttft,
+                decode_ms: decode,
             });
             let _ = event_tx.send(LoopEvent::AssistantMessage {
                 content: full_content.clone(),

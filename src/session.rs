@@ -207,6 +207,8 @@ mod tests {
             content: "hi there".into(),
             tool_calls: vec![],
             usage: None,
+            ttft_ms: 0,
+            decode_ms: 0,
         });
         log.end_step();
         log.end_turn(TurnEndReason::Completed);
@@ -236,6 +238,8 @@ mod tests {
             content: "running a command".into(),
             tool_calls: vec![ToolCall { id: "call_1".into(), name: "shell".into(), arguments: serde_json::json!({}) }],
             usage: None,
+            ttft_ms: 0,
+            decode_ms: 0,
         });
         log.append(SessionEvent::ToolResult { call_id: "call_1".into(), content: "output".into(), is_error: false });
 

@@ -61,6 +61,12 @@ pub struct ToolCallDelta {
 pub struct TokenUsage {
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
+    /// Cache-hit tokens (DeepSeek prompt_cache_hit_tokens); 0 if not reported.
+    #[serde(default)]
+    pub cache_hit_tokens: u64,
+    /// Cache-miss tokens (DeepSeek prompt_cache_miss_tokens); 0 if not reported.
+    #[serde(default)]
+    pub cache_miss_tokens: u64,
 }
 
 // ─── Session Events (durable log) ──────────────────────────────────────────
@@ -79,6 +85,12 @@ pub enum SessionEvent {
         content: String,
         tool_calls: Vec<ToolCall>,
         usage: Option<TokenUsage>,
+        /// Wall time from step start to first token (TTFT), in milliseconds.
+        #[serde(default)]
+        ttft_ms: u64,
+        /// Wall time from first token to done (decode), in milliseconds.
+        #[serde(default)]
+        decode_ms: u64,
     },
     ToolCall { call: ToolCall },
     ToolResult { call_id: CallId, content: String, is_error: bool },

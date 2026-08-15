@@ -135,6 +135,10 @@ struct StreamFunctionDelta {
 struct ApiUsage {
     prompt_tokens: u64,
     completion_tokens: u64,
+    #[serde(default)]
+    prompt_cache_hit_tokens: u64,
+    #[serde(default)]
+    prompt_cache_miss_tokens: u64,
 }
 
 /// The LLM client. Stateless between requests — each call is a fresh HTTP stream.
@@ -455,6 +459,8 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                             final_usage = Some(TokenUsage {
                                 prompt_tokens: usage.prompt_tokens,
                                 completion_tokens: usage.completion_tokens,
+                                cache_hit_tokens: usage.prompt_cache_hit_tokens,
+                                cache_miss_tokens: usage.prompt_cache_miss_tokens,
                             });
                         }
                         for choice in chunk_dto.choices {

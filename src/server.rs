@@ -230,6 +230,9 @@ async fn handle_request(
                 "turns": 0, "steps": 0,
                 "totalInputTokens": 0, "totalOutputTokens": 0, "latestInputTokens": 0,
                 "llmMs": 0, "toolMs": 0,
+                "ttftMs": 0, "ttftSteps": 0,
+                "decodeMs": 0, "decodeTokens": 0,
+                "cacheHitTokens": 0, "cacheMissTokens": 0,
                 "startTime": 0
             });
             let mut trajectory: Vec<serde_json::Value> = Vec::new();
@@ -276,7 +279,7 @@ async fn handle_request(
                                 "type": "user_message", "content": content
                             }));
                         }
-                        SessionEvent::AssistantMessage { content, tool_calls, usage } => {
+                        SessionEvent::AssistantMessage { content, tool_calls, usage, ttft_ms, decode_ms } => {
                             // Track LLM time
                             if step_start_time > 0 {
                                 let now = std::time::SystemTime::now()
@@ -286,15 +289,28 @@ async fn handle_request(
                                 stats["llmMs"] = serde_json::json!(stats["llmMs"].as_u64().unwrap_or(0) + (now - step_start_time));
                                 step_start_time = 0;
                             }
+                            // Track TTFT/decode
+                            if *ttft_ms > 0 {
+                                stats["ttftMs"] = serde_json::json!(stats["ttftMs"].as_u64().unwrap_or(0) + ttft_ms);
+                                stats["ttftSteps"] = serde_json::json!(stats["ttftSteps"].as_u64().unwrap_or(0) + 1);
+                            }
+                            if *decode_ms > 0 {
+                                stats["decodeMs"] = serde_json::json!(stats["decodeMs"].as_u64().unwrap_or(0) + decode_ms);
+                            }
                             // Track usage
                             if let Some(u) = usage {
                                 stats["latestInputTokens"] = serde_json::json!(u.prompt_tokens);
                                 stats["totalInputTokens"] = serde_json::json!(stats["totalInputTokens"].as_u64().unwrap_or(0) + u.prompt_tokens);
                                 stats["totalOutputTokens"] = serde_json::json!(stats["totalOutputTokens"].as_u64().unwrap_or(0) + u.completion_tokens);
+                                stats["cacheHitTokens"] = serde_json::json!(stats["cacheHitTokens"].as_u64().unwrap_or(0) + u.cache_hit_tokens);
+                                stats["cacheMissTokens"] = serde_json::json!(stats["cacheMissTokens"].as_u64().unwrap_or(0) + u.cache_miss_tokens);
+                                stats["decodeTokens"] = serde_json::json!(stats["decodeTokens"].as_u64().unwrap_or(0) + u.completion_tokens);
                                 trajectory.push(serde_json::json!({
                                     "type": "usage",
                                     "prompt_tokens": u.prompt_tokens,
-                                    "completion_tokens": u.completion_tokens
+                                    "completion_tokens": u.completion_tokens,
+                                    "cache_hit_tokens": u.cache_hit_tokens,
+                                    "cache_miss_tokens": u.cache_miss_tokens
                                 }));
                             }
                             // Tool calls in the assistant message
@@ -699,8 +715,8 @@ fn format_loop_event(event: &LoopEvent) -> String {
         LoopEvent::TurnEnd { turn, reason } => {
             format!(r#"{{"type":"turn_end","turn":{turn},"reason":"{:?}"}}"#, reason)
         }
-        LoopEvent::Usage { prompt_tokens, completion_tokens } => {
-            format!(r#"{{"type":"usage","prompt_tokens":{prompt_tokens},"completion_tokens":{completion_tokens}}}"#)
+        LoopEvent::Usage { prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, ttft_ms, decode_ms } => {
+            format!(r#"{{"type":"usage","prompt_tokens":{prompt_tokens},"completion_tokens":{completion_tokens},"cache_hit_tokens":{cache_hit_tokens},"cache_miss_tokens":{cache_miss_tokens},"ttft_ms":{ttft_ms},"decode_ms":{decode_ms}}}"#)
         }
         LoopEvent::Error { message } => {
             let escaped = escape_json_string(message);
