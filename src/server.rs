@@ -216,11 +216,20 @@ async fn handle_request(
                     crate::types::Message::User { content } => serde_json::json!({
                         "role": "user", "content": content
                     }),
-                    crate::types::Message::Assistant { content, tool_calls } => serde_json::json!({
-                        "role": "assistant", "content": content, "tool_calls": tool_calls.len()
-                    }),
-                    crate::types::Message::Tool { call_id, content, .. } => serde_json::json!({
-                        "role": "tool", "call_id": call_id, "content": content
+                    crate::types::Message::Assistant { content, tool_calls } => {
+                        let tc_json: Vec<serde_json::Value> = tool_calls.iter().map(|tc| {
+                            serde_json::json!({
+                                "id": tc.id,
+                                "name": tc.name,
+                                "arguments": tc.arguments
+                            })
+                        }).collect();
+                        serde_json::json!({
+                            "role": "assistant", "content": content, "tool_calls": tc_json
+                        })
+                    }
+                    crate::types::Message::Tool { call_id, content, is_error } => serde_json::json!({
+                        "role": "tool", "call_id": call_id, "content": content, "is_error": is_error
                     }),
                 })
                 .collect();

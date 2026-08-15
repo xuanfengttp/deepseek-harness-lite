@@ -1021,12 +1021,9 @@ async function switchSession(id) {
     } else {
       restoreSessionStats(id);
     }
-    // Rebuild chat messages
+    // Rebuild chat messages with inline tool calls
     if (histData.messages && histData.messages.length > 0) {
-      histData.messages.forEach(msg => {
-        if (msg.role === 'user') addMessage('user', msg.content);
-        else if (msg.role === 'assistant' && msg.content) addMessage('assistant', msg.content);
-      });
+      renderChatFromHistory(histData.messages);
     } else {
       document.querySelector('.chat-inner').innerHTML = heroTemplate;
       applyI18n();
@@ -1074,11 +1071,7 @@ async function loadActiveHistory() {
         updateContextRing();
       }
       if (histData.messages && histData.messages.length > 0) {
-        document.querySelector('.chat-inner').innerHTML = '';
-        histData.messages.forEach(msg => {
-          if (msg.role === 'user') addMessage('user', msg.content);
-          else if (msg.role === 'assistant' && msg.content) addMessage('assistant', msg.content);
-        });
+        renderChatFromHistory(histData.messages);
       }
       // Rebuild trajectory
       if (histData.trajectory && histData.trajectory.length > 0) {
@@ -1631,6 +1624,52 @@ function addMessage(role, content) {
   return el;
 }
 
+// Render full conversation from server history messages.
+// Tool calls and tool results are rendered INLINE in the conversation flow,
+// matching original dsh: assistant message → tool call card → tool result card.
+function renderChatFromHistory(messages) {
+  const chat = document.querySelector('.chat-inner');
+  if (!chat) return;
+  chat.innerHTML = '';
+  for (const msg of messages) {
+    if (msg.role === 'user') {
+      addMessage('user', msg.content);
+    } else if (msg.role === 'assistant') {
+      // Render assistant text bubble (if non-empty)
+      if (msg.content && msg.content.trim()) {
+        addMessage('assistant', msg.content);
+      }
+      // Render tool calls inline after the assistant message
+      if (msg.tool_calls && msg.tool_calls.length > 0) {
+        for (const tc of msg.tool_calls) {
+          const argsStr = tc.arguments ? JSON.stringify(tc.arguments, null, 2) : '';
+          addChatToolCall(tc.name, argsStr, false);
+        }
+      }
+    } else if (msg.role === 'tool') {
+      // Tool result: attach to the most recent tool call card
+      if (currentToolCallEl) {
+        const body = currentToolCallEl.querySelector('.ctc-body');
+        if (body) {
+          const label = document.createElement('div');
+          label.className = 'ctc-result-label';
+          label.textContent = msg.is_error ? '错误' : '结果';
+          body.appendChild(label);
+          const pre = document.createElement('pre');
+          pre.textContent = msg.content;
+          body.appendChild(pre);
+        }
+        if (msg.is_error) currentToolCallEl.classList.add('error');
+        currentToolCallEl = null;
+      } else {
+        // No matching tool call card — render as standalone result card
+        addChatToolCall(msg.is_error ? 'Error' : 'Result', msg.content, msg.is_error);
+      }
+    }
+  }
+  document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
+}
+
 // ── Trajectory rows — simple one-row-per-action (matching original dsh) ──
 let trajCurrentTurn = 0;
 
@@ -1780,65 +1819,65 @@ function addChatToolCall(name, args, isError) {
 // ─── Markdown ──────────────────────────────────────────────────────────
 function renderMd(md) {
   if (!md) return '';
-  // Extract code blocks first (protect them from further processing)
+  // Step 1: Extract code blocks first (protect from all processing).
+  // Store escaped HTML so they can be inserted directly at the end.
   const codeBlocks = [];
-  h = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+  let h = md.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
     const idx = codeBlocks.length;
     codeBlocks.push('<pre data-lang="' + esc(lang) + '"><code>' + esc(code.replace(/\n$/, '')) + '</code></pre>');
-    return '\u0000CODE' + idx + '\u0000';
+    return '\u0000CB' + idx + '\u0000';
   });
-  // Extract inline code (protect)
+  // Step 2: Extract inline code (protect).
   const inlineCodes = [];
   h = h.replace(/`([^`\n]+)`/g, (m, code) => {
     const idx = inlineCodes.length;
     inlineCodes.push('<code>' + esc(code) + '</code>');
-    return '\u0000INLINE' + idx + '\u0000';
+    return '\u0000IC' + idx + '\u0000';
   });
-  // Escape HTML
+  // Step 3: Escape the rest of the HTML.
   h = esc(h);
-  // Tables (GFM): | col | col |\n|---|---|\n| cell | cell |
+  // Step 4: Tables (GFM)
   h = h.replace(/^(\|[^\n]+\|\s*\n\|[\s\-:|]+\|\s*\n(?:\|[^\n]+\|\s*\n?)+)/gm, (m) => {
     const lines = m.trim().split('\n');
     const headers = lines[0].split('|').slice(1, -1).map(s => s.trim());
     const rows = lines.slice(2).map(line => line.split('|').slice(1, -1).map(s => s.trim()));
-    let html = '<table><thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>';
+    let html = '<table><thead><tr>' + headers.map(hd => '<th>' + hd + '</th>').join('') + '</tr></thead><tbody>';
     for (const row of rows) {
       html += '<tr>' + row.map(c => '<td>' + c + '</td>').join('') + '</tr>';
     }
     return html + '</tbody></table>';
   });
-  // Headings
+  // Step 5: Headings
   h = h.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
   h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  // Horizontal rule
+  // Step 6: Horizontal rule
   h = h.replace(/^---+\s*$/gm, '<hr>');
-  // Blockquote
+  // Step 7: Blockquote
   h = h.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-  h = h.replace(/(<blockquote>.*<\/blockquote>\n?)+/g, (m) => m.replace(/\n/g, ''));
-  // Unordered list
+  // Step 8: Unordered list
   h = h.replace(/^[\*\-] (.+)$/gm, '<li>$1</li>');
   h = h.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
-  // Ordered list
-  h = h.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
-  h = h.replace(/(<oli>.*<\/oli>\n?)+/g, (m) => '<ol>' + m.replace(/<\/?oli>/g, (t) => t === '<oli>' ? '<li>' : '</li>') + '</ol>');
-  // Links [text](url)
+  // Step 9: Ordered list
+  h = h.replace(/^\d+\. (.+)$/gm, '\u0000OLI$1\u0000');
+  h = h.replace(/(\u0000OLI[^\u0000]*\u0000\n?)+/g, (m) => '<ol>' + m.replace(/\u0000OLI/g, '<li>').replace(/\u0000/g, '</li>') + '</ol>');
+  // Step 10: Links [text](url)
   h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  // Bold + italic
+  // Step 11: Bold + italic
   h = h.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
   h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   h = h.replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, '<em>$1</em>');
-  // Paragraphs (double newline = paragraph break)
-  h = h.replace(/\n\n/g, '</p><p>');
+  // Step 12: Paragraphs (double newline = paragraph break)
+  h = h.replace(/\n\n+/g, '</p><p>');
   h = '<p>' + h + '</p>';
   h = h.replace(/<p>\s*<\/p>/g, '');
   // Don't wrap block elements in <p>
-  h = h.replace(/<p>(<(?:pre|ul|ol|h[1-6]|blockquote|hr|table))/g, '$1');
-  h = h.replace(/(<\/(?:pre|ul|ol|h[1-6]|blockquote|table)>)<\/p>/g, '$1');
-  // Restore code blocks
-  h = h.replace(/\u0000CODE(\d+)\u0000/g, (m, i) => codeBlocks[parseInt(i)]);
-  h = h.replace(/\u0000INLINE(\d+)\u0000/g, (m, i) => inlineCodes[parseInt(i)]);
+  h = h.replace(/<p>\s*(<(?:pre|ul|ol|h[1-6]|blockquote|hr|table))/g, '$1');
+  h = h.replace(/(<\/(?:pre|ul|ol|h[1-6]|blockquote|table)>)\s*<\/p>/g, '$1');
+  // Step 13: Restore code blocks and inline code
+  h = h.replace(/\u0000CB(\d+)\u0000/g, (m, i) => codeBlocks[parseInt(i)]);
+  h = h.replace(/\u0000IC(\d+)\u0000/g, (m, i) => inlineCodes[parseInt(i)]);
   return h;
 }
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
