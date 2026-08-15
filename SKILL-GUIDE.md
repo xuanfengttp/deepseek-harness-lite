@@ -8,7 +8,7 @@ dsh-lite 的 skill 是 YAML frontmatter + Markdown body 的 `.md` 文件，放�
 ## 0. 系统提示词架构（分层 Section 设计）
 
 dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个巨大的文本块，
-而是由 4 个有序的微型 section 拼接而成，每个 section 极短、高信噪比。
+而是由 5 个有序的微型 section 拼接而成，每个 section 极短、高信噪比。
 
 ### 为什么分层
 
@@ -20,12 +20,13 @@ dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个
 - **行为规则 > 描述**：每个工具注入 1 句"怎么用"的行为规则，而非"是什么"的描述
 - **变量插值**：`{{cwd}}`、`{{model}}` 运行时自动注入，不需要 LLM 探索
 
-### 4 层 Section（按 order 排序）
+### 5 层 Section（按 order 排序）
 
 | order | name | 内容 | token 成本 | 注入条件 |
 |-------|------|------|-----------|----------|
 | -100 | `harness:identity` | "You are an AI agent. Working directory: {{cwd}}." | ~20 | 始终注入 |
 | 0 | `persona` | skill body（角色/方法论） | 可变 | skill body 非空时 |
+| 5 | `custom-prompt` | 用户自定义提示词（设置面板） | 可变 | `config.prompt.custom` 非空时 |
 | 10 | `behavior-rules` | 3 条通用行为规则 | ~80 | 始终注入 |
 | 100 | `tools` | 每个工具 1 句行为规则（guidance） | ~15/工具 | 有允许工具时 |
 

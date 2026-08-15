@@ -1,6 +1,6 @@
 # 统一插件化架构设计（兼容合一方案）
 
-> **实现状态：7 个阶段全部完成（✅）。** 44 个测试通过，0 个编译警告。
+> **实现状态：7 个阶段全部完成（✅）。** 46 个测试通过，0 个编译警告。
 > Phase 1-7 完成于 commit `38039a2eb7` → `8cfb24231c`；
 > 后续增强（斜杠命令弹窗 + 压缩比例可配置）完成于 `8c000b5a20`；
 > 设置面板重设计 + YAML 配置 + skill_creator 转为 skill 文件完成于 `5fec787`。
@@ -1081,5 +1081,9 @@ skill 可以被主 agent 通过 `subagent` 工具委托给子 agent 执行：
 | 增强 | `8c000b5a20` | 斜杠命令弹窗 + 压缩比例可配置 |
 | 重构 | `1f61e94` | 设置面板 3 页签 + TOML→YAML 配置 + 打开配置文件 |
 | 重构 | `5fec787` | skill_creator 从代码工具改为 skill 文件 + SKILL-GUIDE 格式修正 |
+| 修复 | `629366b` | /context 命令 JSON 解析错误修复（serde_json 替代手动字符串拼接） |
+| 重构 | `1bee3ab` | 分层系统提示词（5 section 设计）+ ToolDefinition guidance 字段 |
+| 增强 | `eadfd30` | 自定义系统提示词（设置面板 prompt.custom，order=5 section） |
+| 文档 | `5003c1e` | SSH 文档补全（SKILL-GUIDE §9 + skill-creator Template E + remote-health-check skill） |
 
-全部 7 个阶段 + 后续增强 + 重构已完成。44 个测试通过，0 个编译警告。
+全部 7 个阶段 + 后续增强 + 重构已完成。46 个测试通过，0 个编译警告。

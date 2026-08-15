@@ -100,6 +100,40 @@ Changes take effect on the next chat request (hot-reload — no restart needed).
 
 Tools are `ToolPlugin` trait implementations registered through `register_builtins()`. Adding a tool means implementing the trait + one registration line — no core code changes. Tools run through a 3-stage pipeline: **check** (permission + validation) → **execute** (with timeout) → **result** (truncation + normalization).
 
+### Layered system prompt
+
+The system prompt is assembled from 5 ordered sections — each short and high-signal, keeping permanent context cost under ~300 tokens:
+
+| Order | Section | Source | Tokens |
+|---|---|---|---|
+| -100 | Identity | Fixed ("You are an AI agent. Working dir: {{cwd}}.") | ~20 |
+| 0 | Persona | Skill body | variable |
+| 5 | Custom prompt | User-defined from settings panel | variable |
+| 10 | Behavior rules | 3 universal rules (check exit codes, verify facts, be concise) | ~80 |
+| 100 | Tool guidance | One behavior rule per allowed tool | ~15/tool |
+
+Each tool has a `guidance` field (how to use it) separate from `description` (what it does) — only `guidance` goes into the system prompt. Runtime variables `{{cwd}}` and `{{model}}` are auto-interpolated. The custom prompt section is optional (leave empty to omit). See [SKILL-GUIDE.md](SKILL-GUIDE.md) §0 for details.
+
+### Custom system prompt
+
+A user-defined system prompt can be injected via the settings panel (General tab → System Prompt). It sits between the persona and behavior rules, supports `{{cwd}}`/`{{model}}` interpolation, and takes effect immediately (hot-reload, no restart). Stored in `config.yaml` under `prompt.custom`.
+
+### SSH remote device operations
+
+The built-in `ssh_exec` tool provides persistent SSH sessions to network elements — connections stay open between calls, enabling interactive device queries (show commands, config retrieval, diagnostics). Devices are pre-configured in the settings panel (Tools tab → SSH toggle → device management) or in `config.yaml`:
+
+```yaml
+ssh:
+  targets:
+    - name: core-router
+      host: 192.168.1.1
+      port: 22
+      user: admin
+      password: admin123
+```
+
+Skills can use `ssh_exec` with `target` name or inline `host`/`user`/`password`. See [SKILL-GUIDE.md](SKILL-GUIDE.md) §9 for the full SSH usage guide (configuration, call modes, persistent sessions, skill examples).
+
 ### Single binary, no runtime dependencies
 
 - Musl static linking — no glibc requirement
@@ -110,8 +144,8 @@ Tools are `ToolPlugin` trait implementations registered through `register_builti
 
 | Metric | Value |
 |---|---|
-| Runtime RSS (P4) | ~6 MB |
-| Binary size | ~1.5 MB |
+| Runtime RSS | ~6 MB |
+| Binary size | ~2.6 MB |
 | Target | < 10 MB RSS |
 
 ## Architecture
@@ -245,7 +279,7 @@ The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming).
 
 ## Project status
 
-The unified plugin化 architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**. All extension points are implemented and tested: `StepHook`, `ToolPlugin`, `PromptSection`, `CommandPlugin`, `SubagentTool`. 44 tests pass, 0 compiler warnings.
+The unified plugin architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**. All extension points are implemented and tested: `StepHook`, `ToolPlugin`, `PromptSection`, `CommandPlugin`, `SubagentTool`. 46 tests pass, 0 compiler warnings.
 
 | Phase | Content | Status |
 |---|---|---|
@@ -266,7 +300,9 @@ The unified plugin化 architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**
 | **Post-7** | **Slash command autocomplete popup + compaction ratio config** | **✅ Done** |
 | P7 | SSH persistent interactive sessions | ✅ Done |
 | **Post-7+** | **Workflow+Subagent skill examples + compaction GUI slider + SSH tool toggle** | **✅ Done** |
-| P8 | Size + memory optimization | ✅ Verified (2.64 MB binary) |
+| P8 | Size + memory optimization | ✅ Verified (2.63 MB binary) |
+| **Post-8** | **Layered system prompt (5 sections) + tool guidance field** | **✅ Done** |
+| **Post-8+** | **Custom system prompt (settings panel) + SSH documentation + remote-health-check skill** | **✅ Done** |
 
 ### Slash command autocomplete
 

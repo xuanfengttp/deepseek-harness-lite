@@ -100,6 +100,40 @@ compaction:
 
 工具是 `ToolPlugin` trait 实现，通过 `register_builtins()` 注册。新增工具只需实现 trait + 一行注册代码——无需修改核心代码。工具通过 3 阶段管线执行：**check**（权限 + 校验）→ **execute**（带超时）→ **result**（截断 + 归一化）。
 
+### 分层系统提示词
+
+系统提示词由 5 个有序 section 拼接——每个极短、高信噪比，固定上下文成本控制在 ~300 tokens 以内：
+
+| order | section | 来源 | tokens |
+|---|---|---|---|
+| -100 | 身份 | 固定（"You are an AI agent. Working dir: {{cwd}}."） | ~20 |
+| 0 | 角色 | skill body | 可变 |
+| 5 | 自定义提示词 | 设置面板用户输入 | 可变 |
+| 10 | 行为规则 | 3 条通用规则（检查退出码、验证事实、简洁回答） | ~80 |
+| 100 | 工具引导 | 每个允许工具 1 句行为规则 | ~15/工具 |
+
+每个工具有 `guidance` 字段（怎么用）独立于 `description`（是什么）——只有 `guidance` 进入系统提示词。运行时变量 `{{cwd}}` 和 `{{model}}` 自动插值。自定义提示词 section 可选（留空则不注入）。详见 [SKILL-GUIDE.md](SKILL-GUIDE.md) §0。
+
+### 自定义系统提示词
+
+用户可通过设置面板（通用页 → 系统提示词）注入自定义提示词，位于角色和行为规则之间，支持 `{{cwd}}`/`{{model}}` 插值，即时生效（热重载，无需重启）。存储在 `config.yaml` 的 `prompt.custom` 段。
+
+### SSH 远程设备操作
+
+内置 `ssh_exec` 工具提供持久 SSH 会话连接网元设备——连接在多次调用间保持打开，支持交互式设备查询（show 命令、配置获取、诊断）。设备在设置面板预配置（工具页 → SSH 开关 → 设备管理）或编辑 `config.yaml`：
+
+```yaml
+ssh:
+  targets:
+    - name: core-router
+      host: 192.168.1.1
+      port: 22
+      user: admin
+      password: admin123
+```
+
+Skill 中可用 `ssh_exec` 配合 `target` 名称或内联 `host`/`user`/`password`。完整 SSH 使用指南（配置、调用方式、持久会话、skill 示例）见 [SKILL-GUIDE.md](SKILL-GUIDE.md) §9。
+
 ### 单二进制，无运行时依赖
 
 - musl 静态链接——不依赖 glibc
@@ -110,8 +144,8 @@ compaction:
 
 | 指标 | 数值 |
 |---|---|
-| 运行时 RSS（P4） | ~6 MB |
-| 二进制大小 | ~1.5 MB |
+| 运行时 RSS | ~6 MB |
+| 二进制大小 | ~2.6 MB |
 | 目标 | < 10 MB RSS |
 
 ## 架构
@@ -245,7 +279,7 @@ skill:
 
 ## 项目状态
 
-统一插件化架构（DESIGN-UNIFIED.md，7 个阶段）已**全部完成**。所有扩展点已实现并测试：`StepHook`、`ToolPlugin`、`PromptSection`、`CommandPlugin`、`SubagentTool`。44 个测试通过，0 个编译警告。
+统一插件化架构（DESIGN-UNIFIED.md，7 个阶段）已**全部完成**。所有扩展点已实现并测试：`StepHook`、`ToolPlugin`、`PromptSection`、`CommandPlugin`、`SubagentTool`。46 个测试通过，0 个编译警告。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
@@ -266,7 +300,9 @@ skill:
 | **7 后增强** | **斜杠命令自动补全弹窗 + 压缩比例可配置** | **✅ 完成** |
 | P7 | SSH 持久交互式会话 | ✅ 完成 |
 | **7 后增强+** | **Workflow+Subagent skill 示例 + 压缩 GUI 滑块 + SSH 工具开关** | **✅ 完成** |
-| P8 | 体积 + 内存优化 | ✅ 已验证（二进制 2.64 MB） |
+| P8 | 体积 + 内存优化 | ✅ 已验证（二进制 2.63 MB） |
+| **8 后增强** | **分层系统提示词（5 section）+ 工具 guidance 字段** | **✅ 完成** |
+| **8 后增强+** | **自定义系统提示词（设置面板）+ SSH 文档 + remote-health-check skill** | **✅ 完成** |
 
 ### 斜杠命令自动补全
 
