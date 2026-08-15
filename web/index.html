@@ -567,9 +567,9 @@ body {
 .nav-icon { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex-shrink: 0; color: var(--label-secondary); }
 .modal-content { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .modal-header {
-  height: 54px; padding: 0 24px; display: flex; align-items: center;
+  height: 54px; padding: 0 24px; display: flex; align-items: center; gap: 8px;
 }
-.modal-header h2 { font-size: 16px; font-weight: 500; }
+.modal-header h2 { font-size: 16px; font-weight: 500; flex: 1; }
 .modal-close {
   position: absolute; top: 14px; right: 16px;
   width: 28px; height: 28px; border: none; border-radius: 50%; background: transparent;
@@ -621,6 +621,65 @@ body {
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 .toggle-switch.on::after { transform: translateX(18px); }
+
+/* Language pill selector */
+.lang-pill {
+  height: 36px; padding: 0 14px; border-radius: 18px; border: none;
+  background: var(--bg-platform); color: var(--label-primary); font-size: 14px;
+  cursor: pointer; font-family: var(--font); transition: background var(--dur) var(--ease);
+}
+.lang-pill:hover { background: var(--bg-hover); }
+.lang-pill.selected { background: var(--accent); color: white; }
+
+/* Provider card (model settings) */
+.provider-card {
+  border: 1px solid var(--border-l2); border-radius: 12px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.provider-card-head { display: flex; align-items: center; gap: 10px; }
+.provider-name { font-size: 14px; font-weight: 500; color: var(--label-primary); }
+.provider-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.provider-dot.configured { background: var(--green); }
+.provider-dot.missing { background: var(--red); }
+.provider-actions { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.provider-btn {
+  height: 28px; padding: 0 10px; border-radius: 14px; border: 1px solid var(--border-l2);
+  background: transparent; color: var(--label-primary); font-size: 12px; cursor: pointer; font-family: var(--font);
+}
+.provider-btn:hover { background: var(--bg-hover); }
+.provider-btn.danger { border: none; color: var(--red); }
+.provider-btn.danger:hover { background: var(--bg-hover); }
+.provider-editor {
+  border-radius: 12px; background: var(--bg-platform); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.provider-field { display: flex; flex-direction: column; gap: 6px; }
+.provider-field-label { font-size: 12px; font-weight: 500; color: var(--label-secondary); }
+.provider-advanced { border-top: 1px solid var(--border-l2); padding-top: 10px; }
+.provider-advanced summary {
+  cursor: pointer; font-size: 12px; font-weight: 500; color: var(--label-secondary);
+  display: flex; align-items: center; gap: 6px; padding: 2px 4px; margin-left: -4px; border-radius: 6px;
+  list-style: none;
+}
+.provider-advanced summary::-webkit-details-marker { display: none; }
+.provider-advanced summary::before {
+  content: ''; width: 5px; height: 5px; border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor; transform: rotate(-45deg) translate(-1px, -1px);
+  transition: transform 120ms ease;
+}
+.provider-advanced[open] > summary::before { transform: rotate(45deg) translate(-1px, -1px); }
+.provider-advanced-body { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.provider-editor-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* SSH device card */
+.ssh-device-card {
+  border: 1px solid var(--border-l2); border-radius: 8px; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.ssh-device-head { display: flex; align-items: center; gap: 8px; }
+.ssh-device-name { font-size: 14px; font-weight: 500; color: var(--label-primary); }
+.ssh-device-info { font-size: 12px; color: var(--label-tertiary); font-family: var(--font-code); }
+.ssh-device-actions { display: inline-flex; gap: 4px; margin-left: auto; }
 
 /* Buttons */
 .btn {
@@ -776,9 +835,9 @@ body {
   <div class="modal">
     <div class="modal-nav">
       <h3 data-i18n="settings_title">设置</h3>
-      <div class="nav-item active" data-section="appearance" onclick="switchSection('appearance')">
+      <div class="nav-item active" data-section="general" onclick="switchSection('general')">
         <span class="nav-icon" id="ico-appearance"></span>
-        <span data-i18n="appearance">外观</span>
+        <span data-i18n="general">通用</span>
       </div>
       <div class="nav-item" data-section="model" onclick="switchSection('model')">
         <span class="nav-icon" id="ico-model"></span>
@@ -788,28 +847,29 @@ body {
         <span class="nav-icon" id="ico-tools"></span>
         <span data-i18n="tools">工具</span>
       </div>
-      <div class="nav-item" data-section="config" onclick="switchSection('config')">
-        <span class="nav-icon" id="ico-config"></span>
-        <span data-i18n="config_file">配置文件</span>
-      </div>
-      <div class="nav-item" data-section="language" onclick="switchSection('language')">
-        <span class="nav-icon" id="ico-language"></span>
-        <span data-i18n="language">语言</span>
-      </div>
     </div>
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="section-title">外观</h2>
+        <h2 id="section-title">通用</h2>
+        <button class="btn btn-secondary" style="height:28px;padding:0 12px;font-size:12px;border-radius:14px" onclick="openConfigFile()" data-i18n="open_config">打开配置文件</button>
         <button class="modal-close" onclick="closeSettings()">✕</button>
       </div>
       <div class="modal-body">
 
-        <!-- Appearance -->
-        <div id="section-appearance">
+        <!-- General -->
+        <div id="section-general">
+          <!-- Language -->
+          <div class="setting-row" style="display:flex;align-items:center;justify-content:space-between">
+            <div><div class="setting-label" data-i18n="language">语言</div></div>
+            <div style="display:flex;gap:8px">
+              <button class="lang-pill selected" data-lang="zh" onclick="setLanguage('zh')">中文</button>
+              <button class="lang-pill" data-lang="en" onclick="setLanguage('en')">English</button>
+            </div>
+          </div>
+          <!-- Appearance -->
           <div class="setting-row">
-            <div class="setting-label" data-i18n="theme">主题</div>
-            <div class="setting-hint" data-i18n="theme_hint">选择 dsh-lite 的外观。</div>
-            <div class="theme-cubes" id="theme-cubes">
+            <div class="setting-label" data-i18n="theme">外观</div>
+            <div class="theme-cubes" id="theme-cubes" style="margin-top:8px">
               <div class="theme-cube" data-theme="light" onclick="setTheme('light')">
                 <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M11.3496 8C11.3496 6.14985 9.85015 4.65039 8 4.65039C6.14985 4.65039 4.65039 6.14985 4.65039 8C4.65039 9.85015 6.14985 11.3496 8 11.3496C9.85015 11.3496 11.3496 9.85015 11.3496 8ZM12.6504 8C12.6504 10.5681 10.5681 12.6504 8 12.6504C5.43188 12.6504 3.34961 10.5681 3.34961 8C3.34961 5.43188 5.43188 3.34961 8 3.34961C10.5681 3.34961 12.6504 5.43188 12.6504 8Z" fill="currentColor"/><path d="M8.65039 0.5V2.5H7.34961V0.5H8.65039Z" fill="currentColor"/><path d="M8.65039 13.5V15.5H7.34961V13.5H8.65039Z" fill="currentColor"/><path d="M3.15808 2.24035L4.57229 3.65456L3.6525 4.57435L2.23829 3.16014L3.15808 2.24035Z" fill="currentColor"/><path d="M12.3505 11.4327L13.7647 12.8469L12.8449 13.7667L11.4307 12.3525L12.3505 11.4327Z" fill="currentColor"/><path d="M2.24537 12.8469L3.65958 11.4327L4.57937 12.3525L3.16516 13.7667L2.24537 12.8469Z" fill="currentColor"/><path d="M11.4377 3.65455L12.852 2.24033L13.7718 3.16012L12.3575 4.57434L11.4377 3.65455Z" fill="currentColor"/><path d="M0.5 7.35461H2.5V8.6554H0.5L0.5 7.35461Z" fill="currentColor"/><path d="M13.5 7.35461H15.5V8.6554H13.5V8.6554Z" fill="currentColor"/></svg>
                 <span class="name" data-i18n="light">浅色</span>
@@ -824,59 +884,58 @@ body {
               </div>
             </div>
           </div>
+          <!-- Stats bar -->
           <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
             <div><div class="setting-label" data-i18n="stats_bar">统计栏</div><div class="setting-hint" data-i18n="stats_bar_hint">在输入框下方显示 token 用量与时长。</div></div>
             <div class="toggle-switch" id="toggle-stats" onclick="toggleStats(this)"></div>
           </div>
-        </div>
-
-        <!-- Model -->
-        <div id="section-model" class="hidden">
+          <!-- Compaction -->
           <div class="setting-row">
-            <div class="setting-label" data-i18n="base_url">Base URL</div>
-            <div class="setting-hint" data-i18n="base_url_hint">OpenAI 兼容端点（例如 http://127.0.0.1:8080/v1）</div>
-            <input class="setting-input mono" id="cfg-base-url" placeholder="http://127.0.0.1:8080/v1" onblur="autoSaveModelConfig()">
-          </div>
-          <div class="setting-row">
-            <div class="setting-label" data-i18n="api_key">API Key</div>
-            <div class="setting-hint" data-i18n="api_key_hint">本地推理无需鉴权时留空即可。</div>
-            <input class="setting-input mono" id="cfg-api-key" type="password" placeholder="sk-..." onblur="autoSaveModelConfig()">
-          </div>
-          <div class="setting-row">
-            <div class="setting-label" data-i18n="model_name">模型名称</div>
-            <div class="setting-hint" data-i18n="model_name_hint">发送给端点的模型名。点击"获取"可自动检测。</div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input class="setting-input mono" id="cfg-model" placeholder="deepseek-v4-lite" style="flex:1" onblur="autoSaveModelConfig()">
-              <select class="setting-input mono" id="cfg-model-list" style="flex:1;display:none"></select>
-              <button class="btn btn-secondary" style="height:36px;white-space:nowrap" onclick="fetchModels()" id="btn-fetch-models"><span data-i18n="fetch">获取</span></button>
+            <div class="section-title" data-i18n="compaction">上下文压缩</div>
+            <div class="section-desc">当对话消息超过上下文窗口的阈值比例时，自动将较早的对话摘要为一条消息。修改后即时生效。</div>
+            <div style="margin-top:10px">
+              <div class="setting-label">压缩阈值 <span style="color:var(--label-tertiary);font-weight:400">— 消息占上下文窗口的比例超过此值时触发</span></div>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+                <input type="range" id="cfg-compaction-threshold" min="0.3" max="0.95" step="0.05" value="0.7" style="flex:1;cursor:pointer" oninput="updateThresholdLabel(this.value)">
+                <span id="threshold-value-label" style="font-family:var(--font-code);font-size:14px;color:var(--accent);min-width:42px;text-align:right">70%</span>
+              </div>
+              <div style="font-size:12px;color:var(--label-tertiary);margin-top:4px">小上下文模型建议 0.6（早点压缩）｜大上下文模型建议 0.8（晚点压缩）</div>
+            </div>
+            <div style="margin-top:14px">
+              <div class="setting-label">保留最近轮次 <span style="color:var(--label-tertiary);font-weight:400">— 始终保留最近 N 轮对话不被摘要</span></div>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+                <input type="range" id="cfg-compaction-keep" min="1" max="10" step="1" value="4" style="flex:1;cursor:pointer" oninput="updateKeepLabel(this.value)">
+                <span id="keep-value-label" style="font-family:var(--font-code);font-size:14px;color:var(--accent);min-width:42px;text-align:right">4 轮</span>
+              </div>
+              <div style="font-size:12px;color:var(--label-tertiary);margin-top:4px">长流程 SOP 建议保留 4-6 轮，确保最近结果可供 llm_judge 引用</div>
+            </div>
+            <div style="margin-top:14px">
+              <button class="btn btn-primary" onclick="saveCompactionConfig()">保存压缩设置</button>
+              <span class="config-status" id="compaction-config-status" style="margin-left:10px"></span>
             </div>
           </div>
+          <!-- Config file path -->
           <div class="setting-row">
-            <div class="setting-label" data-i18n="context_window">上下文窗口</div>
-            <div class="setting-hint" data-i18n="context_window_hint">模型可接受的最大 token 数（驱动压缩）。</div>
-            <input class="setting-input" id="cfg-context-window" type="number" placeholder="8192" onblur="autoSaveModelConfig()">
+            <div class="setting-label" data-i18n="config_path">配置文件路径</div>
+            <div class="setting-hint" data-i18n="config_path_hint">配置文件的加载位置。默认在可执行文件旁。修改后重启生效。</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="setting-input mono" id="cfg-file-path" placeholder="(默认)" style="flex:1" readonly>
+              <button class="btn btn-secondary" style="height:36px;white-space:nowrap" onclick="chooseConfigPath()"><span data-i18n="change">修改</span></button>
+            </div>
+            <div id="cfg-path-hint" style="font-size:12px;color:var(--label-tertiary);margin-top:6px"></div>
           </div>
+        </div>
+
+        <!-- Model (provider-centric, like original dsh) -->
+        <div id="section-model" class="hidden">
           <div class="setting-row">
-            <div class="setting-label" data-i18n="max_tokens">最大输出 Token</div>
-            <div class="setting-hint" data-i18n="max_tokens_hint">每次请求的最大输出 token 数。</div>
-            <input class="setting-input" id="cfg-max-tokens" type="number" placeholder="2048" onblur="autoSaveModelConfig()">
+            <div class="section-title" data-i18n="model_section">模型</div>
+            <div class="section-desc">配置 LLM 提供商。每个提供商显示名称和密钥状态，点击编辑展开配置。</div>
           </div>
-          <div class="setting-row">
-            <div class="setting-label" data-i18n="temperature">温度</div>
-            <div class="setting-hint" data-i18n="temperature_hint">0 = 确定性，越高越有创造力。</div>
-            <input class="setting-input" id="cfg-temperature" type="number" step="0.1" min="0" max="2" placeholder="0.0" onblur="autoSaveModelConfig()">
-          </div>
-          <div class="setting-row">
-            <div class="setting-label" data-i18n="model_presets">LLM 提供商预设</div>
-            <div class="setting-hint" data-i18n="model_presets_hint">添加多个 LLM 提供商，可在输入框下拉菜单中快速切换。每个预设包含名称、端点、API Key 和模型名。</div>
-            <div id="preset-list" style="margin-top:8px;display:flex;flex-direction:column;gap:8px"></div>
-            <button class="btn btn-secondary" style="margin-top:8px" onclick="addPresetRow()" data-i18n="add_preset">+ 添加提供商</button>
-            <button class="btn btn-primary" style="margin-top:4px" onclick="savePresets()" data-i18n="save_presets">保存预设</button>
-          </div>
+          <div id="provider-list" style="display:flex;flex-direction:column;gap:8px"></div>
           <div class="config-status" id="model-config-status"></div>
-          <div class="btn-row">
-            <button class="btn btn-primary" onclick="saveModelConfig()" data-i18n="save">保存</button>
-            <button class="btn btn-secondary" onclick="loadConfig()" data-i18n="reset">重置</button>
+          <div style="margin-top:12px">
+            <button class="btn btn-secondary" style="border:1px dashed var(--border-l3);border-radius:12px;width:100%;height:44px" onclick="addProviderCard()" data-i18n="add_provider">+ 添加提供商</button>
           </div>
         </div>
 
@@ -903,80 +962,41 @@ body {
             <div class="toggle-switch" id="toggle-memory" onclick="toggleTool('memory',this)"></div>
           </div>
           <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
-            <div><div class="setting-label">SSH 远程执行</div><div class="setting-hint">持久交互式 SSH 会话，连接网元设备执行命令。需重启生效。</div></div>
-            <div class="toggle-switch" id="toggle-ssh_exec" onclick="toggleTool('ssh_exec',this)"></div>
+            <div><div class="setting-label">Todo</div><div class="setting-hint">任务跟踪</div></div>
+            <div class="toggle-switch" id="toggle-todo" onclick="toggleTool('todo',this)"></div>
+          </div>
+          <!-- SSH with expandable device management -->
+          <div class="setting-row">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div><div class="setting-label">SSH 远程执行</div><div class="setting-hint">持久交互式 SSH 会话，连接网元设备执行命令。需重启生效。</div></div>
+              <div class="toggle-switch" id="toggle-ssh_exec" onclick="toggleTool('ssh_exec',this)"></div>
+            </div>
+            <div id="ssh-devices-section" style="margin-top:12px;display:none">
+              <div class="setting-label" style="margin-bottom:8px">已配置设备</div>
+              <div id="ssh-device-list" style="display:flex;flex-direction:column;gap:8px"></div>
+              <div style="margin-top:8px">
+                <button class="btn btn-secondary" style="border:1px dashed var(--border-l3);border-radius:12px;width:100%;height:40px" onclick="showSshDeviceForm()">+ 添加设备</button>
+              </div>
+              <div id="ssh-device-form" style="display:none;margin-top:12px;padding:14px 16px;background:var(--bg-platform);border-radius:12px;display:flex;flex-direction:column;gap:10px">
+                <input type="hidden" id="ssh-edit-idx" value="-1">
+                <div><label style="font-size:12px;color:var(--label-secondary)">名称</label><input class="setting-input" id="ssh-name" placeholder="core-router" style="margin-top:4px"></div>
+                <div style="display:flex;gap:8px">
+                  <div style="flex:2"><label style="font-size:12px;color:var(--label-secondary)">地址</label><input class="setting-input" id="ssh-host" placeholder="192.168.1.1" style="margin-top:4px"></div>
+                  <div style="flex:1"><label style="font-size:12px;color:var(--label-secondary)">端口</label><input class="setting-input" id="ssh-port" type="number" value="22" style="margin-top:4px"></div>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <div style="flex:1"><label style="font-size:12px;color:var(--label-secondary)">用户名</label><input class="setting-input" id="ssh-user" placeholder="admin" style="margin-top:4px"></div>
+                  <div style="flex:1"><label style="font-size:12px;color:var(--label-secondary)">密码</label><input class="setting-input" id="ssh-password" type="password" style="margin-top:4px"></div>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                  <button class="btn btn-secondary" style="height:32px;padding:0 12px;font-size:13px" onclick="hideSshDeviceForm()">取消</button>
+                  <button class="btn btn-primary" style="height:32px;padding:0 12px;font-size:13px" onclick="saveSshDevice()">保存设备</button>
+                </div>
+              </div>
+              <div class="config-status" id="ssh-config-status" style="margin-top:8px"></div>
+            </div>
           </div>
           <div class="config-status" id="tools-config-status"></div>
-          <div class="btn-row">
-            <button class="btn btn-primary" onclick="saveToolConfig()" data-i18n="save">保存</button>
-          </div>
-        </div>
-
-        <!-- Config File -->
-        <div id="section-config" class="hidden">
-          <div class="setting-row">
-            <div class="setting-label" data-i18n="config_path">配置文件路径</div>
-            <div class="setting-hint" data-i18n="config_path_hint">配置文件的加载位置。默认在可执行文件旁。修改后重启生效。</div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input class="setting-input mono" id="cfg-file-path" placeholder="(默认)" style="flex:1" readonly>
-              <button class="btn btn-secondary" style="height:36px;white-space:nowrap" onclick="chooseConfigPath()"><span data-i18n="change">修改</span></button>
-            </div>
-            <div id="cfg-path-hint" style="font-size:12px;color:var(--label-tertiary);margin-top:6px"></div>
-          </div>
-          <div class="setting-row">
-            <div class="section-title">上下文压缩</div>
-            <div class="section-desc">当对话消息超过上下文窗口的阈值比例时，自动将较早的对话摘要为一条消息。修改后即时生效。</div>
-            <div style="margin-top:10px">
-              <div class="setting-label">压缩阈值 <span style="color:var(--label-tertiary);font-weight:400">— 消息占上下文窗口的比例超过此值时触发</span></div>
-              <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
-                <input type="range" id="cfg-compaction-threshold" min="0.3" max="0.95" step="0.05" value="0.7" style="flex:1;cursor:pointer" oninput="updateThresholdLabel(this.value)">
-                <span id="threshold-value-label" style="font-family:var(--font-code);font-size:14px;color:var(--accent);min-width:42px;text-align:right">70%</span>
-              </div>
-              <div style="font-size:12px;color:var(--label-tertiary);margin-top:4px">小上下文模型建议 0.6（早点压缩）｜大上下文模型建议 0.8（晚点压缩）</div>
-            </div>
-            <div style="margin-top:14px">
-              <div class="setting-label">保留最近轮次 <span style="color:var(--label-tertiary);font-weight:400">— 始终保留最近 N 轮对话不被摘要</span></div>
-              <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
-                <input type="range" id="cfg-compaction-keep" min="1" max="10" step="1" value="4" style="flex:1;cursor:pointer" oninput="updateKeepLabel(this.value)">
-                <span id="keep-value-label" style="font-family:var(--font-code);font-size:14px;color:var(--accent);min-width:42px;text-align:right">4 轮</span>
-              </div>
-              <div style="font-size:12px;color:var(--label-tertiary);margin-top:4px">长流程 SOP 建议保留 4-6 轮，确保最近结果可供 llm_judge 引用</div>
-            </div>
-            <div style="margin-top:14px">
-              <button class="btn btn-primary" onclick="saveCompactionConfig()">保存压缩设置</button>
-              <span class="config-status" id="compaction-config-status" style="margin-left:10px"></span>
-            </div>
-          </div>
-          <div class="setting-row">
-            <div class="section-title" data-i18n="raw_config">原始配置</div>
-            <div class="section-desc" data-i18n="raw_config_hint">直接编辑 TOML 配置文件。保存后重启生效。</div>
-            <div class="config-editor">
-              <textarea id="config-editor-text" spellcheck="false"></textarea>
-            </div>
-            <div class="config-status" id="config-status"></div>
-            <div class="btn-row">
-              <button class="btn btn-primary" onclick="saveConfigFile()" data-i18n="save_to_file">保存到文件</button>
-              <button class="btn btn-secondary" onclick="loadConfigFile()" data-i18n="reload">重新加载</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Language -->
-        <div id="section-language" class="hidden">
-          <div class="setting-row">
-            <div class="setting-label" data-i18n="language">语言</div>
-            <div class="setting-hint" data-i18n="language_hint">选择界面语言。</div>
-            <div class="theme-cubes">
-              <div class="theme-cube selected" data-lang="zh" onclick="setLanguage('zh')">
-                <span style="font-size:24px">中</span>
-                <span class="name">简体中文</span>
-              </div>
-              <div class="theme-cube" data-lang="en" onclick="setLanguage('en')">
-                <span style="font-size:24px">En</span>
-                <span class="name">English</span>
-              </div>
-            </div>
-          </div>
         </div>
 
       </div>
@@ -2139,7 +2159,6 @@ function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 function openSettings() {
   document.getElementById('settings-modal').classList.remove('hidden');
   loadConfig();
-  loadConfigFile();
   loadConfigPath();
   const statsToggle = document.getElementById('toggle-stats');
   if (statsToggle) statsToggle.classList.toggle('on', showStats);
@@ -2149,36 +2168,28 @@ function switchSection(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.section === name));
   document.querySelectorAll('[id^="section-"]').forEach(s => s.classList.add('hidden'));
   document.getElementById(`section-${name}`).classList.remove('hidden');
-  const titleKeys = {appearance:'appearance', model:'model_section', tools:'tools', config:'config_file', language:'language'};
+  const titleKeys = {general:'general', model:'model_section', tools:'tools'};
   document.getElementById('section-title').textContent = t(titleKeys[name] || name);
 }
 
 // ─── Config API ────────────────────────────────────────────────────────
-// Fetch config and apply context_window immediately (needed before stats restore).
-// Form fields are only populated if the settings elements exist.
 async function loadConfig() {
   try {
     const res = await fetch('/api/config');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const cfg = await res.json();
-    if (cfg.model) {
-      configContextWindow = cfg.model.context_window || 8192;
-      updateContextRing();
-      const el = document.getElementById('cfg-base-url');
-      if (el) {
-        el.value = cfg.model.base_url || '';
-        document.getElementById('cfg-api-key').value = cfg.model.api_key || '';
-        document.getElementById('cfg-model').value = cfg.model.model || '';
-        document.getElementById('cfg-context-window').value = cfg.model.context_window || '';
-        document.getElementById('cfg-max-tokens').value = cfg.model.max_tokens || '';
-        document.getElementById('cfg-temperature').value = cfg.model.temperature || '';
-      }
-    }
+    configContextWindow = (cfg.model && cfg.model.context_window) || 8192;
+    updateContextRing();
+    // Render providers (default model + presets)
+    renderProviders(cfg);
     if (cfg.tools) {
-      ['shell','file_read','file_write','file_search','memory','ssh_exec'].forEach(t => {
+      ['shell','file_read','file_write','file_search','memory','ssh_exec','todo'].forEach(t => {
         const el = document.getElementById(`toggle-${t}`);
         if (el) el.classList.toggle('on', !!cfg.tools[t]);
       });
+      // Show/hide SSH device section based on toggle
+      const sshSection = document.getElementById('ssh-devices-section');
+      if (sshSection) sshSection.style.display = cfg.tools.ssh_exec ? '' : 'none';
     }
     if (cfg.compaction) {
       const thresholdEl = document.getElementById('cfg-compaction-threshold');
@@ -2192,13 +2203,223 @@ async function loadConfig() {
         updateKeepLabel(keepEl.value);
       }
     }
-    loadPresets(cfg);
+    // Load SSH devices
+    renderSshDevices(cfg.ssh && cfg.ssh.targets ? cfg.ssh.targets : []);
   } catch(e) {
     console.error('loadConfig', e);
-    const statusEl = document.getElementById('model-config-status');
-    if (statusEl) showModelConfigStatus('⚠ 无法连接服务器: ' + e.message, 'err');
   }
 }
+
+// ── Provider-centric model config (like original dsh) ──
+let providersData = []; // [{isDefault, name, base_url, api_key, model, context_window, max_tokens, temperature}]
+let editingProviderIdx = -1;
+
+function renderProviders(cfg) {
+  providersData = [];
+  // Default model is always the first provider
+  if (cfg.model) {
+    providersData.push({
+      isDefault: true,
+      name: cfg.model.model || '(default)',
+      base_url: cfg.model.base_url || '',
+      api_key: cfg.model.api_key || '',
+      model: cfg.model.model || '',
+      context_window: cfg.model.context_window || 8192,
+      max_tokens: cfg.model.max_tokens || 2048,
+      temperature: cfg.model.temperature || 0.0,
+    });
+  }
+  // Presets
+  if (cfg.models && Array.isArray(cfg.models)) {
+    cfg.models.forEach(p => {
+      providersData.push({
+        isDefault: false,
+        name: p.name || '(unnamed)',
+        base_url: p.base_url || '',
+        api_key: p.api_key || '',
+        model: p.model || '',
+        context_window: p.context_window || 8192,
+        max_tokens: p.max_tokens || 2048,
+        temperature: p.temperature || 0.0,
+      });
+    });
+  }
+  renderProviderCards();
+}
+
+function renderProviderCards() {
+  const list = document.getElementById('provider-list');
+  if (!list) return;
+  list.innerHTML = '';
+  providersData.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'provider-card';
+    const hasKey = p.api_key && p.api_key.length > 0;
+    const dotClass = hasKey ? 'configured' : 'missing';
+    const isOpen = editingProviderIdx === i;
+    let html = `
+      <div class="provider-card-head">
+        <span class="provider-dot ${dotClass}"></span>
+        <span class="provider-name">${esc(p.name || p.model || '(default)')}</span>
+        ${p.isDefault ? '<span style="font-size:11px;color:var(--label-tertiary);border:1px solid var(--border-l3);border-radius:4px;padding:1px 6px">默认</span>' : ''}
+        <span class="provider-actions">
+          <button class="provider-btn" onclick="toggleProviderEdit(${i})">${isOpen ? '收起' : '编辑'}</button>
+          ${!p.isDefault ? `<button class="provider-btn danger" onclick="deleteProvider(${i})">删除</button>` : ''}
+        </span>
+      </div>
+    `;
+    if (isOpen) {
+      html += `
+        <div class="provider-editor">
+          <div class="provider-field">
+            <span class="provider-field-label">API Key</span>
+            <input class="setting-input mono" type="password" id="pv-api-key" placeholder="sk-..." value="${esc(p.api_key||'')}">
+          </div>
+          <details class="provider-advanced">
+            <summary>自定义设置</summary>
+            <div class="provider-advanced-body">
+              <div class="provider-field">
+                <span class="provider-field-label">Base URL</span>
+                <input class="setting-input mono" id="pv-base-url" placeholder="http://127.0.0.1:8080/v1" value="${esc(p.base_url||'')}">
+              </div>
+              <div class="provider-field">
+                <span class="provider-field-label">模型名称</span>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input class="setting-input mono" id="pv-model" placeholder="deepseek-v4-lite" style="flex:1" value="${esc(p.model||'')}">
+                  <select class="setting-input mono" id="pv-model-list" style="flex:1;display:none"></select>
+                  <button class="provider-btn" style="white-space:nowrap" onclick="fetchModelsForProvider()" id="pv-fetch-btn">获取</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <div class="provider-field" style="flex:1">
+                  <span class="provider-field-label">上下文窗口</span>
+                  <input class="setting-input" id="pv-context-window" type="number" value="${p.context_window||8192}">
+                </div>
+                <div class="provider-field" style="flex:1">
+                  <span class="provider-field-label">最大输出 Token</span>
+                  <input class="setting-input" id="pv-max-tokens" type="number" value="${p.max_tokens||2048}">
+                </div>
+                <div class="provider-field" style="flex:1">
+                  <span class="provider-field-label">温度</span>
+                  <input class="setting-input" id="pv-temperature" type="number" step="0.1" min="0" max="2" value="${p.temperature||0}">
+                </div>
+              </div>
+              ${!p.isDefault ? `
+              <div class="provider-field">
+                <span class="provider-field-label">预设名称</span>
+                <input class="setting-input" id="pv-name" value="${esc(p.name||'')}">
+              </div>` : ''}
+            </div>
+          </details>
+          <div class="provider-editor-actions">
+            <button class="provider-btn" onclick="toggleProviderEdit(-1)">取消</button>
+            <button class="provider-btn" style="border-color:var(--accent);color:var(--accent)" onclick="saveProvider(${i})">保存</button>
+          </div>
+        </div>
+      `;
+    }
+    card.innerHTML = html;
+    list.appendChild(card);
+  });
+}
+
+function toggleProviderEdit(idx) {
+  editingProviderIdx = editingProviderIdx === idx ? -1 : idx;
+  renderProviderCards();
+}
+
+async function saveProvider(idx) {
+  const p = providersData[idx];
+  p.api_key = document.getElementById('pv-api-key').value;
+  const baseUrlEl = document.getElementById('pv-base-url');
+  if (baseUrlEl) p.base_url = baseUrlEl.value;
+  const modelEl = document.getElementById('pv-model');
+  if (modelEl) p.model = modelEl.value;
+  const ctxEl = document.getElementById('pv-context-window');
+  if (ctxEl) p.context_window = parseInt(ctxEl.value) || 8192;
+  const maxEl = document.getElementById('pv-max-tokens');
+  if (maxEl) p.max_tokens = parseInt(maxEl.value) || 2048;
+  const tempEl = document.getElementById('pv-temperature');
+  if (tempEl) p.temperature = parseFloat(tempEl.value) || 0;
+  const nameEl = document.getElementById('pv-name');
+  if (nameEl) p.name = nameEl.value;
+
+  if (p.isDefault) {
+    // Save as model config
+    const cfg = { model: { base_url: p.base_url, api_key: p.api_key, model: p.model, context_window: p.context_window, max_tokens: p.max_tokens, temperature: p.temperature } };
+    try {
+      await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
+      showModelConfigStatus('✓ 已保存，即时生效', 'ok');
+      editingProviderIdx = -1;
+      await loadConfig();
+      await loadModelPresets();
+    } catch(e) { showModelConfigStatus('保存失败: ' + e.message, 'err'); }
+  } else {
+    // Save as part of models array — rebuild entire array
+    const models = providersData.filter(x => !x.isDefault).map(x => ({name: x.name, base_url: x.base_url, api_key: x.api_key, model: x.model, context_window: x.context_window, max_tokens: x.max_tokens, temperature: x.temperature}));
+    try {
+      await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({models})});
+      showModelConfigStatus('✓ 已保存，即时生效', 'ok');
+      editingProviderIdx = -1;
+      await loadConfig();
+      await loadModelPresets();
+    } catch(e) { showModelConfigStatus('保存失败: ' + e.message, 'err'); }
+  }
+}
+
+function deleteProvider(idx) {
+  if (providersData[idx].isDefault) return;
+  if (!confirm('确定删除此提供商？')) return;
+  providersData.splice(idx, 1);
+  editingProviderIdx = -1;
+  // Save the updated models array
+  const models = providersData.filter(x => !x.isDefault).map(x => ({name: x.name, base_url: x.base_url, api_key: x.api_key, model: x.model, context_window: x.context_window, max_tokens: x.max_tokens, temperature: x.temperature}));
+  fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({models})}).then(() => {
+    loadConfig();
+    loadModelPresets();
+  });
+}
+
+function addProviderCard() {
+  // Add a new provider with defaults, then open it for editing
+  providersData.push({isDefault: false, name: '新提供商', base_url: '', api_key: '', model: '', context_window: 8192, max_tokens: 2048, temperature: 0.0});
+  editingProviderIdx = providersData.length - 1;
+  renderProviderCards();
+}
+
+async function fetchModelsForProvider() {
+  const btn = document.getElementById('pv-fetch-btn');
+  if (!btn) return;
+  const oldText = btn.textContent;
+  btn.textContent = '⏳'; btn.disabled = true;
+  try {
+    const payload = {
+      base_url: document.getElementById('pv-base-url').value,
+      api_key: document.getElementById('pv-api-key').value,
+    };
+    const res = await fetch('/api/models', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data = await res.json();
+    let models = [];
+    if (Array.isArray(data.data)) models = data.data.map(m => m.id).filter(Boolean);
+    else if (Array.isArray(data.models)) models = data.models.map(m => m.id || m.name).filter(Boolean);
+    if (models.length === 0) { showModelConfigStatus('No models found', 'err'); return; }
+    const sel = document.getElementById('pv-model-list');
+    const inp = document.getElementById('pv-model');
+    if (sel && inp) {
+      sel.innerHTML = '';
+      models.forEach(id => { const opt = document.createElement('option'); opt.value = id; opt.textContent = id; sel.appendChild(opt); });
+      const current = inp.value;
+      if (current && models.includes(current)) sel.value = current;
+      else { sel.value = models[0]; inp.value = models[0]; }
+      inp.style.display = 'none'; sel.style.display = 'block';
+      sel.onchange = () => { inp.value = sel.value; };
+    }
+    showModelConfigStatus(`Found ${models.length} model(s)`, 'ok');
+  } catch(e) { showModelConfigStatus('Fetch failed: ' + e.message, 'err'); }
+  finally { btn.textContent = oldText; btn.disabled = false; }
+}
+
+function showModelConfigStatus(msg, type) { showStatusMsg('model-config-status', msg, type); }
 
 // ── Compaction config helpers ──
 function updateThresholdLabel(val) {
@@ -2217,43 +2438,10 @@ async function saveCompactionConfig() {
     await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
     const statusEl = document.getElementById('compaction-config-status');
     if (statusEl) { statusEl.textContent = '✓ 已保存，即时生效'; statusEl.className = 'config-status ok'; }
-    // Also reload the raw config editor so it reflects the change.
-    loadConfigFile();
   } catch(e) {
     const statusEl = document.getElementById('compaction-config-status');
     if (statusEl) { statusEl.textContent = '✗ 保存失败: ' + e.message; statusEl.className = 'config-status err'; }
   }
-}
-
-let _autoSaveTimer = null;
-function autoSaveModelConfig() {
-  // Debounce: if another blur fires within 300ms, keep only the last.
-  clearTimeout(_autoSaveTimer);
-  _autoSaveTimer = setTimeout(() => saveModelConfig(true), 300);
-}
-
-async function saveModelConfig(silent) {
-  const cfg = {
-    model: {
-      base_url: document.getElementById('cfg-base-url').value,
-      api_key: document.getElementById('cfg-api-key').value,
-      model: document.getElementById('cfg-model').value,
-      context_window: parseInt(document.getElementById('cfg-context-window').value) || 8192,
-      max_tokens: parseInt(document.getElementById('cfg-max-tokens').value) || 2048,
-      temperature: parseFloat(document.getElementById('cfg-temperature').value) || 0.0,
-    }
-  };
-  try {
-    await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
-    // Config is hot-reloaded by handle_chat on each request, so no restart needed.
-    if (silent) {
-      showModelConfigStatus('✓ 已自动保存', 'ok');
-    } else {
-      showModelConfigStatus('✓ 已保存，即时生效', 'ok');
-    }
-    // Refresh the model preset dropdown in case model name changed.
-    await loadModelPresets();
-  } catch(e) { showModelConfigStatus('保存失败: ' + e.message, 'err'); }
 }
 
 function showStatusMsg(elId, msg, type) {
@@ -2267,64 +2455,9 @@ function showModelConfigStatus(msg, type) {
   showStatusMsg('model-config-status', msg, type);
 }
 
-// ── LLM Provider Presets ──
-let presetsData = [];
-
-function loadPresets(cfg) {
-  presetsData = (cfg.models || []).map(p => ({...p}));
-  renderPresets();
-}
-
-function renderPresets() {
-  const list = document.getElementById('preset-list');
-  if (!list) return;
-  list.innerHTML = '';
-  presetsData.forEach((p, i) => {
-    const row = document.createElement('div');
-    row.style.cssText = 'border:1px solid var(--border-l2);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px;background:var(--bg-platform)';
-    row.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center">
-        <input class="setting-input mono" placeholder="预设名称" value="${esc(p.name||'')}" style="flex:1" oninput="presetsData[${i}].name=this.value">
-        <button class="btn btn-danger" style="height:32px;padding:0 8px" onclick="removePreset(${i})">✕</button>
-      </div>
-      <input class="setting-input mono" placeholder="Base URL (https://api.deepseek.com/v1)" value="${esc(p.base_url||'')}" style="width:100%" oninput="presetsData[${i}].base_url=this.value">
-      <div style="display:flex;gap:8px">
-        <input class="setting-input mono" placeholder="API Key" type="password" value="${esc(p.api_key||'')}" style="flex:1" oninput="presetsData[${i}].api_key=this.value">
-        <input class="setting-input mono" placeholder="模型名" value="${esc(p.model||'')}" style="flex:1" oninput="presetsData[${i}].model=this.value">
-      </div>
-    `;
-    list.appendChild(row);
-  });
-}
-
-function addPresetRow() {
-  presetsData.push({name:'', base_url:'', api_key:'', model:'', context_window:8192, max_tokens:2048, temperature:0.0});
-  renderPresets();
-}
-
-function removePreset(idx) {
-  presetsData.splice(idx, 1);
-  renderPresets();
-}
-
-async function savePresets() {
-  // Send the models array as part of config — replace entirely.
-  const cfg = { models: presetsData.filter(p => p.name && p.base_url && p.model) };
-  try {
-    const res = await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
-    const data = await res.json();
-    if (data.ok) {
-      showModelConfigStatus('✓ 预设已保存，即时生效', 'ok');
-      await loadModelPresets();
-    } else {
-      showModelConfigStatus('✗ 保存失败: ' + (data.error||''), 'err');
-    }
-  } catch(e) { showModelConfigStatus('保存失败: ' + e.message, 'err'); }
-}
-
 async function saveToolConfig(silent) {
   const tools = {};
-  ['shell','file_read','file_write','file_search','memory','ssh_exec'].forEach(t => {
+  ['shell','file_read','file_write','file_search','memory','ssh_exec','todo'].forEach(t => {
     tools[t] = document.getElementById(`toggle-${t}`).classList.contains('on');
   });
   try {
@@ -2333,98 +2466,118 @@ async function saveToolConfig(silent) {
   } catch(e) { showStatusMsg('tools-config-status', '保存失败: ' + e.message, 'err'); }
 }
 
-function toggleTool(name, el) { el.classList.toggle('on'); autoSaveToolConfig(); }
+function toggleTool(name, el) {
+  el.classList.toggle('on');
+  // Show/hide SSH device section
+  if (name === 'ssh_exec') {
+    const sshSection = document.getElementById('ssh-devices-section');
+    if (sshSection) sshSection.style.display = el.classList.contains('on') ? '' : 'none';
+  }
+  autoSaveToolConfig();
+}
 let _autoSaveToolTimer = null;
 function autoSaveToolConfig() {
   clearTimeout(_autoSaveToolTimer);
   _autoSaveToolTimer = setTimeout(() => saveToolConfig(true), 300);
 }
 
-async function loadConfigFile() {
+// ─── Open config file in system editor ─────────────────────────────────
+async function openConfigFile() {
   try {
-    const res = await fetch('/api/config/raw');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    document.getElementById('config-editor-text').value = text;
-    showConfigStatus('', '');
-  } catch(e) { showConfigStatus('✗ 加载失败: ' + e.message, 'err'); }
+    await fetch('/api/config/open', {method:'POST'});
+  } catch(e) { console.error('openConfigFile', e); }
 }
 
-async function saveConfigFile() {
-  const text = document.getElementById('config-editor-text').value;
-  try {
-    const res = await fetch('/api/config/raw', {method:'POST',headers:{'Content-Type':'text/plain'},body:text});
-    const data = await res.json();
-    if (data.ok) {
-      showConfigStatus('✓ 已保存，即时生效', 'ok');
-      // Refresh the model/tools form so it reflects the new config.
-      await loadConfig();
-    } else {
-      showConfigStatus('✗ 保存失败: ' + (data.error || '未知错误'), 'err');
-    }
-  } catch(e) { showConfigStatus('✗ 保存失败: ' + e.message, 'err'); }
-}
+// ─── SSH device management ─────────────────────────────────────────────
+let sshDevicesData = [];
 
-function showConfigStatus(msg, type) {
-  const el = document.getElementById('config-status');
-  if (!el) return;
-  el.textContent = msg;
-  el.className = 'config-status ' + (type === 'ok' ? 'ok' : type === 'err' ? 'err' : '');
-  if (type === 'ok' && msg) setTimeout(() => { if (el.textContent === msg) { el.textContent = ''; el.className = 'config-status'; } }, 3000);
-}
-
-// ─── Model auto-fetch ──────────────────────────────────────────────────
-async function fetchModels() {
-  const btn = document.getElementById('btn-fetch-models');
-  const oldText = btn.textContent;
-  btn.textContent = '⏳';
-  btn.disabled = true;
-  try {
-    // Send the current form values so the backend uses what the user typed,
-    // not the stale startup config.
-    const payload = {
-      base_url: document.getElementById('cfg-base-url').value,
-      api_key: document.getElementById('cfg-api-key').value,
-    };
-    const res = await fetch('/api/models', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    let models = [];
-    if (Array.isArray(data.data)) {
-      models = data.data.map(m => m.id).filter(Boolean);
-    } else if (Array.isArray(data.models)) {
-      models = data.models.map(m => m.id || m.name).filter(Boolean);
-    }
-    if (models.length === 0) {
-      showConfigStatus('No models found. Check Base URL.', 'err');
-      return;
-    }
-    // Show dropdown, hide text input
-    const sel = document.getElementById('cfg-model-list');
-    const inp = document.getElementById('cfg-model');
-    sel.innerHTML = '';
-    models.forEach(id => {
-      const opt = document.createElement('option');
-      opt.value = id; opt.textContent = id;
-      sel.appendChild(opt);
-    });
-    // Pre-select current model if present
-    const current = inp.value;
-    if (current && models.includes(current)) sel.value = current;
-    else { sel.value = models[0]; inp.value = models[0]; }
-    inp.style.display = 'none';
-    sel.style.display = 'block';
-    sel.onchange = () => { inp.value = sel.value; };
-    showConfigStatus(`Found ${models.length} model(s).`, 'ok');
-  } catch(e) {
-    showConfigStatus('Fetch failed: ' + e.message, 'err');
-  } finally {
-    btn.textContent = oldText;
-    btn.disabled = false;
+function renderSshDevices(targets) {
+  sshDevicesData = targets || [];
+  const list = document.getElementById('ssh-device-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (sshDevicesData.length === 0) {
+    list.innerHTML = '<div style="font-size:13px;color:var(--label-tertiary);padding:8px 0">暂无设备。点击下方添加。</div>';
+    return;
   }
+  sshDevicesData.forEach((d, i) => {
+    const card = document.createElement('div');
+    card.className = 'ssh-device-card';
+    card.innerHTML = `
+      <div class="ssh-device-head">
+        <span class="ssh-device-name">${esc(d.name||'')}</span>
+        <span class="ssh-device-info">${esc(d.host||'')}:${esc(d.port||22)} · ${esc(d.user||'')}</span>
+        <span class="ssh-device-actions">
+          <button class="provider-btn" onclick="editSshDevice(${i})">编辑</button>
+          <button class="provider-btn danger" onclick="deleteSshDevice(${i})">删除</button>
+        </span>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function showSshDeviceForm() {
+  document.getElementById('ssh-device-form').style.display = 'flex';
+  document.getElementById('ssh-edit-idx').value = '-1';
+  document.getElementById('ssh-name').value = '';
+  document.getElementById('ssh-host').value = '';
+  document.getElementById('ssh-port').value = '22';
+  document.getElementById('ssh-user').value = '';
+  document.getElementById('ssh-password').value = '';
+  document.getElementById('ssh-name').focus();
+}
+
+function hideSshDeviceForm() {
+  document.getElementById('ssh-device-form').style.display = 'none';
+}
+
+function editSshDevice(idx) {
+  const d = sshDevicesData[idx];
+  if (!d) return;
+  document.getElementById('ssh-device-form').style.display = 'flex';
+  document.getElementById('ssh-edit-idx').value = String(idx);
+  document.getElementById('ssh-name').value = d.name || '';
+  document.getElementById('ssh-host').value = d.host || '';
+  document.getElementById('ssh-port').value = d.port || 22;
+  document.getElementById('ssh-user').value = d.user || '';
+  document.getElementById('ssh-password').value = d.password || '';
+}
+
+async function saveSshDevice() {
+  const idx = parseInt(document.getElementById('ssh-edit-idx').value);
+  const device = {
+    name: document.getElementById('ssh-name').value.trim(),
+    host: document.getElementById('ssh-host').value.trim(),
+    port: parseInt(document.getElementById('ssh-port').value) || 22,
+    user: document.getElementById('ssh-user').value.trim(),
+    password: document.getElementById('ssh-password').value,
+  };
+  if (!device.name || !device.host) {
+    showStatusMsg('ssh-config-status', '名称和地址不能为空', 'err');
+    return;
+  }
+  if (idx >= 0) {
+    sshDevicesData[idx] = device;
+  } else {
+    sshDevicesData.push(device);
+  }
+  try {
+    await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssh:{targets:sshDevicesData}})});
+    hideSshDeviceForm();
+    showStatusMsg('ssh-config-status', '✓ 设备已保存，重启生效', 'ok');
+    renderSshDevices(sshDevicesData);
+  } catch(e) { showStatusMsg('ssh-config-status', '✗ 保存失败: ' + e.message, 'err'); }
+}
+
+async function deleteSshDevice(idx) {
+  if (!confirm('确定删除设备 ' + (sshDevicesData[idx]?.name || '') + '？')) return;
+  sshDevicesData.splice(idx, 1);
+  try {
+    await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ssh:{targets:sshDevicesData}})});
+    showStatusMsg('ssh-config-status', '✓ 设备已删除，重启生效', 'ok');
+    renderSshDevices(sshDevicesData);
+  } catch(e) { showStatusMsg('ssh-config-status', '✗ 删除失败: ' + e.message, 'err'); }
 }
 
 // ─── Config path ───────────────────────────────────────────────────────
@@ -2444,7 +2597,7 @@ async function chooseConfigPath() {
   if (newPath === null) return; // cancelled
   const trimmed = newPath.trim();
   if (!trimmed) {
-    showConfigStatus('Path cannot be empty.', 'err');
+    document.getElementById('cfg-path-hint').textContent = '✗ 路径不能为空';
     return;
   }
   try {
@@ -2456,12 +2609,11 @@ async function chooseConfigPath() {
     const data = await res.json();
     if (data.ok) {
       document.getElementById('cfg-file-path').value = trimmed;
-      document.getElementById('cfg-path-hint').textContent = '✓ Saved. Restart to apply.';
-      showConfigStatus('Config path saved. Restart to apply.', 'ok');
+      document.getElementById('cfg-path-hint').textContent = '✓ 已保存，重启生效';
     } else {
-      showConfigStatus('Failed: ' + (data.error || 'unknown'), 'err');
+      document.getElementById('cfg-path-hint').textContent = '✗ ' + (data.error || '失败');
     }
-  } catch(e) { showConfigStatus('Save failed: ' + e.message, 'err'); }
+  } catch(e) { document.getElementById('cfg-path-hint').textContent = '✗ 保存失败: ' + e.message; }
 }
 
 // ─── i18n ──────────────────────────────────────────────────────────────
@@ -2472,7 +2624,8 @@ const I18N = {
     skill:'技能', trajectory:'轨迹', chat:'对话', ready:'就绪', send_to_start:'发送消息开始对话。',
     input_placeholder:'发送消息… 输入 / 查看命令',
     appearance:'外观', model_section:'模型', tools:'工具', config_file:'配置文件', language:'语言',
-    theme:'主题', theme_hint:'选择 dsh-lite 的外观。',
+    general:'通用',
+    theme:'外观', theme_hint:'选择 dsh-lite 的外观。',
     light:'浅色', dark:'深色', system:'跟随系统',
     base_url:'Base URL', base_url_hint:'OpenAI 兼容端点（例如 http://127.0.0.1:8080/v1）',
     api_key:'API Key', api_key_hint:'本地推理无需鉴权时留空即可。',
@@ -2489,13 +2642,13 @@ const I18N = {
     tool_memory:'记忆', tool_memory_hint:'长期 KV 存储（读/写/检索）',
     config_path:'配置文件路径', config_path_hint:'配置文件的加载位置。默认在可执行文件旁。修改后重启生效。',
     change:'修改',
-    raw_config:'原始配置', raw_config_hint:'直接编辑 TOML 配置文件。保存后重启生效。',
-    save_to_file:'保存到文件', reload:'重新加载',
     saved_restart:'已保存，对话时即时生效。', save_failed:'保存失败：',
     language_hint:'选择界面语言。',
     chat:'对话', delete:'删除', confirm_delete:'确定删除此会话？',
     stats_bar:'统计栏', stats_bar_hint:'在输入框下方显示 token 用量与时长。',
-    model_presets:'LLM 提供商预设', model_presets_hint:'添加多个 LLM 提供商，可在输入框下拉菜单中快速切换。每个预设包含名称、端点、API Key 和模型名。', add_preset:'+ 添加提供商', save_presets:'保存预设',
+    compaction:'上下文压缩',
+    open_config:'打开配置文件',
+    add_provider:'+ 添加提供商',
   },
   en: {
     new_session:'New Session', settings:'Settings', settings_title:'Settings',
@@ -2503,7 +2656,8 @@ const I18N = {
     skill:'Skill', trajectory:'Trajectory', chat:'Chat', ready:'Ready', send_to_start:'Send a message to start a conversation.',
     input_placeholder:'Send a message… type / for commands',
     appearance:'Appearance', model_section:'Model', tools:'Tools', config_file:'Config File', language:'Language',
-    theme:'Theme', theme_hint:'Choose how dsh-lite looks to you.',
+    general:'General',
+    theme:'Appearance', theme_hint:'Choose how dsh-lite looks to you.',
     light:'Light', dark:'Dark', system:'System',
     base_url:'Base URL', base_url_hint:'OpenAI-compatible endpoint (e.g. http://127.0.0.1:8080/v1)',
     api_key:'API Key', api_key_hint:'Leave empty for local inference without auth.',
@@ -2520,8 +2674,6 @@ const I18N = {
     tool_memory:'Memory', tool_memory_hint:'Long-term KV store (read/write/recall)',
     config_path:'Config File Path', config_path_hint:'Where the config file is loaded from. Default: next to the executable. Changes apply after restart.',
     change:'Change',
-    raw_config:'Raw Configuration', raw_config_hint:'Edit the TOML config file directly. Changes apply after save + restart.',
-    save_to_file:'Save to file', reload:'Reload',
     saved_restart:'Saved. Takes effect on next message.', save_failed:'Save failed: ',
     language_hint:'Choose the interface language.',
     chat:'Chat', delete:'Delete', confirm_delete:'Delete this session?',
@@ -2539,7 +2691,7 @@ function applyI18n() {
 function initLanguage() {
   currentLang = localStorage.getItem('dsh-lang') || 'zh';
   applyI18n();
-  document.querySelectorAll('.theme-cube[data-lang]').forEach(c => {
+  document.querySelectorAll('.lang-pill[data-lang]').forEach(c => {
     c.classList.toggle('selected', c.dataset.lang === currentLang);
   });
 }
@@ -2547,7 +2699,7 @@ function setLanguage(lang) {
   currentLang = lang;
   localStorage.setItem('dsh-lang', lang);
   applyI18n();
-  document.querySelectorAll('.theme-cube[data-lang]').forEach(c => {
+  document.querySelectorAll('.lang-pill[data-lang]').forEach(c => {
     c.classList.toggle('selected', c.dataset.lang === lang);
   });
 }

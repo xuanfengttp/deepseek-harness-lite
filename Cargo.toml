@@ -30,8 +30,8 @@ tokio-stream = "0.1"
 # Async stream macro (for SSE body construction)
 async-stream = "0.3"
 
-# Config (TOML)
-toml = "0.8"
+# Config (YAML — matches original dsh settings.yaml)
+serde_yaml = "0.9"
 
 # Skill YAML frontmatter
 yaml-rust2 = "0.10"

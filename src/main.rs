@@ -288,8 +288,8 @@ async fn async_main() -> ExitCode {
 /// Priority:
 /// 1. `DSH_LITE_CONFIG` env var (highest)
 /// 2. `<exe_dir>/.dsh-lite-path` file contents (user-set via settings)
-/// 3. `<exe_dir>/config.toml` (default, next to the binary — auto-generated on first run)
-/// 4. `config/default.toml` (last-resort fallback for dev/legacy)
+/// 3. `<exe_dir>/config.yaml` (default, next to the binary — auto-generated on first run)
+/// 4. `config/default.yaml` (last-resort fallback for dev/legacy)
 pub fn resolve_config_path() -> String {
     if let Ok(p) = env::var("DSH_LITE_CONFIG") {
         return p;
@@ -310,13 +310,13 @@ pub fn resolve_config_path() -> String {
         }
     }
 
-    // Default: config.toml next to the exe (may not exist yet — will be auto-generated)
+    // Default: config.yaml next to the exe (may not exist yet — will be auto-generated)
     if let Some(dir) = exe_dir {
-        return dir.join("config.toml").to_string_lossy().to_string();
+        return dir.join("config.yaml").to_string_lossy().to_string();
     }
 
     // Last-resort fallback (dev mode without exe resolution)
-    "config/default.toml".to_string()
+    "config/default.yaml".to_string()
 }
 
 /// Load configuration from the resolved path.
@@ -331,14 +331,14 @@ fn load_config() -> Result<Config, String> {
     let path = resolve_config_path();
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("read {path}: {e}"))?;
-    toml::from_str(&content)
+    serde_yaml::from_str(&content)
         .map_err(|e| format!("parse {path}: {e}"))
 }
 
 /// Load config, or generate a default config file on first run.
 ///
 /// If the resolved config file does not exist, write a fresh default to
-/// `<exe_dir>/config.toml` (or the configured path) and load from it.
+/// `<exe_dir>/config.yaml` (or the configured path) and load from it.
 /// This ensures the settings panel always has something to show.
 fn load_or_init_config() -> Config {
     let path = resolve_config_path();
@@ -353,7 +353,7 @@ fn load_or_init_config() -> Config {
 
     // File doesn't exist — generate one from the compiled-in default.
     log::info!("Config file not found at {path}, generating default...");
-    let default_content = include_str!("../config/default.toml");
+    let default_content = include_str!("../config/default.yaml");
 
     // Try to write it. If the path has a parent dir that doesn't exist,
     // create it. If writing fails (e.g. read-only), fall back to defaults.
@@ -378,7 +378,7 @@ fn load_or_init_config() -> Config {
 
 /// Fallback default config if file loading fails.
 fn default_config() -> Config {
-    toml::from_str(include_str!("../config/default.toml"))
+    serde_yaml::from_str(include_str!("../config/default.yaml"))
         .expect("bundled default config must parse")
 }
 
@@ -437,7 +437,7 @@ fn print_help() {
          USAGE:\n    dsh-lite [PROMPT] [OPTIONS]\n\n\
          ARGS:\n    <PROMPT>    Run one turn with this prompt\n\n\
          OPTIONS:\n    -V, --version       Print version\n    -h, --help          Print this help\n    --skill <NAME>      Select skill by name\n\n\
-         ENV:\n    DSH_LITE_CONFIG    Path to config file (override; default: exe-dir/config.toml)\n    RUST_LOG           Log level (default: info)",
+         ENV:\n    DSH_LITE_CONFIG    Path to config file (override; default: exe-dir/config.yaml)\n    RUST_LOG           Log level (default: info)",
         env!("CARGO_PKG_VERSION")
     );
 }

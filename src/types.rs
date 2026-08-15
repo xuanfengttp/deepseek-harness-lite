@@ -240,7 +240,7 @@ pub struct ToolsConfig {
 }
 
 /// SSH configuration — named device targets for persistent interactive sessions.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 pub struct SshConfig {
     /// Named SSH targets. Each target is a persistent connection that stays
     /// open across multiple commands, enabling interactive device queries.
@@ -249,7 +249,7 @@ pub struct SshConfig {
 }
 
 /// One SSH device target — a persistent connection to a network element.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct SshTarget {
     /// Friendly name for this device (used as the `target` parameter in ssh_exec).
     pub name: String,

@@ -1,0 +1,82 @@
+# DeepSeek Harness Lite — Configuration
+#
+# This file is auto-generated on first run with empty defaults.
+# Fill in your model settings below, then save and send a message —
+# changes apply immediately (hot-reload, no restart needed).
+#
+# To add multiple LLM providers, add models entries below.
+# Each preset appears as a dropdown option in the chat input bar.
+#
+# Example:
+#   models:
+#     - name: DeepSeek
+#       base_url: "https://api.deepseek.com/v1"
+#       api_key: "sk-your-key"
+#       model: "deepseek-chat"
+#       context_window: 8192
+#       max_tokens: 2048
+#       temperature: 0.0
+#     - name: Local
+#       base_url: "http://127.0.0.1:8080/v1"
+#       api_key: ""
+#       model: "qwen2.5-7b"
+#       context_window: 32768
+#       max_tokens: 4096
+#       temperature: 0.7
+
+model:
+  base_url: ""
+  api_key: ""
+  model: ""
+  context_window: 8192
+  max_tokens: 2048
+  temperature: 0.0
+
+server:
+  listen: "127.0.0.1:3081"
+
+session:
+  persist_dir: ".sessions"
+  checkpoint_events: 50
+  checkpoint_turn_end: true
+
+memory:
+  backend: "flash"
+  max_entries: 256
+  path: ".sessions/memory.bin"
+
+compaction:
+  threshold: 0.7
+  keep_recent_turns: 4
+
+skill:
+  dir: "skills"
+
+trajectory:
+  enabled: false
+
+tools:
+  shell: true
+  file_read: true
+  file_write: true
+  file_search: true
+  memory: true
+  ssh_exec: false
+  todo: true
+
+# SSH device targets — persistent interactive sessions for network elements.
+# Each target stays connected across multiple commands (background session).
+# Enable ssh_exec above, then define devices here or pass params at call time.
+#
+# ssh:
+#   targets:
+#     - name: core-router
+#       host: 192.168.1.1
+#       port: 22
+#       user: admin
+#       password: admin123
+#     - name: edge-switch
+#       host: 192.168.1.2
+#       port: 22
+#       user: admin
+#       password: admin123

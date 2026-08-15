@@ -491,7 +491,7 @@ async fn handle_request(
             let config_path = crate::resolve_config_path();
             match std::fs::read_to_string(&config_path) {
                 Ok(content) => {
-                    match toml::from_str::<serde_json::Value>(&content) {
+                    match serde_yaml::from_str::<serde_json::Value>(&content) {
                         Ok(val) => serve_json(&serde_json::to_string(&val).unwrap_or_default()),
                         Err(_) => serve_json("{}"),
                     }
@@ -500,20 +500,20 @@ async fn handle_request(
             }
         }
 
-        // Save config (JSON merge into TOML file)
+        // Save config (JSON merge into YAML file)
         (Method::POST, "/api/config") => {
             let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
             let config_path = crate::resolve_config_path();
 
-            // Read current config, parse the incoming JSON as TOML-compatible,
+            // Read current config, parse the incoming JSON as YAML-compatible,
             // merge, and write back.
             let current = std::fs::read_to_string(&config_path).unwrap_or_default();
-            let mut current_val: serde_json::Value = toml::from_str(&current).unwrap_or(serde_json::json!({}));
+            let mut current_val: serde_json::Value = serde_yaml::from_str(&current).unwrap_or(serde_json::json!({}));
 
             if let Ok(incoming) = serde_json::from_slice::<serde_json::Value>(&body) {
                 merge_json(&mut current_val, &incoming);
-                let new_toml = toml::to_string(&current_val).unwrap_or_default();
-                if std::fs::write(&config_path, new_toml).is_ok() {
+                let new_yaml = serde_yaml::to_string(&current_val).unwrap_or_default();
+                if std::fs::write(&config_path, new_yaml).is_ok() {
                     serve_json(r#"{"ok":true,"message":"Config saved. Applied on next chat request (hot-reload)."}"#)
                 } else {
                     serve_json(r#"{"ok":false,"error":"Failed to write config file"}"#)
@@ -547,8 +547,8 @@ async fn handle_request(
             let config_path = crate::resolve_config_path();
             let content = String::from_utf8_lossy(&body).to_string();
 
-            // Validate it's parseable TOML before saving.
-            match toml::from_str::<serde_json::Value>(&content) {
+            // Validate it's parseable YAML before saving.
+            match serde_yaml::from_str::<serde_json::Value>(&content) {
                 Ok(_) => {
                     if std::fs::write(&config_path, &content).is_ok() {
                         serve_json(r#"{"ok":true,"message":"Config file saved. Applied on next chat request (hot-reload)."}"#)
@@ -557,8 +557,24 @@ async fn handle_request(
                     }
                 }
                 Err(e) => {
-                    serve_json(&format!(r#"{{"ok":false,"error":"Invalid TOML: {e}"}}"#))
+                    serve_json(&format!(r#"{{"ok":false,"error":"Invalid YAML: {e}"}}"#))
                 }
+            }
+        }
+
+        // Open config file in system default editor
+        (Method::POST, "/api/config/open") => {
+            let config_path = crate::resolve_config_path();
+            #[cfg(target_os = "windows")]
+            let result = std::process::Command::new("cmd").args(["/C", "start", "", &config_path]).spawn();
+            #[cfg(target_os = "linux")]
+            let result = std::process::Command::new("xdg-open").arg(&config_path).spawn();
+            #[cfg(target_os = "macos")]
+            let result = std::process::Command::new("open").arg(&config_path).spawn();
+
+            match result {
+                Ok(_) => serve_json(r#"{"ok":true}"#),
+                Err(e) => serve_json(&format!(r#"{{"ok":false,"error":"{e}"}}"#)),
             }
         }
 
