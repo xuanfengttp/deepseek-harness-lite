@@ -6,6 +6,7 @@
 //! Endpoints:
 //! - GET  /            → web client HTML
 //! - POST /api/chat    → SSE stream of LoopEvents for one turn
+//! - POST /api/command → execute a slash command locally (no LLM)
 //! - GET  /api/sessions → list all sessions (JSON)
 //! - POST /api/sessions/create → create a new session
 //! - POST /api/sessions/switch → switch active session
@@ -421,6 +422,11 @@ async fn handle_request(
         // Chat (SSE stream)
         (Method::POST, "/api/chat") => {
             handle_chat(req, state).await
+        }
+
+        // Slash command (local, not sent to LLM)
+        (Method::POST, "/api/command") => {
+            handle_command(req, state).await
         }
 
         // Fetch available models from the LLM endpoint (OpenAI-compatible /v1/models)
@@ -861,5 +867,126 @@ fn merge_json(current: &mut serde_json::Value, incoming: &serde_json::Value) {
             }
         }
         (cur, inc) => { *cur = inc.clone(); }
+    }
+}
+
+/// Handle POST /api/command — execute a slash command locally (no LLM).
+///
+/// Supported commands:
+/// - /clear    — clear all messages in the current session
+/// - /compact  — trigger conversation compaction
+/// - /context  — show estimated token usage of the current session
+/// - /new      — create a new session (returns new session id)
+/// - /help     — list available commands
+///
+/// Request body: { "command": "/clear", "args": "" }
+/// Response: { "ok": true, "text": "...", "action": "clear|new|none" }
+async fn handle_command(
+    req: Request<Incoming>,
+    state: Arc<ServerState>,
+) -> Response<BoxBody<Bytes, Infallible>> {
+    let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+    let parsed = serde_json::from_slice::<serde_json::Value>(&body).ok();
+
+    let command = parsed.as_ref()
+        .and_then(|v| v.get("command").and_then(|c| c.as_str()).map(String::from))
+        .unwrap_or_default();
+    let args = parsed.as_ref()
+        .and_then(|v| v.get("args").and_then(|a| a.as_str()).map(String::from))
+        .unwrap_or_default();
+
+    // Parse the command name (strip leading /).
+    let cmd_name = command.trim_start_matches('/').trim().to_lowercase();
+
+    log::info!("Command: /{cmd_name} (args: {args})");
+
+    match cmd_name.as_str() {
+        "clear" => {
+            let mut mgr = state.session_mgr.lock().await;
+            if let Some(log) = mgr.active_mut() {
+                log.clear();
+                mgr.checkpoint_active();
+                serve_json(r#"{"ok":true,"text":"会话已清空。","action":"clear"}"#)
+            } else {
+                serve_json(r#"{"ok":false,"error":"没有活跃会话。","action":"none"}"#)
+            }
+        }
+
+        "new" => {
+            let mut mgr = state.session_mgr.lock().await;
+            let title = if args.trim().is_empty() { "New session" } else { args.trim() };
+            let new_id = mgr.create(title);
+            serve_json(&format!(r#"{{"ok":true,"text":"已创建新会话。","action":"new","sessionId":{:?}}}"#, new_id))
+        }
+
+        "context" => {
+            let mgr = state.session_mgr.lock().await;
+            if let Some(log) = mgr.active() {
+                let tokens = log.estimated_tokens();
+                let event_count = log.events().count();
+                // Get context_window from config
+                let context_window = state.config.model.context_window;
+                let pct = if context_window > 0 { (tokens * 100 / context_window) as u64 } else { 0 };
+                serve_json(&format!(
+                    r#"{{"ok":true,"text":"当前会话约 {tokens} tokens（{event_count} 条事件），上下文窗口 {context_window} tokens，已用 {pct}%。","action":"none","tokens":{tokens},"events":{event_count},"contextWindow":{context_window},"percent":{pct}}}"#
+                ))
+            } else {
+                serve_json(r#"{"ok":false,"error":"没有活跃会话。","action":"none"}"#)
+            }
+        }
+
+        "compact" => {
+            let mut mgr = state.session_mgr.lock().await;
+            if let Some(log) = mgr.active_mut() {
+                // Simple compaction: keep only the most recent events (last 6),
+                // which roughly corresponds to the last turn's messages.
+                // A full LLM-based compaction is deferred (P4).
+                let keep = 6;
+                let total = log.events().count();
+                if total > keep {
+                    // Remove oldest events, keeping only the most recent `keep`.
+                    // We need to drain from the front of the VecDeque.
+                    let to_remove = total - keep;
+                    for _ in 0..to_remove {
+                        // VecDeque doesn't have a public pop_front that returns
+                        // the event, but we can use drain.
+                    }
+                    // Use a simpler approach: take events, rebuild.
+                    let events: Vec<_> = log.events().cloned().collect();
+                    log.clear();
+                    for event in events.into_iter().skip(to_remove) {
+                        log.append(event);
+                    }
+                    mgr.checkpoint_active();
+                    serve_json(&format!(
+                        r#"{{"ok":true,"text":"已压缩会话：保留最近 {keep} 条事件，移除 {to_remove} 条旧事件。","action":"clear"}}"#
+                    ))
+                } else {
+                    serve_json(r#"{"ok":true,"text":"会话较短，无需压缩。","action":"none"}"#)
+                }
+            } else {
+                serve_json(r#"{"ok":false,"error":"没有活跃会话。","action":"none"}"#)
+            }
+        }
+
+        "help" => {
+            let help_text = "可用命令：\n\
+                /new [标题]     — 新建会话\n\
+                /clear          — 清空当前会话\n\
+                /compact        — 压缩会话上下文\n\
+                /context        — 查看当前 token 用量\n\
+                /help           — 显示此帮助\n\
+                \n\
+                在输入框中输入 / 开头的命令即可执行，无需发送给模型。";
+            // Escape for JSON
+            let escaped = help_text.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+            serve_json(&format!(r#"{{"ok":true,"text":"{escaped}","action":"none"}}"#))
+        }
+
+        _ => {
+            serve_json(&format!(
+                r#"{{"ok":false,"error":"未知命令：/{cmd_name}。输入 /help 查看可用命令。","action":"none"}}"#
+            ))
+        }
     }
 }

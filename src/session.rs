@@ -64,6 +64,29 @@ impl SessionLog {
         self.current_turn
     }
 
+    /// Clear all events from the log (for the `/clear` command).
+    /// Resets turn/step counters and seq, but keeps the same capacity.
+    pub fn clear(&mut self) {
+        self.events.clear();
+        self.next_seq = 0;
+        self.current_turn = 0;
+        self.current_step = 0;
+    }
+
+    /// Estimate total token count of the derived messages.
+    /// Uses a rough heuristic: ~4 chars per token for mixed text/JSON.
+    pub fn estimated_tokens(&self) -> usize {
+        let messages = self.derive_messages();
+        let total_chars: usize = messages.iter().map(|m| match m {
+            Message::User { content } => content.len(),
+            Message::Assistant { content, tool_calls } => {
+                content.len() + tool_calls.iter().map(|tc| tc.arguments.to_string().len() + tc.name.len()).sum::<usize>()
+            }
+            Message::Tool { content, .. } => content.len(),
+        }).sum();
+        total_chars / 4
+    }
+
     /// End the current turn.
     pub fn end_turn(&mut self, reason: TurnEndReason) {
         self.append(SessionEvent::TurnEnd { turn: self.current_turn, reason });
@@ -319,5 +342,28 @@ mod tests {
         assert!(matches!(msgs[3], Message::Assistant { .. }));
         assert!(matches!(msgs[4], Message::Tool { .. }));
         assert!(matches!(msgs[5], Message::Assistant { .. }));
+    }
+
+    #[test]
+    fn clear_empties_log() {
+        let mut log = SessionLog::new(128);
+        log.append(SessionEvent::UserMessage { content: "hello".into() });
+        log.append(SessionEvent::AssistantMessage {
+            content: "hi".into(), tool_calls: vec![], usage: None, ttft_ms: 0, decode_ms: 0,
+        });
+        assert_eq!(log.derive_messages().len(), 2);
+        log.clear();
+        assert_eq!(log.derive_messages().len(), 0);
+        // Can still append after clear.
+        log.append(SessionEvent::UserMessage { content: "fresh start".into() });
+        assert_eq!(log.derive_messages().len(), 1);
+    }
+
+    #[test]
+    fn estimated_tokens_positive() {
+        let mut log = SessionLog::new(128);
+        log.append(SessionEvent::UserMessage { content: "This is a test message with enough characters".into() });
+        let tokens = log.estimated_tokens();
+        assert!(tokens > 0);
     }
 }

@@ -260,6 +260,16 @@ body {
 .message.assistant .bubble {
   padding: 0; font-size: 15px; line-height: 1.7; color: var(--label-primary);
 }
+/* System message (slash command results) — centered, subtle */
+.message.system { text-align: center; }
+.message.system .bubble {
+  display: inline-block; max-width: 90%; text-align: left;
+  background: var(--bg-platform); color: var(--label-secondary);
+  padding: 8px 14px; border-radius: 10px; font-size: 13px; line-height: 1.6;
+  border: 1px solid var(--border-l1); white-space: pre-wrap;
+  font-family: var(--font-code);
+}
+.message.system .bubble pre { background: transparent; border: none; padding: 0; }
 .bubble pre {
   background: var(--bg-platform); padding: 12px 16px; border-radius: 8px; overflow-x: auto;
   margin: 8px 0; font-size: 13px; font-family: var(--font-code); line-height: 1.5;
@@ -1194,6 +1204,61 @@ async function sendMessage() {
   const hero = document.getElementById('hero');
   if (hero) hero.remove();
 
+  // ── Slash command detection ──
+  // If the message starts with "/", treat it as a command (not sent to LLM).
+  // Exceptions: messages that are just URLs or paths starting with "/".
+  const slashMatch = msg.match(/^\/([a-z][a-z0-9_-]*)(\s.*)?$/);
+  if (slashMatch) {
+    const cmdName = slashMatch[1];
+    const cmdArgs = (slashMatch[2] || '').trim();
+    const knownCommands = ['new', 'clear', 'compact', 'context', 'help'];
+    if (knownCommands.includes(cmdName)) {
+      input.value = ''; input.style.height = '44px';
+      isStreaming = true;
+      setSendButtonMode('stop');
+      try {
+        const res = await fetch('/api/command', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({command: '/' + cmdName, args: cmdArgs})
+        });
+        const result = await res.json();
+        // Show the command in the chat (user-like, but styled as command)
+        addMessage('system', '$ ' + msg);
+        if (result.ok) {
+          addMessage('system', result.text);
+        } else {
+          addMessage('system', '❌ ' + (result.error || '命令执行失败'));
+        }
+        // Handle command-specific actions
+        if (result.action === 'clear') {
+          // Clear chat UI
+          document.querySelector('.chat-inner').innerHTML = '';
+          clearTrajectory();
+          currentToolCallEl = null;
+          currentAssistantEl = null;
+          currentAssistantText = '';
+          resetSessionStats();
+        } else if (result.action === 'new' && result.sessionId) {
+          // Switch to the new session
+          await switchSession(result.sessionId);
+        }
+      } catch(e) {
+        console.error('command', e);
+        addMessage('system', '❌ 命令执行失败：' + e.message);
+      }
+      isStreaming = false;
+      setSendButtonMode('send');
+      loadSessions();
+      return;
+    }
+    // Unknown command — show error, don't send to LLM
+    input.value = ''; input.style.height = '44px';
+    addMessage('system', '$ ' + msg);
+    addMessage('system', '❌ 未知命令：/' + cmdName + '。输入 /help 查看可用命令。');
+    return;
+  }
+
   addMessage('user', msg);
   addTrajCell('user', 'USER', truncate(msg, 80), '');
   input.value = ''; input.style.height = '44px';
@@ -1625,9 +1690,13 @@ function addMessage(role, content) {
   const chat = document.querySelector('.chat-inner');
   const el = document.createElement('div');
   el.className = `message ${role}`;
-  el.innerHTML = role === 'user'
-    ? `<div class="bubble">${esc(content)}</div>`
-    : `<div class="role-tag">Assistant</div><div class="bubble">${renderMd(content)}</div>`;
+  if (role === 'user') {
+    el.innerHTML = `<div class="bubble">${esc(content)}</div>`;
+  } else if (role === 'system') {
+    el.innerHTML = `<div class="bubble">${esc(content)}</div>`;
+  } else {
+    el.innerHTML = `<div class="role-tag">Assistant</div><div class="bubble">${renderMd(content)}</div>`;
+  }
   chat.appendChild(el);
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
   return el;
@@ -2195,7 +2264,7 @@ const I18N = {
     new_session:'新建会话', settings:'设置', settings_title:'设置',
     search_sessions:'搜索会话...',
     skill:'技能', trajectory:'轨迹', chat:'对话', ready:'就绪', send_to_start:'发送消息开始对话。',
-    input_placeholder:'发送消息...',
+    input_placeholder:'发送消息… 输入 / 查看命令',
     appearance:'外观', model_section:'模型', tools:'工具', config_file:'配置文件', language:'语言',
     theme:'主题', theme_hint:'选择 dsh-lite 的外观。',
     light:'浅色', dark:'深色', system:'跟随系统',
@@ -2226,7 +2295,7 @@ const I18N = {
     new_session:'New Session', settings:'Settings', settings_title:'Settings',
     search_sessions:'Search sessions...',
     skill:'Skill', trajectory:'Trajectory', chat:'Chat', ready:'Ready', send_to_start:'Send a message to start a conversation.',
-    input_placeholder:'Send a message...',
+    input_placeholder:'Send a message… type / for commands',
     appearance:'Appearance', model_section:'Model', tools:'Tools', config_file:'Config File', language:'Language',
     theme:'Theme', theme_hint:'Choose how dsh-lite looks to you.',
     light:'Light', dark:'Dark', system:'System',
