@@ -1,51 +1,48 @@
 //! Shell tool: execute a command and return stdout+stderr.
 //!
-//! Platform-aware: uses `sh -c` on Unix, `cmd /c` on Windows. Runs in a
-//! blocking thread via `spawn_blocking` to avoid blocking the async reactor.
-//! Output is captured and truncated by the registry's spill stage.
+//! Platform-aware: uses `sh -c` on Unix, `cmd /c` on Windows.
 
-use crate::types::ToolResult;
-use crate::tools::make_executor;
-use crate::types::ToolDefinition;
+use crate::types::{ToolDefinition, ToolResult};
+use crate::tools::ToolPlugin;
 use serde_json;
 
-/// The shell tool definition.
-pub fn definition() -> ToolDefinition {
-    ToolDefinition {
-        name: "shell".into(),
-        description: "Execute a shell command on the device and return its output".into(),
-        parameters: serde_json::json!({
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The shell command to execute"
-                }
-            },
-            "required": ["command"]
-        }),
-        timeout_ms: 30_000,
-    }
-}
+/// The shell tool plugin.
+pub struct ShellTool;
 
-/// Create the shell tool executor.
-pub fn make_executor_fn() -> crate::tools::ToolExecutor {
-    make_executor(|args: serde_json::Value, tx: tokio::sync::oneshot::Sender<ToolResult>| {
-        let command = args.get("command")
+impl ToolPlugin for ShellTool {
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "shell".into(),
+            description: "Execute a shell command on the device and return its output".into(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to execute"
+                    }
+                },
+                "required": ["command"]
+            }),
+            timeout_ms: 30_000,
+        }
+    }
+
+    fn execute(&self, args: serde_json::Value) -> ToolResult {
+        let command = args
+            .get("command")
             .and_then(|c| c.as_str())
             .unwrap_or("");
 
         if command.is_empty() {
-            let _ = tx.send(ToolResult {
+            return ToolResult {
                 content: "Error: `command` parameter is required and must be non-empty".into(),
                 is_error: true,
-            });
-            return;
+            };
         }
 
         log::info!("shell: executing `{command}`");
 
-        // Platform-specific shell invocation.
         let (program, flag) = if cfg!(windows) {
             ("cmd", "/C")
         } else {
@@ -57,7 +54,7 @@ pub fn make_executor_fn() -> crate::tools::ToolExecutor {
             .arg(command)
             .output();
 
-        let result = match output {
+        match output {
             Ok(out) => {
                 let stdout = String::from_utf8_lossy(&out.stdout).to_string();
                 let stderr = String::from_utf8_lossy(&out.stderr).to_string();
@@ -66,7 +63,7 @@ pub fn make_executor_fn() -> crate::tools::ToolExecutor {
                 let mut content = stdout;
                 if !stderr.is_empty() {
                     if !content.is_empty() {
-                        content.push_str("\n");
+                        content.push('\n');
                     }
                     content.push_str("[stderr]\n");
                     content.push_str(&stderr);
@@ -83,8 +80,6 @@ pub fn make_executor_fn() -> crate::tools::ToolExecutor {
                 content: format!("Error: failed to execute command: {e}"),
                 is_error: true,
             },
-        };
-
-        let _ = tx.send(result);
-    })
+        }
+    }
 }

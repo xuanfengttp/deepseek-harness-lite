@@ -1,13 +1,13 @@
-//! Tool registry and 3-stage execution pipeline.
+//! Tool registry and execution pipeline with plugin-based registration.
 //!
-//! Mirrors dsh `core/tools`, simplified from 5 waterfall stages to 3 direct
-//! stages: check → execute → result. No waterfall/around-middleware — hooks
-//! are plain functions. Timeout and cancellation wrap the execute stage.
+//! Maps to dsh `core/tools` + `ctx.tools.register(defineTool())`.
+//! Tools implement the `ToolPlugin` trait — definition + execution in one unit.
+//! The registry handles the 3-stage pipeline: check → execute → result.
 //!
 //! Stages:
-//! 1. `check` — permission (policy) + argument validation
-//! 2. `execute` — the tool body, wrapped with timeout/cancellation
-//! 3. `result` — truncate (spill) + record + normalize errors
+//! 1. `check` — permission (policy) + tool existence
+//! 2. `execute` — the tool body, wrapped with timeout (inside spawn_blocking)
+//! 3. `result` — truncate (spill) + normalize errors
 
 pub mod shell;
 pub mod file;
@@ -16,6 +16,7 @@ pub mod memory;
 use crate::types::*;
 use crate::policy::Policy;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -23,19 +24,26 @@ use tokio::time::timeout;
 /// the model's limited context.
 const MAX_OUTPUT_BYTES: usize = 16_384;
 
-/// The tool registry: maps tool names to definitions and executors.
+/// A tool plugin provides its definition and execution logic together.
+///
+/// Maps to dsh `defineTool()` + `ctx.tools.register()`. Each built-in tool
+/// implements this trait, and `register_builtins()` registers them all.
+pub trait ToolPlugin: Send + Sync {
+    /// The tool's schema (name, description, parameters, timeout).
+    fn definition(&self) -> ToolDefinition;
+
+    /// Execute the tool with JSON arguments. Returns the result.
+    ///
+    /// This runs inside `spawn_blocking`, so it must not hold non-Send data
+    /// and must not call async functions.
+    fn execute(&self, args: serde_json::Value) -> ToolResult;
+}
+
+/// The tool registry: maps tool names to plugins, enforces policy.
 pub struct ToolRegistry {
-    tools: HashMap<String, RegisteredTool>,
+    tools: HashMap<String, Arc<dyn ToolPlugin>>,
     policy: Policy,
 }
-
-struct RegisteredTool {
-    def: ToolDefinition,
-    executor: ToolExecutor,
-}
-
-/// A tool executor is an async function taking JSON arguments and returning a ToolResult.
-pub type ToolExecutor = std::sync::Arc<dyn Fn(serde_json::Value, tokio::sync::oneshot::Sender<ToolResult>) + Send + Sync>;
 
 /// Result of checking a tool call before execution.
 enum CheckResult {
@@ -51,19 +59,16 @@ impl ToolRegistry {
         }
     }
 
-    /// Register a tool with its definition and executor.
-    pub fn register(
-        &mut self,
-        def: ToolDefinition,
-        executor: ToolExecutor,
-    ) {
+    /// Register a tool plugin.
+    pub fn register(&mut self, plugin: Box<dyn ToolPlugin>) {
+        let def = plugin.definition();
         log::debug!("Registered tool: {}", def.name);
-        self.tools.insert(def.name.clone(), RegisteredTool { def, executor });
+        self.tools.insert(def.name.clone(), Arc::from(plugin));
     }
 
     /// Get all registered tool definitions (for prompt assembly).
     pub fn definitions(&self) -> Vec<ToolDefinition> {
-        self.tools.values().map(|t| t.def.clone()).collect()
+        self.tools.values().map(|p| p.definition()).collect()
     }
 
     /// Get definitions filtered to a specific allow-list.
@@ -71,9 +76,10 @@ impl ToolRegistry {
         if allow.is_empty() {
             return self.definitions();
         }
-        self.tools.values()
-            .filter(|t| allow.iter().any(|n| n == &t.def.name))
-            .map(|t| t.def.clone())
+        self.tools
+            .values()
+            .filter(|p| allow.iter().any(|n| n == &p.definition().name))
+            .map(|p| p.definition())
             .collect()
     }
 
@@ -104,18 +110,21 @@ impl ToolRegistry {
     ///
     /// Returns the final ToolResult (truncated, error-normalized).
     pub async fn execute(&self, call: &ToolCall) -> ToolResult {
-        // Stage 1: check (permission + validation)
+        // Stage 1: check (permission + existence)
         match self.check(call) {
             CheckResult::Deny(reason) => {
                 log::info!("Tool `{}` denied: {}", call.name, reason);
-                return ToolResult { content: format!("Error: permission denied — {reason}"), is_error: true };
+                return ToolResult {
+                    content: format!("Error: permission denied — {reason}"),
+                    is_error: true,
+                };
             }
             CheckResult::Allow => {}
         }
 
-        // Stage 2: execute (with timeout)
-        let registered = match self.tools.get(&call.name) {
-            Some(t) => t,
+        // Stage 2: execute (with timeout, inside spawn_blocking)
+        let plugin = match self.tools.get(&call.name) {
+            Some(p) => p,
             None => {
                 return ToolResult {
                     content: format!("Error: unknown tool `{}`", call.name),
@@ -123,31 +132,25 @@ impl ToolRegistry {
                 };
             }
         };
-        let (result_tx, result_rx) = tokio::sync::oneshot::channel();
-        let executor = registered.executor.clone();
+
         let args = call.arguments.clone();
         let tool_name = call.name.clone();
-        let timeout_ms = registered.def.timeout_ms;
+        let timeout_ms = plugin.definition().timeout_ms;
 
-        // Run the executor in a blocking-safe context with timeout.
-        let _exec_task = tokio::task::spawn_blocking(move || {
-            (executor)(args, result_tx);
-        });
-
+        // Run the plugin's execute() inside spawn_blocking, wrapped with timeout.
+        // Arc clone the plugin so the 'static spawn_blocking task owns it.
         let timeout_dur = Duration::from_millis(timeout_ms);
-        match timeout(timeout_dur, async {
-            // Wait for the executor's result.
-            match result_rx.await {
-                Ok(result) => result,
-                Err(_) => ToolResult {
-                    content: "Error: tool executor dropped result channel".into(),
+        let plugin = plugin.clone();
+        let result = tokio::task::spawn_blocking(move || plugin.execute(args));
+
+        match timeout(timeout_dur, result).await {
+            Ok(Ok(r)) => self.finalize_result(r, &tool_name),
+            Ok(Err(e)) => {
+                log::warn!("Tool `{}` panicked: {e}", tool_name);
+                ToolResult {
+                    content: format!("Error: tool `{}` panicked: {e}", tool_name),
                     is_error: true,
-                },
-            }
-        }).await {
-            Ok(result) => {
-                // Stage 3: result (truncate + normalize)
-                self.finalize_result(result, &tool_name)
+                }
             }
             Err(_) => {
                 log::warn!("Tool `{}` timed out after {}ms", tool_name, timeout_ms);
@@ -161,11 +164,9 @@ impl ToolRegistry {
 
     /// Stage 1: check permission and validity.
     fn check(&self, call: &ToolCall) -> CheckResult {
-        // Permission check via policy.
         if let Some(reason) = self.policy.check_tool(&call.name) {
             return CheckResult::Deny(reason);
         }
-        // Tool existence check.
         if !self.tools.contains_key(&call.name) {
             return CheckResult::Deny(format!("tool `{}` is not registered", call.name));
         }
@@ -189,13 +190,31 @@ impl ToolRegistry {
     }
 }
 
-/// Create a simple tool executor from an async function.
+/// Register all built-in tools based on config. Called once at startup.
 ///
-/// Usage: `make_executor(|args, tx| { async move { tx.send(result).ok(); } })`
-/// The function runs inside `spawn_blocking`, so it must not hold non-Send data.
-pub fn make_executor<F>(f: F) -> ToolExecutor
-where
-    F: Fn(serde_json::Value, tokio::sync::oneshot::Sender<ToolResult>) + Send + Sync + 'static,
-{
-    std::sync::Arc::new(f)
+/// This replaces the duplicated if-else registration blocks that were
+/// in both main.rs and server.rs.
+pub fn register_builtins(registry: &mut ToolRegistry, config: &crate::types::Config) {
+    if config.tools.shell {
+        registry.register(Box::new(shell::ShellTool));
+    }
+    if config.tools.file_read {
+        registry.register(Box::new(file::FileReadTool));
+    }
+    if config.tools.file_write {
+        registry.register(Box::new(file::FileWriteTool));
+    }
+    if config.tools.file_search {
+        registry.register(Box::new(file::FileSearchTool));
+    }
+    if config.tools.memory {
+        let store = std::sync::Arc::new(crate::memory::MemoryStore::open(
+            &config.memory.path,
+            config.memory.max_entries,
+        ));
+        log::info!("Memory store: {} entries", store.len());
+        registry.register(Box::new(memory::MemoryReadTool { store: store.clone() }));
+        registry.register(Box::new(memory::MemoryWriteTool { store: store.clone() }));
+        registry.register(Box::new(memory::MemoryRecallTool { store }));
+    }
 }

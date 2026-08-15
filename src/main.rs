@@ -25,9 +25,6 @@ use crate::types::*;
 use crate::session::SessionLog;
 use crate::llm::LlmClient;
 use crate::tools::ToolRegistry;
-use crate::tools::shell;
-use crate::tools::file;
-use crate::tools::memory as memory_tool;
 use crate::policy::Policy;
 use crate::agent::LoopEvent;
 use crate::dispatcher::DispatchResult;
@@ -119,32 +116,10 @@ async fn async_main() -> ExitCode {
     // Ensure the skills directory exists with default skills if missing.
     ensure_skills_dir(&config.skill.dir);
 
-    // Register built-in tools.
+    // Register built-in tools (shared registration function, no duplication).
     let policy = Policy::from_config(&config.tools);
     let mut tools = ToolRegistry::new(policy);
-
-    if config.tools.shell {
-        tools.register(shell::definition(), shell::make_executor_fn());
-    }
-    if config.tools.file_read {
-        tools.register(file::read_definition(), file::make_read_executor());
-    }
-    if config.tools.file_write {
-        tools.register(file::write_definition(), file::make_write_executor());
-    }
-    if config.tools.file_search {
-        tools.register(file::search_definition(), file::make_search_executor());
-    }
-    if config.tools.memory {
-        let store = std::sync::Arc::new(memory::MemoryStore::open(
-            &config.memory.path,
-            config.memory.max_entries,
-        ));
-        log::info!("Memory store: {} entries", store.len());
-        tools.register(memory_tool::read_definition(), memory_tool::make_read_executor(store.clone()));
-        tools.register(memory_tool::write_definition(), memory_tool::make_write_executor(store.clone()));
-        tools.register(memory_tool::recall_definition(), memory_tool::make_recall_executor(store));
-    }
+    crate::tools::register_builtins(&mut tools, &config);
 
     log::info!("Registered {} tool(s)", tools.definitions().len());
 

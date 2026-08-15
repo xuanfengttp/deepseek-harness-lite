@@ -622,30 +622,10 @@ async fn handle_chat(
         mgr.take_active().unwrap_or_else(|| crate::session::SessionLog::new(512))
     };
 
-    // Build the tools + LLM client.
+    // Build the tools + LLM client (shared registration function).
     let policy = crate::policy::Policy::from_config(&config.tools);
     let mut tools = crate::tools::ToolRegistry::new(policy);
-    if config.tools.shell {
-        tools.register(crate::tools::shell::definition(), crate::tools::shell::make_executor_fn());
-    }
-    if config.tools.file_read {
-        tools.register(crate::tools::file::read_definition(), crate::tools::file::make_read_executor());
-    }
-    if config.tools.file_write {
-        tools.register(crate::tools::file::write_definition(), crate::tools::file::make_write_executor());
-    }
-    if config.tools.file_search {
-        tools.register(crate::tools::file::search_definition(), crate::tools::file::make_search_executor());
-    }
-    if config.tools.memory {
-        let store = std::sync::Arc::new(crate::memory::MemoryStore::open(
-            &config.memory.path,
-            config.memory.max_entries,
-        ));
-        tools.register(crate::tools::memory::read_definition(), crate::tools::memory::make_read_executor(store.clone()));
-        tools.register(crate::tools::memory::write_definition(), crate::tools::memory::make_write_executor(store.clone()));
-        tools.register(crate::tools::memory::recall_definition(), crate::tools::memory::make_recall_executor(store));
-    }
+    crate::tools::register_builtins(&mut tools, &config);
 
     let llm = crate::llm::LlmClient::new(&config.model);
     let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model)
