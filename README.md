@@ -10,6 +10,8 @@ DeepSeek Harness Lite (`dsh-lite`) is a from-scratch Rust reimplementation that 
 
 The result is a single static binary with a ~6 MB runtime memory footprint, designed for resource-constrained environments where a full Node.js runtime is impractical.
 
+> **Download pre-built binaries:** [Latest Release](https://github.com/xuanfengttp/deepseek-harness-lite/releases) — Windows x86_64, Linux ARM64/ARMv7/x86_64 (static musl, zero dependencies)
+
 ## Key features
 
 ### Unified agent loop with strategy hooks
@@ -243,6 +245,8 @@ git push origin v0.1.0-rc.6
 ```
 
 The CI workflow (`.github/workflows/release.yml`) builds all 5 targets in parallel, packages each with `config.yaml` + `skills/` + `README.md`, and creates a GitHub Release with downloadable archives.
+
+**Current release:** [v0.1.0-rc.6](https://github.com/xuanfengttp/deepseek-harness-lite/releases/tag/v0.1.0-rc.6)
 
 For local packaging, use the `packages.ps1` script:
 

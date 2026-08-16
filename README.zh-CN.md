@@ -10,6 +10,8 @@ DeepSeek Harness Lite（`dsh-lite`）是对 DeepSeek Harness 核心架构的全�
 
 最终产物是一个单一静态二进制文件，运行时内存占用约 6 MB，适用于无法运行完整 Node.js 运行时的资源受限环境。
 
+> **下载预编译二进制：** [最新 Release](https://github.com/xuanfengttp/deepseek-harness-lite/releases) — Windows x86_64、Linux ARM64/ARMv7/x86_64（musl 静态链接，零依赖）
+
 ## 核心特性
 
 ### 统一 Agent Loop + 策略钩子
@@ -243,6 +245,8 @@ git push origin v0.1.0-rc.6
 ```
 
 CI 工作流（`.github/workflows/release.yml`）并行构建全部 5 个目标，每个打包包含 `config.yaml` + `skills/` + `README.md`，并创建 GitHub Release 供下载。
+
+**当前发布版本：** [v0.1.0-rc.6](https://github.com/xuanfengttp/deepseek-harness-lite/releases/tag/v0.1.0-rc.6)
 
 本地打包用 `packages.ps1` 脚本：
 
