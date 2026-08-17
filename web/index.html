@@ -271,32 +271,29 @@ body {
 }
 .message.system .bubble pre { background: transparent; border: none; padding: 0; }
 
-/* ── Thinking/reasoning block (collapsible, like ChatBox) ────────────── */
-.think-block {
-  max-width: 748px; margin: 0 auto 8px; width: 100%; box-sizing: border-box;
-  border: 1px solid var(--border-l2); border-radius: 10px; overflow: hidden;
-  background: var(--bg-platform); transition: border-color 0.2s var(--ease);
+/* ── Thinking/reasoning block — inline in assistant bubble (matching DSH original) ── */
+.think-section {
+  border-left: 2px solid var(--border-l3);
+  margin: 0 0 8px 0; padding-left: 10px;
 }
-.think-block:hover { border-color: var(--border-l3); }
-.think-block > summary {
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 14px; cursor: pointer; user-select: none;
-  font-size: 13px; font-weight: 500; color: var(--label-tertiary);
-  list-style: none; transition: color 0.15s var(--ease);
+.think-toggle {
+  display: inline-flex; align-items: center; gap: 3px;
+  height: 20px; cursor: pointer; user-select: none;
+  font-size: 12px; font-weight: 600; color: var(--label-tertiary);
+  background: none; border: none; padding: 0; transition: color 0.12s var(--ease);
 }
-.think-block > summary::-webkit-details-marker { display: none; }
-.think-block > summary::before {
-  content: '▸'; font-size: 11px; transition: transform 0.2s var(--ease);
-  color: var(--label-tertiary);
+.think-toggle:hover { color: var(--label-secondary); }
+.think-chevron {
+  display: inline-block; font-size: 10px; transition: transform 0.12s var(--ease);
+  color: var(--label-caption);
 }
-.think-block[open] > summary::before { transform: rotate(90deg); }
-.think-block[open] > summary { color: var(--label-secondary); border-bottom: 1px solid var(--border-l1); }
-.think-content {
-  padding: 10px 14px; font-size: 13px; line-height: 1.6;
+.think-section.expanded .think-chevron { transform: rotate(90deg); }
+.think-body {
+  display: none; margin-top: 4px; font-size: 13px; line-height: 1.6;
   color: var(--label-tertiary); max-height: 400px; overflow-y: auto;
 }
-.think-content p { margin: 6px 0; }
-.think-content .typing { color: var(--accent); animation: blink 1s infinite; }
+.think-section.expanded .think-body { display: block; }
+.think-body p { margin: 6px 0; }
 
 .bubble pre {
   background: var(--bg-platform); padding: 12px 16px; border-radius: 8px; overflow-x: auto;
@@ -1986,35 +1983,50 @@ function replayTrajectory(events) {
 function handleEvent(event, showTraj) {
   switch (event.type) {
     case 'think_delta':
-      // Create or update a collapsible thinking block above the assistant bubble.
-      // The thinking block is rendered before any text delta, so it appears
-      // above the assistant's answer in the chat.
+      // Create the thinking section inside the assistant bubble (before output text).
+      // Structure: <div class="message assistant"><div class="bubble">
+      //   <div class="think-section expanded"><button class="think-toggle">...</button><div class="think-body">...</div></div>
+      //   <div class="think-output">...actual answer...</div>
+      // </div></div>
+      if (!currentAssistantEl) {
+        currentAssistantEl = addMessage('assistant', '');
+        currentAssistantText = '';
+      }
       if (!currentThinkEl) {
-        // Create the thinking block element
-        const thinkWrapper = document.createElement('div');
-        thinkWrapper.className = 'message assistant';
-        thinkWrapper.innerHTML = '<details class="think-block"><summary class="think-summary">💭 思考过程</summary><div class="think-content"></div></details>';
-        document.querySelector('.chat-inner').appendChild(thinkWrapper);
-        currentThinkEl = thinkWrapper.querySelector('.think-content');
+        const bubble = currentAssistantEl.querySelector('.bubble');
+        // Create thinking section
+        const thinkSection = document.createElement('div');
+        thinkSection.className = 'think-section expanded';
+        thinkSection.innerHTML = '<button class="think-toggle" type="button"><span class="think-chevron">▶</span>思考</button><div class="think-body"></div>';
+        bubble.appendChild(thinkSection);
+        // Create output container (will be filled by delta events)
+        const outputDiv = document.createElement('div');
+        outputDiv.className = 'think-output';
+        bubble.appendChild(outputDiv);
+        // Wire toggle
+        thinkSection.querySelector('.think-toggle').onclick = () => thinkSection.classList.toggle('expanded');
+        currentThinkEl = thinkSection.querySelector('.think-body');
         currentThinkText = '';
-        // Auto-expand while streaming, user can collapse later
-        thinkWrapper.querySelector('details').open = true;
       }
       currentThinkText += event.text;
-      currentThinkEl.innerHTML = renderMd(currentThinkText) + '<span class="typing">▋</span>';
+      currentThinkEl.innerHTML = renderMd(currentThinkText);
       document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
       break;
     case 'delta':
       if (!currentAssistantEl) { currentAssistantEl = addMessage('assistant',''); currentAssistantText=''; }
       currentAssistantText += event.text;
-      currentAssistantEl.querySelector('.bubble').innerHTML = renderMd(currentAssistantText) + '<span class="typing">▋</span>';
+      // If a thinking section exists, write output to the .think-output div.
+      // Otherwise write directly to the bubble (no thinking content).
+      const outputTarget = currentAssistantEl.querySelector('.think-output') || currentAssistantEl.querySelector('.bubble');
+      outputTarget.innerHTML = renderMd(currentAssistantText) + '<span class="typing">▋</span>';
       document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
       break;
     case 'assistant_message':
       if (!currentAssistantEl) currentAssistantEl = addMessage('assistant','');
       if (event.content) {
         currentAssistantText = event.content;
-        currentAssistantEl.querySelector('.bubble').innerHTML = renderMd(event.content);
+        const outputTarget = currentAssistantEl.querySelector('.think-output') || currentAssistantEl.querySelector('.bubble');
+        outputTarget.innerHTML = renderMd(event.content);
         // Add ASSISTANT trajectory row showing the model's reasoning/output
         addTrajCell('message', 'ASSISTANT', truncate(event.content, 80), '');
       }
@@ -2086,8 +2098,8 @@ function handleEvent(event, showTraj) {
       currentAssistantEl=null;
       currentThinkEl=null;
       currentThinkText='';
-      // Auto-collapse thinking blocks when the turn ends (user can re-expand)
-      document.querySelectorAll('.think-block').forEach(d => { if (d.open) d.open = false; });
+      // Auto-collapse thinking sections when the turn ends (user can re-expand)
+      document.querySelectorAll('.think-section').forEach(s => s.classList.remove('expanded'));
       saveSessionStats();
       break;
     case 'usage':
