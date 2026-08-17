@@ -102,7 +102,7 @@ impl CommandPlugin for ContextCommand {
             let context_window = ctx.config.model.context_window;
             let pct = if context_window > 0 { (tokens * 100 / context_window) as u64 } else { 0 };
             CommandResult::ok_text(format!(
-                "当前会话约 {tokens} tokens（{event_count} 条事件），上下文窗口 {context_window} tokens，已用 {pct}%。"
+                "当前已用 {tokens} tokens（{event_count} 条事件），模型最大上下文 {context_window} tokens，使用率 {pct}%。"
             ))
         } else {
             CommandResult::error("没有活跃会话。")
