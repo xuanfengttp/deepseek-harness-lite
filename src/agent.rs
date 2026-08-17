@@ -82,7 +82,7 @@ pub struct AgentLoop {
     compaction_threshold: f32,
     /// Number of recent turns to keep during compaction.
     keep_recent_turns: usize,
-    /// Custom system prompt from config (injected between persona and rules).
+    /// Custom system prompt from config (injected after persona, at the tail for KV cache).
     custom_prompt: String,
     /// Step hooks — control execution flow (strategy, compaction, etc.).
     hooks: Vec<Box<dyn StepHook>>,

@@ -236,7 +236,7 @@ pub struct TrajectoryConfig {
     pub enabled: bool,
 }
 
-/// Custom system prompt injected between persona and behavior rules.
+/// Custom system prompt injected at the tail of the system prompt (after persona).
 /// Empty string = no custom section. Content supports {{cwd}}/{{model}} interpolation.
 #[derive(Debug, Clone, Default, Deserialize, serde::Serialize)]
 pub struct PromptConfig {

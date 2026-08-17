@@ -26,6 +26,7 @@ mod subagent;
 use crate::types::*;
 use crate::session::SessionLog;
 use crate::llm::LlmClient;
+use crate::llm::LlmRequest;
 use crate::tools::ToolRegistry;
 use crate::policy::Policy;
 use crate::agent::LoopEvent;
@@ -266,6 +267,12 @@ async fn async_main() -> ExitCode {
             config: config.clone(),
         });
 
+        // KV cache preheat: send the fixed system prompt to the LLM on startup
+        // so the provider caches the prefix. Subsequent real requests can reuse
+        // the cached KV pairs for the system prompt, reducing TTFT and compute.
+        // The preheat response is discarded — it's not shown in the UI.
+        preheat_kv_cache(&config, &active_skill);
+
         if let Err(e) = server::run(&config.server.listen, state).await {
             log::error!("Server error: {e}");
             eprintln!("\n========================================");
@@ -281,6 +288,64 @@ async fn async_main() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+/// Preheat the LLM's KV cache by sending the fixed system prompt as a
+/// minimal streaming request. The provider caches the prefix tokens so
+/// subsequent real requests with the same system prompt can reuse them.
+///
+/// This is fire-and-forget: the response is drained but discarded, and
+/// errors are logged but never surfaced to the user.
+fn preheat_kv_cache(config: &Config, skill: &Skill) {
+    // Build tools (same registration as chat) to get tool definitions.
+    let policy = Policy::from_config(&config.tools);
+    let mut tools = ToolRegistry::new(policy);
+    crate::tools::register_builtins(&mut tools, config);
+    crate::tools::register_subagent(&mut tools, config);
+    let all_tools = tools.definitions();
+
+    // Assemble the system prompt with the same logic as the agent loop.
+    let mut runtime_vars = std::collections::HashMap::new();
+    runtime_vars.insert(
+        "cwd".into(),
+        std::env::current_dir()
+            .map(|d| d.display().to_string())
+            .unwrap_or_else(|_| ".".into()),
+    );
+    runtime_vars.insert("model".into(), config.model.model.clone());
+    let assembled = crate::prompt::assemble(skill, &all_tools, &config.prompt.custom, &runtime_vars);
+
+    // Build a minimal LLM request: system prompt + a trivial user message.
+    // max_tokens=1 to minimize wasted output. think=false to skip reasoning.
+    let llm = LlmClient::new(&config.model);
+    let request = LlmRequest {
+        model: config.model.model.clone(),
+        system: assembled.system,
+        messages: vec![Message::User {
+            content: "ready".into(),
+        }],
+        tools: assembled.tools,
+        max_tokens: 1,
+        temperature: 0.0,
+        think: false,
+    };
+
+    log::info!("Preheating KV cache (system prompt: {} chars, {} tools)...",
+        request.system.len(), request.tools.len());
+
+    tokio::spawn(async move {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<crate::llm::StreamEvent>(64);
+        match llm.stream(request, tx).await {
+            Ok(()) => {
+                // Drain the stream to ensure the connection completes cleanly.
+                while let Some(_event) = rx.recv().await {}
+                log::info!("KV cache preheat complete");
+            }
+            Err(e) => {
+                log::warn!("KV cache preheat failed (non-fatal): {e}");
+            }
+        }
+    });
 }
 
 /// Resolve the config file path.

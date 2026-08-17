@@ -31,16 +31,24 @@ pub struct PromptSection {
     pub text: String,
 }
 
-/// Section order conventions (mirrors dsh system-prompt order semantics):
-///   -100  harness:identity  — fixed agent identity
-///      0  persona           — skill body (role/methodology)
-///     10  behavior-rules    — universal behavior rules
-///    100  tools             — per-tool behavior guidance
+/// Section order conventions, optimized for KV cache reuse.
+///
+/// Fixed content (identity + rules) is grouped at the head so the KV cache
+/// prefix stays stable across skill/config changes. Semi-fixed content
+/// (tool guidance) follows — it only changes when tools or skill allow-list
+/// changes. Dynamic content (persona + custom-prompt) is at the tail, so
+/// changes there only invalidate the suffix, not the cached prefix.
+///
+///   -100  harness:identity  — fixed agent identity (never changes)
+///    -90  behavior-rules    — universal behavior rules (never changes)
+///    -80  tools             — per-tool guidance (semi-fixed: skill + config)
+///      0  persona           — skill body (dynamic: changes on skill switch)
+///     10  custom-prompt     — user-defined prompt (dynamic: changes on config edit)
 pub const ORDER_IDENTITY: i32 = -100;
+pub const ORDER_RULES: i32 = -90;
+pub const ORDER_TOOLS: i32 = -80;
 pub const ORDER_PERSONA: i32 = 0;
-pub const ORDER_RULES: i32 = 10;
-pub const ORDER_TOOLS: i32 = 100;
-pub const ORDER_CUSTOM: i32 = 5;
+pub const ORDER_CUSTOM: i32 = 10;
 
 /// Universal behavior rules for all agents (order=10).
 /// Short, high-signal rules that prevent the most common small-model mistakes.
@@ -49,12 +57,13 @@ const BEHAVIOR_RULES: &str = "## Rules\n\n- Check command exit codes; investigat
 /// Build prompt sections from a skill, available tools, and optional custom prompt.
 ///
 /// Returns dynamic sections that `assemble()` will sort and join.
-/// The layered design mirrors dsh's section-based architecture:
-///   1. Identity (fixed, ~20 tokens)
-///   2. Persona (skill body, variable)
-///   3. Custom prompt (user-defined, order=5, between persona and rules)
-///   4. Behavior rules (fixed, ~80 tokens)
-///   5. Tool guidance (per-tool behavior rules, ~15 tokens/tool)
+/// The layered design is ordered for KV cache reuse — fixed content at head,
+/// dynamic content at tail:
+///   1. Identity (fixed, ~20 tokens, order=-100)
+///   2. Behavior rules (fixed, ~80 tokens, order=-90)
+///   3. Tool guidance (semi-fixed, ~15 tokens/tool, order=-80)
+///   4. Persona (skill body, dynamic, order=0)
+///   5. Custom prompt (user-defined, dynamic, order=10)
 pub fn build_sections(
     skill: &Skill,
     all_tools: &[ToolDefinition],
@@ -62,42 +71,25 @@ pub fn build_sections(
 ) -> (Vec<PromptSection>, Vec<ToolDefinition>) {
     let mut sections: Vec<PromptSection> = Vec::new();
 
-    // Layer 1: Harness identity (order=-100, always present, ~20 tokens).
+    // Layer 1: Harness identity (order=-100, fixed, ~20 tokens).
     sections.push(PromptSection {
         name: "harness:identity".into(),
         order: ORDER_IDENTITY,
         text: "You are an AI agent. Working directory: {{cwd}}.".into(),
     });
 
-    // Layer 2: Persona section (order=0, skill Markdown body).
-    if !skill.body.is_empty() {
-        sections.push(PromptSection {
-            name: "persona".into(),
-            order: ORDER_PERSONA,
-            text: skill.body.clone(),
-        });
-    }
-
-    // Layer 3: Custom system prompt (order=5, user-defined from settings panel).
-    // Injected between persona and behavior rules. Supports {{cwd}}/{{model}}.
-    if !custom_prompt.is_empty() {
-        sections.push(PromptSection {
-            name: "custom-prompt".into(),
-            order: ORDER_CUSTOM,
-            text: custom_prompt.into(),
-        });
-    }
-
-    // Layer 4: Behavior rules (order=10, always present, ~80 tokens).
+    // Layer 2: Behavior rules (order=-90, fixed, ~80 tokens).
+    // Grouped right after identity so the fixed prefix is contiguous for KV cache.
     sections.push(PromptSection {
         name: "behavior-rules".into(),
         order: ORDER_RULES,
         text: BEHAVIOR_RULES.into(),
     });
 
-    // Layer 5: Tool guidance (order=100, one behavior rule per allowed tool).
+    // Layer 3: Tool guidance (order=-80, semi-fixed, ~15 tokens/tool).
     // Uses `guidance` (HOW to use) not `description` (WHAT it does).
     // Description stays in the tool schema sent separately to the LLM.
+    // Semi-fixed: only changes when tools config or skill allow-list changes.
     let allowed_tools = filter_tools(all_tools, &skill.tools_allow);
     if !allowed_tools.is_empty() {
         let tool_lines: Vec<String> = allowed_tools
@@ -116,6 +108,25 @@ pub fn build_sections(
                 text: tool_section,
             });
         }
+    }
+
+    // Layer 4: Persona (order=0, dynamic — skill body, changes on skill switch).
+    if !skill.body.is_empty() {
+        sections.push(PromptSection {
+            name: "persona".into(),
+            order: ORDER_PERSONA,
+            text: skill.body.clone(),
+        });
+    }
+
+    // Layer 5: Custom prompt (order=10, dynamic — user-defined from settings panel).
+    // Supports {{cwd}}/{{model}} interpolation.
+    if !custom_prompt.is_empty() {
+        sections.push(PromptSection {
+            name: "custom-prompt".into(),
+            order: ORDER_CUSTOM,
+            text: custom_prompt.into(),
+        });
     }
 
     (sections, allowed_tools)
@@ -243,16 +254,15 @@ mod tests {
         // Identity section (order=-100) should be present.
         assert!(prompt.system.contains("You are an AI agent."));
         assert!(prompt.system.contains("{{cwd}}")); // uninterpolated when no vars provided
-        // Behavior rules section (order=10) should be present.
+        // Behavior rules section (order=-90) should be present.
         assert!(prompt.system.contains("## Rules"));
         assert!(prompt.system.contains("investigate failures"));
-        // Identity should come before persona.
+        // Fixed content (identity + rules) should come before dynamic (persona).
         let id_pos = prompt.system.find("You are an AI agent.").unwrap();
-        let persona_pos = prompt.system.find("diagnostic agent").unwrap();
-        assert!(id_pos < persona_pos);
-        // Persona should come before rules.
         let rules_pos = prompt.system.find("## Rules").unwrap();
-        assert!(persona_pos < rules_pos);
+        let persona_pos = prompt.system.find("diagnostic agent").unwrap();
+        assert!(id_pos < rules_pos);   // identity before rules (both fixed)
+        assert!(rules_pos < persona_pos); // rules before persona (fixed before dynamic)
     }
 
     #[test]
