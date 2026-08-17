@@ -800,6 +800,15 @@ body {
 .ctx-raw-tool:last-child { border-bottom: none; }
 .ctx-raw-tool-name { font-size: 13px; font-weight: 600; color: var(--accent); }
 .ctx-raw-tool-desc { font-size: 12px; color: var(--label-tertiary); margin: 4px 0; }
+.ctx-raw-sec-table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; }
+.ctx-raw-sec-table th { text-align: left; font-size: 11px; font-weight: 600; color: var(--label-tertiary); padding: 4px 10px; border-bottom: 1px solid var(--border-l2); }
+.ctx-raw-sec-table td { font-size: 12px; padding: 5px 10px; border-bottom: 1px solid var(--border-l1); }
+.ctx-raw-sec-name { font-family: var(--font-code); color: var(--label-secondary); }
+.ctx-raw-sec-order { font-family: var(--font-code); color: var(--accent); text-align: center; }
+.ctx-raw-fixity { display: inline-block; padding: 1px 6px; font-size: 10px; border-radius: 3px; }
+.ctx-raw-fixity.fixed { color: #0a9928; background: rgba(10,153,40,0.1); }
+.ctx-raw-fixity.dynamic { color: #c26b00; background: rgba(194,107,0,0.1); }
+.ctx-raw-sec-hint { font-size: 11px; color: var(--label-tertiary); padding: 6px 10px; line-height: 1.5; }
 
 .hidden { display: none !important; }
 </style>
@@ -1269,13 +1278,8 @@ async function deleteSession(id) {
       // Switch to the most recent remaining session.
       await switchSession(remaining[0].id);
     } else {
-      // No sessions left — show hero.
-      document.querySelector('.chat-inner').innerHTML = heroTemplate;
-      clearTrajectory(); currentToolCallEl = null;
-      setView('chat');
-      applyI18n();
-      currentAssistantEl = null;
-      currentAssistantText = '';
+      // No sessions left — auto-create a new one so the user can keep chatting.
+      await createSession();
     }
   }
 }
@@ -1468,6 +1472,12 @@ async function sendMessage() {
   const input = document.getElementById('input');
   const msg = input.value.trim();
   if (!msg || isStreaming) return;
+
+  // If there's no active session (e.g. all sessions were deleted), create one.
+  if (!currentSessionId) {
+    await createSession();
+    if (!currentSessionId) return; // creation failed
+  }
 
   const hero = document.getElementById('hero');
   if (hero) hero.remove();
@@ -1848,6 +1858,21 @@ function openContextModal(data) {
     msgHtml = '<div class="ctx-raw-empty">（暂无消息）</div>';
   }
 
+  // Build section order table (shows KV-cache-optimized ordering)
+  let sectionsHtml = '';
+  if (data.sections && data.sections.length > 0) {
+    const sortedSecs = [...data.sections].sort((a, b) => a.order - b.order);
+    const fixityLabel = (order) => order < 0 ? '<span class="ctx-raw-fixity fixed">固定</span>' : '<span class="ctx-raw-fixity dynamic">动态</span>';
+    let rows = '';
+    for (const s of sortedSecs) {
+      rows += '<tr><td class="ctx-raw-sec-name">' + escapeHtml(s.name) + '</td><td class="ctx-raw-sec-order">' + s.order + '</td><td>' + fixityLabel(s.order) + '</td></tr>';
+    }
+    sectionsHtml = '<details class="ctx-raw-details" open><summary>Section 编排顺序 <span class="ctx-raw-badge">KV 缓存优化</span></summary>' +
+      '<table class="ctx-raw-sec-table"><thead><tr><th>Section</th><th>Order</th><th>类型</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="ctx-raw-sec-hint">固定内容（order &lt; 0）连续排列在头部，动态内容在尾部。切换 skill 或改自定义提示词只失效尾部缓存。</div>' +
+      '</details>';
+  }
+
   // Build tool schemas
   let toolsHtml = '';
   if (data.tools && data.tools.length > 0) {
@@ -1868,6 +1893,7 @@ function openContextModal(data) {
         '<button class="ctx-raw-close" onclick="document.getElementById(\'ctx-raw-modal\').remove()">✕</button>' +
       '</div>' +
       '<div class="ctx-raw-modal-body">' +
+        sectionsHtml +
         '<details class="ctx-raw-details" open><summary>System Prompt <span class="ctx-raw-badge">' + (data.skill || '') + ' · ' + (data.mode || '') + '</span></summary><pre class="ctx-raw-system">' + escapeHtml(data.system || '') + '</pre></details>' +
         '<details class="ctx-raw-details" open><summary>Messages (' + (data.messages ? data.messages.length : 0) + ')</summary>' + msgHtml + '</details>' +
         toolsHtml +

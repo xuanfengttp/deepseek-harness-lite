@@ -25,10 +25,19 @@ pub struct AssembledPrompt {
 /// Plugins contribute sections by pushing `PromptSection`s into the assemble
 /// call. Sections are sorted by `order` (ascending) before joining.
 pub struct PromptSection {
-    #[allow(dead_code)]
     pub name: String,
     pub order: i32,
     pub text: String,
+}
+
+impl Clone for PromptSection {
+    fn clone(&self) -> Self {
+        PromptSection {
+            name: self.name.clone(),
+            order: self.order,
+            text: self.text.clone(),
+        }
+    }
 }
 
 /// Section order conventions, optimized for KV cache reuse.

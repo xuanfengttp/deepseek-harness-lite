@@ -930,7 +930,17 @@ async fn handle_context_raw(state: Arc<ServerState>) -> Response<BoxBody<Bytes, 
         .map(|d| d.display().to_string())
         .unwrap_or_else(|_| ".".into()));
     runtime_vars.insert("model".into(), config.model.model.clone());
-    let assembled = crate::prompt::assemble(&skill, &all_tools, &config.prompt.custom, &runtime_vars);
+
+    // Build sections separately so we can return section metadata (name, order)
+    // for the context viewer UI to display the KV-cache-optimized ordering.
+    let (sections, allowed_tools) = crate::prompt::build_sections(&skill, &all_tools, &config.prompt.custom);
+    let assembled = crate::prompt::assemble_sections(sections.clone(), allowed_tools, &runtime_vars);
+
+    // Section metadata for the context viewer (shows order → KV cache layout).
+    let sections_json: Vec<serde_json::Value> = sections.iter().map(|s| serde_json::json!({
+        "name": s.name,
+        "order": s.order,
+    })).collect();
 
     // Derive messages from session log.
     let messages: Vec<serde_json::Value> = {
@@ -975,6 +985,7 @@ async fn handle_context_raw(state: Arc<ServerState>) -> Response<BoxBody<Bytes, 
 
     let resp = serde_json::json!({
         "system": assembled.system,
+        "sections": sections_json,
         "messages": messages,
         "tools": tools_json,
         "skill": skill.name,
