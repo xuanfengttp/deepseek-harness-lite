@@ -43,12 +43,20 @@ pub enum StreamEvent {
 
 /// OpenAI-compatible request body (serialized to JSON).
 #[derive(Debug, Serialize)]
+struct StreamOptions {
+    include_usage: bool,
+}
+
+#[derive(Debug, Serialize)]
 struct ChatCompletionRequest {
     model: String,
     messages: Vec<ApiMessage>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<ApiTool>,
     stream: bool,
+    /// Request usage stats in streaming responses (OpenAI stream_options).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
     max_tokens: usize,
     temperature: f32,
     /// Provider-specific reasoning control. Omitted when think is false.
@@ -349,6 +357,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
             messages,
             tools,
             stream: true,
+            stream_options: Some(StreamOptions { include_usage: true }),
             max_tokens: request.max_tokens,
             temperature: request.temperature,
             reasoning_effort: if request.think { Some("high".to_string()) } else { None },

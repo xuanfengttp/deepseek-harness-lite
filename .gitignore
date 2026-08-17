@@ -36,3 +36,6 @@ release/
 
 # Explore / design notes (working docs, not shipped)
 .explore-notes.md
+
+# Blog drafts (not tracked)
+blog/
