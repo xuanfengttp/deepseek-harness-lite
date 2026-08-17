@@ -270,6 +270,34 @@ body {
   font-family: var(--font-code);
 }
 .message.system .bubble pre { background: transparent; border: none; padding: 0; }
+
+/* ── Thinking/reasoning block (collapsible, like ChatBox) ────────────── */
+.think-block {
+  max-width: 748px; margin: 0 auto 8px; width: 100%; box-sizing: border-box;
+  border: 1px solid var(--border-l2); border-radius: 10px; overflow: hidden;
+  background: var(--bg-platform); transition: border-color 0.2s var(--ease);
+}
+.think-block:hover { border-color: var(--border-l3); }
+.think-block > summary {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; cursor: pointer; user-select: none;
+  font-size: 13px; font-weight: 500; color: var(--label-tertiary);
+  list-style: none; transition: color 0.15s var(--ease);
+}
+.think-block > summary::-webkit-details-marker { display: none; }
+.think-block > summary::before {
+  content: '▸'; font-size: 11px; transition: transform 0.2s var(--ease);
+  color: var(--label-tertiary);
+}
+.think-block[open] > summary::before { transform: rotate(90deg); }
+.think-block[open] > summary { color: var(--label-secondary); border-bottom: 1px solid var(--border-l1); }
+.think-content {
+  padding: 10px 14px; font-size: 13px; line-height: 1.6;
+  color: var(--label-tertiary); max-height: 400px; overflow-y: auto;
+}
+.think-content p { margin: 6px 0; }
+.think-content .typing { color: var(--accent); animation: blink 1s infinite; }
+
 .bubble pre {
   background: var(--bg-platform); padding: 12px 16px; border-radius: 8px; overflow-x: auto;
   margin: 8px 0; font-size: 13px; font-family: var(--font-code); line-height: 1.5;
@@ -1095,6 +1123,8 @@ body {
 let isStreaming = false;
 let currentAssistantEl = null;
 let currentAssistantText = '';
+let currentThinkEl = null;
+let currentThinkText = '';
 let chatAbort = null;
 let currentTheme = 'system';
 let showTrajectory = false;
@@ -1955,6 +1985,25 @@ function replayTrajectory(events) {
 
 function handleEvent(event, showTraj) {
   switch (event.type) {
+    case 'think_delta':
+      // Create or update a collapsible thinking block above the assistant bubble.
+      // The thinking block is rendered before any text delta, so it appears
+      // above the assistant's answer in the chat.
+      if (!currentThinkEl) {
+        // Create the thinking block element
+        const thinkWrapper = document.createElement('div');
+        thinkWrapper.className = 'message assistant';
+        thinkWrapper.innerHTML = '<details class="think-block"><summary class="think-summary">💭 思考过程</summary><div class="think-content"></div></details>';
+        document.querySelector('.chat-inner').appendChild(thinkWrapper);
+        currentThinkEl = thinkWrapper.querySelector('.think-content');
+        currentThinkText = '';
+        // Auto-expand while streaming, user can collapse later
+        thinkWrapper.querySelector('details').open = true;
+      }
+      currentThinkText += event.text;
+      currentThinkEl.innerHTML = renderMd(currentThinkText) + '<span class="typing">▋</span>';
+      document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
+      break;
     case 'delta':
       if (!currentAssistantEl) { currentAssistantEl = addMessage('assistant',''); currentAssistantText=''; }
       currentAssistantText += event.text;
@@ -2015,6 +2064,7 @@ function handleEvent(event, showTraj) {
       if (!sessionStats.startTime) sessionStats.startTime = Date.now();
       updateStatsBar();
       currentAssistantEl=null; currentAssistantText='';
+      currentThinkEl=null; currentThinkText='';
       trajTurnStartTime = Date.now();
       addTrajTurnHeader(event.turn);
       break;
@@ -2027,11 +2077,17 @@ function handleEvent(event, showTraj) {
       // their originating assistant message and the next step's message.
       currentAssistantEl = null;
       currentAssistantText = '';
+      currentThinkEl = null;
+      currentThinkText = '';
       updateStatsBar();
       break;
     case 'step_end': break;
     case 'turn_end':
       currentAssistantEl=null;
+      currentThinkEl=null;
+      currentThinkText='';
+      // Auto-collapse thinking blocks when the turn ends (user can re-expand)
+      document.querySelectorAll('.think-block').forEach(d => { if (d.open) d.open = false; });
       saveSessionStats();
       break;
     case 'usage':

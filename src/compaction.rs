@@ -138,6 +138,9 @@ pub async fn compact(
     while let Some(event) = stream_rx.recv().await {
         match event {
             StreamEvent::Delta(text) => summary.push_str(&text),
+            StreamEvent::ThinkDelta(_) => {
+                // Thinking content not needed for summarization — discard.
+            }
             StreamEvent::Done { content, .. } => {
                 if !content.is_empty() {
                     summary = content;

@@ -728,6 +728,10 @@ fn format_loop_event(event: &LoopEvent) -> String {
             let escaped = escape_json_string(text);
             format!(r#"{{"type":"delta","text":"{escaped}"}}"#)
         }
+        LoopEvent::ThinkDelta { text } => {
+            let escaped = escape_json_string(text);
+            format!(r#"{{"type":"think_delta","text":"{escaped}"}}"#)
+        }
         LoopEvent::AssistantMessage { content, tool_calls } => {
             let escaped = escape_json_string(content);
             let tc_json: Vec<String> = tool_calls.iter().map(|tc| {

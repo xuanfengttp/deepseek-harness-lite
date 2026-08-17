@@ -199,6 +199,12 @@ async fn async_main() -> ExitCode {
                         use std::io::Write;
                         std::io::stdout().flush().ok();
                     }
+                    LoopEvent::ThinkDelta { text } => {
+                        // CLI mode: print thinking in dim/diminished style
+                        use std::io::Write;
+                        print!("\x1b[2m{text}\x1b[0m");
+                        std::io::stdout().flush().ok();
+                    }
                     LoopEvent::AssistantMessage { content, tool_calls } => {
                         if !content.is_empty() && full_text.is_empty() {
                             println!("{content}");

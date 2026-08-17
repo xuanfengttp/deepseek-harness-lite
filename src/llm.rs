@@ -32,6 +32,8 @@ pub struct LlmRequest {
 pub enum StreamEvent {
     /// A text delta from the assistant.
     Delta(String),
+    /// A thinking/reasoning delta from the model (reasoning_content field).
+    ThinkDelta(String),
     /// A complete assembled tool call (emitted once per tool call when assembled).
     #[allow(dead_code)]
     ToolCall(ToolCall),
@@ -122,6 +124,10 @@ struct StreamChoice {
 struct StreamDelta {
     #[serde(default)]
     content: Option<String>,
+    /// Reasoning/thinking content (DeepSeek, llama.cpp, and other OpenAI-compatible APIs).
+    /// Some providers use `reasoning`, `reasoning_text` — we try all via serde aliases.
+    #[serde(default, alias = "reasoning", alias = "reasoning_text")]
+    reasoning_content: Option<String>,
     #[serde(default)]
     tool_calls: Option<Vec<StreamToolCallDelta>>,
 }
@@ -490,6 +496,13 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                             if let Some(content) = choice.delta.content {
                                 full_content.push_str(&content);
                                 let _ = tx.send(StreamEvent::Delta(content)).await;
+                            }
+                            // Thinking/reasoning content — emitted as ThinkDelta
+                            // so the frontend can render it in a collapsible block.
+                            if let Some(reasoning) = choice.delta.reasoning_content {
+                                if !reasoning.is_empty() {
+                                    let _ = tx.send(StreamEvent::ThinkDelta(reasoning)).await;
+                                }
                             }
                             if let Some(tc_deltas) = choice.delta.tool_calls {
                                 for tc in tc_deltas {

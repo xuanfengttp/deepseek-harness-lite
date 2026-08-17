@@ -43,6 +43,8 @@ pub enum LoopEvent {
     StepStart { turn: u64, step: u64 },
     /// A streaming text delta from the assistant.
     Delta { text: String },
+    /// A streaming thinking/reasoning delta from the model.
+    ThinkDelta { text: String },
     /// The assistant produced a complete message.
     AssistantMessage { content: String, tool_calls: Vec<ToolCall> },
     /// A tool call was initiated.
@@ -331,6 +333,12 @@ impl AgentLoop {
                     full_content.push_str(&text);
                     let _ = event_tx.send(LoopEvent::Delta { text }).await;
                 }
+                StreamEvent::ThinkDelta(text) => {
+                    // Forward thinking/reasoning deltas to the frontend for display.
+                    // Thinking content is NOT stored in full_content — it's separate
+                    // from the assistant's final answer.
+                    let _ = event_tx.send(LoopEvent::ThinkDelta { text }).await;
+                }
                 StreamEvent::ToolCall(tc) => {
                     tool_calls.push(tc);
                 }
@@ -506,6 +514,9 @@ impl AgentLoop {
                 StreamEvent::Delta(text) => {
                     judge_content.push_str(&text);
                     let _ = event_tx.send(LoopEvent::Delta { text }).await;
+                }
+                StreamEvent::ThinkDelta(_) => {
+                    // Thinking content is not needed for LLM judging — discard.
                 }
                 StreamEvent::Done { content, .. } => {
                     if !content.is_empty() {
