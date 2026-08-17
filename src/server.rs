@@ -429,6 +429,11 @@ async fn handle_request(
             handle_command(req, state).await
         }
 
+        // Raw context: returns the full system prompt + messages that would be sent to the LLM
+        (Method::GET, "/api/context/raw") => {
+            handle_context_raw(state).await
+        }
+
         // List available slash commands (for frontend autocomplete popup)
         (Method::GET, "/api/commands") => {
             let plugins = crate::commands::register_builtins();
@@ -883,6 +888,99 @@ fn merge_json(current: &mut serde_json::Value, incoming: &serde_json::Value) {
         }
         (cur, inc) => { *cur = inc.clone(); }
     }
+}
+
+/// Handle GET /api/context/raw — return the full context that would be sent to the LLM.
+///
+/// Reconstructs the system prompt (from active skill + tools + custom prompt)
+/// and the derived messages (from session log), without making an LLM call.
+/// Used by the "查看上下文" feature to let users inspect exactly what the model sees.
+async fn handle_context_raw(state: Arc<ServerState>) -> Response<BoxBody<Bytes, Infallible>> {
+    let config = crate::load_config_file().unwrap_or_else(|| state.config.clone());
+
+    // Find the active skill.
+    let skill_name = state.active_skill_name.lock().await.clone();
+    let skill = state.skills.iter()
+        .find(|s| s.name == skill_name)
+        .cloned()
+        .unwrap_or_else(|| state.skills.first().cloned().unwrap_or_else(|| {
+            Skill {
+                name: "default".into(),
+                description: "default".into(),
+                when_to_use: None,
+                mode: ExecMode::Plan,
+                think: false,
+                tools_allow: vec![],
+                variables: std::collections::HashMap::new(),
+                body: "You are a helpful assistant.".into(),
+                steps: vec![],
+            }
+        }));
+
+    // Build tools (same registration as chat).
+    let policy = crate::policy::Policy::from_config(&config.tools);
+    let mut tools = crate::tools::ToolRegistry::new(policy);
+    crate::tools::register_builtins(&mut tools, &config);
+    crate::tools::register_subagent(&mut tools, &config);
+    let all_tools: Vec<ToolDefinition> = tools.definitions();
+
+    // Assemble the system prompt (same logic as agent loop).
+    let mut runtime_vars = std::collections::HashMap::new();
+    runtime_vars.insert("cwd".into(), std::env::current_dir()
+        .map(|d| d.display().to_string())
+        .unwrap_or_else(|_| ".".into()));
+    runtime_vars.insert("model".into(), config.model.model.clone());
+    let assembled = crate::prompt::assemble(&skill, &all_tools, &config.prompt.custom, &runtime_vars);
+
+    // Derive messages from session log.
+    let messages: Vec<serde_json::Value> = {
+        let mgr = state.session_mgr.lock().await;
+        if let Some(log) = mgr.active() {
+            log.derive_messages().iter().map(|m| {
+                match m {
+                    crate::types::Message::User { content } => serde_json::json!({
+                        "role": "user",
+                        "content": content,
+                    }),
+                    crate::types::Message::Assistant { content, tool_calls } => {
+                        let tc_json: Vec<serde_json::Value> = tool_calls.iter().map(|tc| serde_json::json!({
+                            "id": tc.id,
+                            "name": tc.name,
+                            "arguments": tc.arguments,
+                        })).collect();
+                        serde_json::json!({
+                            "role": "assistant",
+                            "content": content,
+                            "tool_calls": tc_json,
+                        })
+                    }
+                    crate::types::Message::Tool { call_id, content, .. } => serde_json::json!({
+                        "role": "tool",
+                        "call_id": call_id,
+                        "content": content,
+                    }),
+                }
+            }).collect()
+        } else {
+            vec![]
+        }
+    };
+
+    // Tool schemas (filtered by skill allow-list).
+    let tools_json: Vec<serde_json::Value> = assembled.tools.iter().map(|t| serde_json::json!({
+        "name": t.name,
+        "description": t.description,
+        "parameters": t.parameters,
+    })).collect();
+
+    let resp = serde_json::json!({
+        "system": assembled.system,
+        "messages": messages,
+        "tools": tools_json,
+        "skill": skill.name,
+        "mode": format!("{:?}", skill.mode).to_lowercase(),
+    });
+    serve_json(&resp.to_string())
 }
 
 /// Handle POST /api/command — execute a slash command locally (no LLM).

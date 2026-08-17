@@ -740,6 +740,67 @@ body {
 }
 .stats-bar .sep { color: var(--border-l2); margin: 0 8px; }
 
+/* ── Context viewer: expand button + modal ──────────────────────────── */
+.ctx-expand-btn {
+  display: inline-block; padding: 6px 14px; margin-top: 4px;
+  font-size: 13px; color: var(--accent); background: var(--accent-light);
+  border: 1px solid var(--accent-100); border-radius: 8px; cursor: pointer;
+  transition: all 0.15s var(--ease);
+}
+.ctx-expand-btn:hover { background: var(--accent-100); }
+.ctx-raw-modal-overlay {
+  position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.ctx-raw-modal {
+  background: var(--bg-base); border-radius: 12px; box-shadow: var(--shadow-l3);
+  max-width: 820px; width: 100%; max-height: 85vh; display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.ctx-raw-modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 18px; border-bottom: 1px solid var(--border-l2);
+  font-weight: 600; font-size: 15px;
+}
+.ctx-raw-close {
+  background: none; border: none; font-size: 18px; cursor: pointer;
+  color: var(--label-tertiary); padding: 4px 8px; border-radius: 6px;
+}
+.ctx-raw-close:hover { background: var(--bg-hover); color: var(--label-primary); }
+.ctx-raw-modal-body { padding: 16px 18px; overflow-y: auto; flex: 1; }
+.ctx-raw-details { margin-bottom: 12px; border: 1px solid var(--border-l2); border-radius: 8px; overflow: hidden; }
+.ctx-raw-details > summary {
+  padding: 10px 14px; cursor: pointer; font-weight: 600; font-size: 13px;
+  background: var(--bg-layer-2); user-select: none;
+}
+.ctx-raw-details > summary:hover { background: var(--bg-hover); }
+.ctx-raw-badge {
+  display: inline-block; margin-left: 8px; padding: 2px 8px; font-size: 11px;
+  font-weight: 400; color: var(--accent); background: var(--accent-light); border-radius: 4px;
+}
+.ctx-raw-system {
+  margin: 0; padding: 12px 14px; font-family: var(--font-code); font-size: 12px;
+  line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  color: var(--label-secondary); background: var(--bg-layer-2); max-height: 300px; overflow-y: auto;
+}
+.ctx-raw-msg { padding: 10px 14px; border-bottom: 1px solid var(--border-l1); }
+.ctx-raw-msg:last-child { border-bottom: none; }
+.ctx-raw-role { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 6px; }
+.ctx-raw-text {
+  margin: 4px 0 0; padding: 8px 10px; font-family: var(--font-code); font-size: 12px;
+  line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+  color: var(--label-secondary); background: var(--bg-layer-2); border-radius: 6px;
+  max-height: 200px; overflow-y: auto;
+}
+.ctx-raw-tc { margin-top: 6px; }
+.ctx-raw-tc-name { font-size: 11px; font-weight: 600; color: var(--label-tertiary); }
+.ctx-raw-meta { font-size: 11px; color: var(--label-tertiary); margin-top: 4px; }
+.ctx-raw-empty { padding: 20px; text-align: center; color: var(--label-tertiary); font-size: 13px; }
+.ctx-raw-tool { padding: 10px 14px; border-bottom: 1px solid var(--border-l1); }
+.ctx-raw-tool:last-child { border-bottom: none; }
+.ctx-raw-tool-name { font-size: 13px; font-weight: 600; color: var(--accent); }
+.ctx-raw-tool-desc { font-size: 12px; color: var(--label-tertiary); margin: 4px 0; }
+
 .hidden { display: none !important; }
 </style>
 </head>
@@ -889,6 +950,11 @@ body {
             <div><div class="setting-label" data-i18n="stats_bar">统计栏</div><div class="setting-hint" data-i18n="stats_bar_hint">在输入框下方显示 token 用量与时长。</div></div>
             <div class="toggle-switch" id="toggle-stats" onclick="toggleStats(this)"></div>
           </div>
+          <!-- Context viewer -->
+          <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
+            <div><div class="setting-label">查看上下文</div><div class="setting-hint">输入 /context 后显示展开按钮，可查看发送给 LLM 的完整上下文原文。</div></div>
+            <div class="toggle-switch" id="toggle-context-view" onclick="toggleContextView(this)"></div>
+          </div>
           <!-- Compaction -->
           <div class="setting-row">
             <div class="section-title" data-i18n="compaction">上下文压缩</div>
@@ -1024,6 +1090,7 @@ let chatAbort = null;
 let currentTheme = 'system';
 let showTrajectory = false;
 let showStats = localStorage.getItem('dsh-stats') !== 'off';
+let showContextView = localStorage.getItem('dsh-context-view') === 'on';
 let currentPreset = '默认';
 let sessionStats = { turns: 0, steps: 0, latestInputTokens: 0, totalOutputTokens: 0, totalInputTokens: 0, startTime: 0, llmMs: 0, toolMs: 0, stepStartTime: 0, toolCallStartTime: 0, ttftMs: 0, ttftSteps: 0, decodeMs: 0, decodeTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0 };
 let configContextWindow = 8192;
@@ -1428,6 +1495,15 @@ async function sendMessage() {
         addMessage('system', '$ ' + msg);
         if (result.ok) {
           addMessage('system', result.text);
+          // For /context: if context-view toggle is on, add an expand button below the result
+          if (cmdName === 'context' && showContextView) {
+            const chat = document.querySelector('.chat-inner');
+            const btnEl = document.createElement('div');
+            btnEl.className = 'message system';
+            btnEl.innerHTML = '<div class="bubble" style="padding:0;border:none;background:none"><button class="ctx-expand-btn" onclick="showContextRaw()">📄 展开上下文原文</button></div>';
+            chat.appendChild(btnEl);
+            document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
+          }
         } else {
           addMessage('system', '❌ ' + (result.error || '命令执行失败'));
         }
@@ -1729,6 +1805,80 @@ function toggleStats(el) {
   showStats = el.classList.contains('on');
   localStorage.setItem('dsh-stats', showStats ? 'on' : 'off');
   updateStatsBar();
+}
+function toggleContextView(el) {
+  el.classList.toggle('on');
+  showContextView = el.classList.contains('on');
+  localStorage.setItem('dsh-context-view', showContextView ? 'on' : 'off');
+}
+
+// ── Context viewer: fetch and display raw LLM context ──
+async function showContextRaw() {
+  try {
+    const res = await fetch('/api/context/raw');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    openContextModal(data);
+  } catch(e) {
+    addMessage('system', '❌ 获取上下文失败：' + e.message);
+  }
+}
+
+function openContextModal(data) {
+  // Remove existing modal
+  const existing = document.getElementById('ctx-raw-modal');
+  if (existing) existing.remove();
+
+  // Build message blocks
+  let msgHtml = '';
+  if (data.messages && data.messages.length > 0) {
+    for (const m of data.messages) {
+      const roleLabel = m.role === 'user' ? '👤 user' : m.role === 'assistant' ? '🤖 assistant' : m.role === 'tool' ? '🔧 tool' : m.role;
+      let body = '';
+      if (m.content) body += '<pre class="ctx-raw-text">' + escapeHtml(m.content) + '</pre>';
+      if (m.tool_calls && m.tool_calls.length > 0) {
+        for (const tc of m.tool_calls) {
+          body += '<div class="ctx-raw-tc"><span class="ctx-raw-tc-name">' + escapeHtml(tc.name) + '</span><pre class="ctx-raw-text">' + escapeHtml(JSON.stringify(tc.arguments, null, 2)) + '</pre></div>';
+        }
+      }
+      if (m.call_id) body += '<div class="ctx-raw-meta">call_id: ' + escapeHtml(m.call_id) + '</div>';
+      msgHtml += '<div class="ctx-raw-msg"><div class="ctx-raw-role">' + roleLabel + '</div>' + body + '</div>';
+    }
+  } else {
+    msgHtml = '<div class="ctx-raw-empty">（暂无消息）</div>';
+  }
+
+  // Build tool schemas
+  let toolsHtml = '';
+  if (data.tools && data.tools.length > 0) {
+    toolsHtml = '<details class="ctx-raw-details"><summary>工具定义 (' + data.tools.length + ')</summary>';
+    for (const t of data.tools) {
+      toolsHtml += '<div class="ctx-raw-tool"><div class="ctx-raw-tool-name">' + escapeHtml(t.name) + '</div><div class="ctx-raw-tool-desc">' + escapeHtml(t.description) + '</div><pre class="ctx-raw-text">' + escapeHtml(JSON.stringify(t.parameters, null, 2)) + '</pre></div>';
+    }
+    toolsHtml += '</details>';
+  }
+
+  const modal = document.createElement('div');
+  modal.id = 'ctx-raw-modal';
+  modal.className = 'ctx-raw-modal-overlay';
+  modal.innerHTML =
+    '<div class="ctx-raw-modal">' +
+      '<div class="ctx-raw-modal-header">' +
+        '<span>当前上下文原文</span>' +
+        '<button class="ctx-raw-close" onclick="document.getElementById(\'ctx-raw-modal\').remove()">✕</button>' +
+      '</div>' +
+      '<div class="ctx-raw-modal-body">' +
+        '<details class="ctx-raw-details" open><summary>System Prompt <span class="ctx-raw-badge">' + (data.skill || '') + ' · ' + (data.mode || '') + '</span></summary><pre class="ctx-raw-system">' + escapeHtml(data.system || '') + '</pre></details>' +
+        '<details class="ctx-raw-details" open><summary>Messages (' + (data.messages ? data.messages.length : 0) + ')</summary>' + msgHtml + '</details>' +
+        toolsHtml +
+      '</div>' +
+    '</div>';
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── Trajectory state ──
@@ -2174,6 +2324,8 @@ function openSettings() {
   loadConfigPath();
   const statsToggle = document.getElementById('toggle-stats');
   if (statsToggle) statsToggle.classList.toggle('on', showStats);
+  const ctxViewToggle = document.getElementById('toggle-context-view');
+  if (ctxViewToggle) ctxViewToggle.classList.toggle('on', showContextView);
 }
 function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
 function switchSection(name) {
