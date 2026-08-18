@@ -24,8 +24,8 @@ pub struct LlmRequest {
     pub tools: Vec<ToolDefinition>,
     pub max_tokens: usize,
     pub temperature: f32,
-    /// Whether to enable model reasoning/thinking.
-    pub think: bool,
+    /// Reasoning/thinking effort level (Off = no reasoning).
+    pub think: ThinkLevel,
 }
 
 /// Events emitted while streaming a completion.
@@ -38,7 +38,7 @@ pub enum StreamEvent {
     #[allow(dead_code)]
     ToolCall(ToolCall),
     /// The final assistant message with full content and usage.
-    Done { content: String, tool_calls: Vec<ToolCall>, usage: Option<TokenUsage> },
+    Done { content: String, tool_calls: Vec<ToolCall>, usage: Option<TokenUsage>, finish_reason: Option<String> },
     /// An error during streaming.
     Error(String),
 }
@@ -74,6 +74,9 @@ struct ApiMessage {
     tool_calls: Option<Vec<ApiToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_call_id: Option<String>,
+    /// DeepSeek thinking-mode passback: sent only on tool-call turns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -116,7 +119,6 @@ struct StreamChunkDto {
 struct StreamChoice {
     delta: StreamDelta,
     #[serde(default)]
-    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 
@@ -312,6 +314,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                 content: request.system.clone(),
                 tool_calls: None,
                 tool_call_id: None,
+                reasoning_content: None,
             });
         }
         // Append conversation messages.
@@ -322,8 +325,9 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                     content: content.clone(),
                     tool_calls: None,
                     tool_call_id: None,
+                    reasoning_content: None,
                 }),
-                Message::Assistant { content, tool_calls } => messages.push(ApiMessage {
+                Message::Assistant { content, tool_calls, reasoning_content } => messages.push(ApiMessage {
                     role: "assistant",
                     content: content.clone(),
                     tool_calls: if tool_calls.is_empty() {
@@ -339,12 +343,14 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                         }).collect())
                     },
                     tool_call_id: None,
+                    reasoning_content: reasoning_content.clone(),
                 }),
                 Message::Tool { call_id, content, .. } => messages.push(ApiMessage {
                     role: "tool",
                     content: content.clone(),
                     tool_calls: None,
                     tool_call_id: Some(call_id.clone()),
+                    reasoning_content: None,
                 }),
             }
         }
@@ -366,7 +372,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
             stream_options: Some(StreamOptions { include_usage: true }),
             max_tokens: request.max_tokens,
             temperature: request.temperature,
-            reasoning_effort: if request.think { Some("high".to_string()) } else { None },
+            reasoning_effort: request.think.as_effort_str().map(|s| s.to_string()),
         }
     }
 
@@ -448,6 +454,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
         let mut tool_call_accum: std::collections::BTreeMap<usize, (String, String, String)> = std::collections::BTreeMap::new();
         let mut full_content = String::new();
         let mut final_usage: Option<TokenUsage> = None;
+        let mut final_finish_reason: Option<String> = None;
 
         use tokio_stream::StreamExt;
         pin_mut!(frame_stream);
@@ -479,6 +486,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                             content: full_content.clone(),
                             tool_calls,
                             usage: final_usage.take(),
+                            finish_reason: final_finish_reason.take(),
                         }).await;
                         return Ok(());
                     }
@@ -503,6 +511,10 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                                 if !reasoning.is_empty() {
                                     let _ = tx.send(StreamEvent::ThinkDelta(reasoning)).await;
                                 }
+                            }
+                            // Capture finish_reason for truncation detection.
+                            if let Some(fr) = choice.finish_reason {
+                                final_finish_reason = Some(fr);
                             }
                             if let Some(tc_deltas) = choice.delta.tool_calls {
                                 for tc in tc_deltas {
@@ -543,6 +555,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
             content: full_content,
             tool_calls,
             usage: final_usage,
+            finish_reason: final_finish_reason,
         }).await;
 
         Ok(())

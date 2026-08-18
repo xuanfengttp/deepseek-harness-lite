@@ -154,7 +154,7 @@ async fn async_main() -> ExitCode {
     } else {
         default_skill()
     };
-    log::info!("Active skill: {} (mode: {:?}, think: {})", active_skill.name, active_skill.mode, active_skill.think);
+    log::info!("Active skill: {} (mode: {:?}, think: {:?})", active_skill.name, active_skill.mode, active_skill.think);
 
     // Create session manager (multi-session + offloading + double-page cache).
     let mut session_mgr = session_manager::SessionManager::new(
@@ -333,7 +333,7 @@ fn preheat_kv_cache(config: &Config, skill: &Skill) {
         tools: assembled.tools,
         max_tokens: 1,
         temperature: 0.0,
-        think: false,
+        think: ThinkLevel::Off,
     };
 
     log::info!("Preheating KV cache (system prompt: {} chars, {} tools)...",
@@ -499,7 +499,7 @@ fn default_skill() -> Skill {
         description: "General-purpose assistant".into(),
         when_to_use: None,
         mode: ExecMode::Plan,
-        think: false,
+        think: ThinkLevel::Off,
         tools_allow: vec![],
         variables: std::collections::HashMap::new(),
         body: "Answer the user's request using available tools. Be concise and accurate.".into(),

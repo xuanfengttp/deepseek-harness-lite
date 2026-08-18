@@ -55,7 +55,7 @@ fn render_messages_for_summary(messages: &[Message]) -> String {
             Message::User { content } => {
                 out.push_str(&format!("[User]: {content}\n"));
             }
-            Message::Assistant { content, tool_calls } => {
+            Message::Assistant { content, tool_calls, .. } => {
                 if !content.is_empty() {
                     out.push_str(&format!("[Assistant]: {content}\n"));
                 }
@@ -125,7 +125,7 @@ pub async fn compact(
         tools: vec![],
         max_tokens: 1024,
         temperature, // low temperature for faithful summary
-        think: false, // summarization doesn't need reasoning
+        think: ThinkLevel::Off, // summarization doesn't need reasoning
     };
 
     let (stream_tx, mut stream_rx) = tokio::sync::mpsc::channel(64);
@@ -186,7 +186,7 @@ mod tests {
     fn test_render_messages() {
         let messages = vec![
             Message::User { content: "check interface".into() },
-            Message::Assistant { content: "I'll check now.".into(), tool_calls: vec![] },
+            Message::Assistant { content: "I'll check now.".into(), tool_calls: vec![], reasoning_content: None },
             Message::Tool { call_id: "tc1".into(), content: "eth0 is up".into(), is_error: false },
         ];
         let text = render_messages_for_summary(&messages);

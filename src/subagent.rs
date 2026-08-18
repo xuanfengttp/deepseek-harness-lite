@@ -299,7 +299,7 @@ fn default_plan_skill() -> Skill {
         description: "Default plan skill for subagent delegation".into(),
         when_to_use: None,
         mode: ExecMode::Plan,
-        think: true,
+        think: ThinkLevel::High,
         tools_allow: vec![], // empty = all tools allowed
         variables: HashMap::new(),
         body: "You are a focused subagent. Complete the given task autonomously. Use available tools as needed. Provide a clear final answer.".into(),
@@ -315,7 +315,7 @@ mod tests {
     fn default_plan_skill_is_plan_mode() {
         let skill = default_plan_skill();
         assert!(matches!(skill.mode, ExecMode::Plan));
-        assert!(skill.think);
+        assert_eq!(skill.think, ThinkLevel::High);
         assert!(!skill.body.is_empty());
     }
 

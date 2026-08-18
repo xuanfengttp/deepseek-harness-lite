@@ -28,6 +28,10 @@ pub enum Message {
     Assistant {
         content: String,
         tool_calls: Vec<ToolCall>,
+        /// Reasoning content for DeepSeek thinking-mode passback.
+        /// Sent back to the API ONLY on tool-call turns; omitted on plain turns.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reasoning_content: Option<String>,
     },
     /// The outcome of one tool call, fed back to the model.
     Tool { call_id: CallId, content: String, is_error: bool },
@@ -309,6 +313,43 @@ impl Default for ExecMode {
 
 // ─── Skill ─────────────────────────────────────────────────────────────────
 
+/// Reasoning/thinking effort level for a skill or LLM request.
+///
+/// - `Off`: no reasoning (fast, cheap)
+/// - `Low`: reduced reasoning (fewer reasoning tokens)
+/// - `High`: full reasoning (default when `think: true` in YAML)
+/// - `Max`: maximum reasoning effort
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThinkLevel {
+    Off,
+    Low,
+    High,
+    Max,
+}
+
+impl Default for ThinkLevel {
+    fn default() -> Self {
+        ThinkLevel::Off
+    }
+}
+
+impl ThinkLevel {
+    /// Returns the wire value for `reasoning_effort`, or None when thinking is off.
+    pub fn as_effort_str(&self) -> Option<&'static str> {
+        match self {
+            ThinkLevel::Off => None,
+            ThinkLevel::Low => Some("low"),
+            ThinkLevel::High => Some("high"),
+            ThinkLevel::Max => Some("max"),
+        }
+    }
+
+    /// Whether any reasoning effort is enabled.
+    pub fn is_enabled(&self) -> bool {
+        !matches!(self, ThinkLevel::Off)
+    }
+}
+
 /// A loaded skill definition (YAML frontmatter + Markdown body).
 #[derive(Debug, Clone)]
 pub struct Skill {
@@ -317,7 +358,7 @@ pub struct Skill {
     #[allow(dead_code)]
     pub when_to_use: Option<String>,
     pub mode: ExecMode,
-    pub think: bool,
+    pub think: ThinkLevel,
     pub tools_allow: Vec<String>,
     pub variables: HashMap<String, String>,
     /// The Markdown body (skill instructions rendered to the model).

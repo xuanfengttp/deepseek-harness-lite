@@ -429,7 +429,7 @@ async fn handle_request(
                     "name": s.name,
                     "description": s.description,
                     "mode": format!("{:?}", s.mode).to_lowercase(),
-                    "think": s.think,
+                    "think": format!("{:?}", s.think).to_lowercase(),
                 })
             }).collect();
             let json = serde_json::to_string(&skills_json).unwrap_or_else(|_| "[]".into());
@@ -662,7 +662,7 @@ async fn handle_chat(
                 description: "default".into(),
                 when_to_use: None,
                 mode: ExecMode::Plan,
-                think: false,
+                think: ThinkLevel::Off,
                 tools_allow: vec![],
                 variables: std::collections::HashMap::new(),
                 body: "You are a helpful assistant.".into(),
@@ -930,7 +930,7 @@ async fn handle_context_raw(state: Arc<ServerState>) -> Response<BoxBody<Bytes, 
                 description: "default".into(),
                 when_to_use: None,
                 mode: ExecMode::Plan,
-                think: false,
+                think: ThinkLevel::Off,
                 tools_allow: vec![],
                 variables: std::collections::HashMap::new(),
                 body: "You are a helpful assistant.".into(),
@@ -973,7 +973,7 @@ async fn handle_context_raw(state: Arc<ServerState>) -> Response<BoxBody<Bytes, 
                         "role": "user",
                         "content": content,
                     }),
-                    crate::types::Message::Assistant { content, tool_calls } => {
+                    crate::types::Message::Assistant { content, tool_calls, .. } => {
                         let tc_json: Vec<serde_json::Value> = tool_calls.iter().map(|tc| serde_json::json!({
                             "id": tc.id,
                             "name": tc.name,

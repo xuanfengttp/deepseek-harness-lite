@@ -79,7 +79,7 @@ impl SessionLog {
         let messages = self.derive_messages();
         let total_chars: usize = messages.iter().map(|m| match m {
             Message::User { content } => content.len(),
-            Message::Assistant { content, tool_calls } => {
+            Message::Assistant { content, tool_calls, .. } => {
                 content.len() + tool_calls.iter().map(|tc| tc.arguments.to_string().len() + tc.name.len()).sum::<usize>()
             }
             Message::Tool { content, .. } => content.len(),
@@ -125,15 +125,20 @@ impl SessionLog {
                     }
                     messages.push(Message::User { content: content.clone() });
                 }
-                SessionEvent::AssistantMessage { content, tool_calls, .. } => {
+                SessionEvent::AssistantMessage { content, tool_calls, thinking, .. } => {
                     // Flush tool results from the PREVIOUS step before this new
                     // assistant message (tool results belong between steps).
                     for (call_id, content, is_error) in pending_tool_results.drain(..) {
                         messages.push(Message::Tool { call_id, content, is_error });
                     }
+                    // DeepSeek thinking-mode passback rule: reasoning_content
+                    // must return on tool-call turns; drop on plain turns to
+                    // save tokens.
+                    let reasoning = if !tool_calls.is_empty() { thinking.clone() } else { None };
                     messages.push(Message::Assistant {
                         content: content.clone(),
                         tool_calls: tool_calls.clone(),
+                        reasoning_content: reasoning,
                     });
                 }
                 SessionEvent::ToolResult { call_id, content, is_error } => {

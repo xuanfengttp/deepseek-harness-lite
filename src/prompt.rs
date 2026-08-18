@@ -219,7 +219,7 @@ mod tests {
             description: "test".into(),
             when_to_use: None,
             mode: ExecMode::Plan,
-            think: false,
+            think: ThinkLevel::Off,
             tools_allow: tools.into_iter().map(String::from).collect(),
             variables: HashMap::new(),
             body: body.into(),

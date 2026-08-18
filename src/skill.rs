@@ -86,9 +86,9 @@ pub fn validate(skill: &Skill, known_tools: &[String]) -> Vec<String> {
         warnings.push(format!("mode {:?} but no steps defined", skill.mode));
     }
 
-    // Workflow mode with think=true is unusual (deterministic mode doesn't need reasoning).
-    if skill.mode == ExecMode::Workflow && skill.think {
-        warnings.push("workflow mode with think=true — reasoning will only apply to llm_judge steps".into());
+    // Workflow mode with thinking enabled is unusual (deterministic mode doesn't need reasoning).
+    if skill.mode == ExecMode::Workflow && skill.think.is_enabled() {
+        warnings.push("workflow mode with think enabled — reasoning will only apply to llm_judge steps".into());
     }
 
     // Check step references in `when` conditions and llm_judge inputs.
@@ -197,7 +197,7 @@ fn parse_skill_content(content: &str, path: &Path) -> Result<Skill, String> {
     let when_to_use = meta["whenToUse"].as_str().map(String::from);
 
     let mode = parse_mode(meta["mode"].as_str().unwrap_or("plan"));
-    let think = meta["think"].as_bool().unwrap_or(false);
+    let think = parse_think(&meta["think"]);
 
     // Parse tools.allow list.
     let tools_allow = parse_string_list(&meta["tools"]["allow"]);
@@ -247,6 +247,25 @@ fn parse_mode(s: &str) -> ExecMode {
         "todo" => ExecMode::Todo,
         _ => ExecMode::Plan,
     }
+}
+
+/// Parse the `think` YAML field. Accepts:
+/// - `true` / `false` (bool) → High / Off (backward compatible)
+/// - `"off"` / `"low"` / `"high"` / `"max"` (string) → corresponding level
+fn parse_think(yaml: &yaml_rust2::Yaml) -> ThinkLevel {
+    if let Some(b) = yaml.as_bool() {
+        return if b { ThinkLevel::High } else { ThinkLevel::Off };
+    }
+    if let Some(s) = yaml.as_str() {
+        return match s.to_lowercase().as_str() {
+            "off" | "false" | "no" | "0" => ThinkLevel::Off,
+            "low" => ThinkLevel::Low,
+            "high" | "true" | "yes" | "1" => ThinkLevel::High,
+            "max" => ThinkLevel::Max,
+            _ => ThinkLevel::Off,
+        };
+    }
+    ThinkLevel::Off
 }
 
 fn parse_string_list(yaml: &yaml_rust2::Yaml) -> Vec<String> {
@@ -332,9 +351,24 @@ mod tests {
         assert_eq!(skill.name, "test-skill");
         assert_eq!(skill.description, "A test skill");
         assert_eq!(skill.mode, ExecMode::Plan);
-        assert!(skill.think);
+        assert_eq!(skill.think, ThinkLevel::High);
         assert_eq!(skill.tools_allow, vec!["shell", "file_read"]);
         assert!(skill.body.contains("test agent"));
+    }
+
+    #[test]
+    fn parses_think_levels() {
+        for (yaml_val, expected) in [
+            ("think: true", ThinkLevel::High),
+            ("think: false", ThinkLevel::Off),
+            ("think: low", ThinkLevel::Low),
+            ("think: high", ThinkLevel::High),
+            ("think: max", ThinkLevel::Max),
+        ] {
+            let content = format!("---\nname: t\ndescription: t\nmode: plan\n{yaml_val}\n---\nBody");
+            let skill = parse_skill_content(&content, Path::new("t.md")).unwrap();
+            assert_eq!(skill.think, expected, "failed for {yaml_val}");
+        }
     }
 
     #[test]

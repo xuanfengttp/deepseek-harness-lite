@@ -87,7 +87,7 @@ impl Dispatcher {
         event_tx: mpsc::Sender<LoopEvent>,
     ) -> DispatchResult {
         log::info!(
-            "Dispatching with mode: {:?}, think: {}",
+            "Dispatching with mode: {:?}, think: {:?}",
             skill.mode,
             skill.think
         );

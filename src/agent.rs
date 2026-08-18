@@ -346,12 +346,22 @@ impl AgentLoop {
                     content,
                     tool_calls: tc,
                     usage,
+                    finish_reason,
                 } => {
                     done_time = Some(std::time::Instant::now());
                     if !content.is_empty() {
                         full_content = content;
                     }
                     tool_calls = tc;
+                    // Detect max-tokens truncation — log a warning so the user
+                    // knows the response was cut short. The session continues
+                    // with whatever content was received (degraded but usable).
+                    if finish_reason.as_deref() == Some("length") {
+                        log::warn!(
+                            "Response truncated by max_tokens (finish_reason=length). \
+                             Content may be incomplete. Consider increasing max_tokens."
+                        );
+                    }
                     if let Some(u) = &usage {
                         let ttft = first_token_time
                             .map(|t| t.duration_since(step_start).as_millis() as u64)
