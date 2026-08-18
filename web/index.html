@@ -2018,7 +2018,10 @@ function handleEvent(event, showTraj) {
       // If a thinking section exists, write output to the .think-output div.
       // Otherwise write directly to the bubble (no thinking content).
       const outputTarget = currentAssistantEl.querySelector('.think-output') || currentAssistantEl.querySelector('.bubble');
-      outputTarget.innerHTML = renderMd(currentAssistantText) + '<span class="typing">▋</span>';
+      // Only show the blinking cursor when there's actual output text.
+      // During thinking-only streaming, think-output is empty — no cursor.
+      const cursor = currentAssistantText ? '<span class="typing">▋</span>' : '';
+      outputTarget.innerHTML = renderMd(currentAssistantText) + cursor;
       document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
       break;
     case 'assistant_message':
