@@ -94,6 +94,11 @@ pub enum SessionEvent {
         /// Wall time from first token to done (decode), in milliseconds.
         #[serde(default)]
         decode_ms: u64,
+        /// Model thinking/reasoning content (reasoning_content field).
+        /// Persisted for UI display, but NOT sent to the LLM in derive_messages
+        /// (avoids context bloat). None = no thinking, empty = thinking was empty.
+        #[serde(default)]
+        thinking: Option<String>,
     },
     ToolCall { call: ToolCall },
     ToolResult { call_id: CallId, content: String, is_error: bool },

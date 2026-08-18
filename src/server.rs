@@ -209,31 +209,48 @@ async fn handle_request(
             // returns the correct session's history.
             mgr.switch(id);
 
-            // Build messages for chat display
-            let messages: Vec<serde_json::Value> = mgr.active_messages()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|m| match m {
-                    crate::types::Message::User { content } => serde_json::json!({
-                        "role": "user", "content": content
-                    }),
-                    crate::types::Message::Assistant { content, tool_calls } => {
-                        let tc_json: Vec<serde_json::Value> = tool_calls.iter().map(|tc| {
-                            serde_json::json!({
-                                "id": tc.id,
-                                "name": tc.name,
-                                "arguments": tc.arguments
-                            })
-                        }).collect();
-                        serde_json::json!({
-                            "role": "assistant", "content": content, "tool_calls": tc_json
-                        })
+            // Build messages for chat display directly from session events
+            // (not from derive_messages) so we can include the `thinking` field
+            // which is stored in SessionEvent::AssistantMessage but not in Message.
+            let mut messages: Vec<serde_json::Value> = Vec::new();
+            let mut pending_tool_results: Vec<(String, String, bool)> = Vec::new();
+            if let Some(log) = mgr.active() {
+                for event in log.events() {
+                    match event {
+                        SessionEvent::UserMessage { content } => {
+                            for (cid, c, e) in pending_tool_results.drain(..) {
+                                messages.push(serde_json::json!({"role":"tool","call_id":cid,"content":c,"is_error":e}));
+                            }
+                            messages.push(serde_json::json!({"role":"user","content":content}));
+                        }
+                        SessionEvent::AssistantMessage { content, tool_calls, thinking, .. } => {
+                            for (cid, c, e) in pending_tool_results.drain(..) {
+                                messages.push(serde_json::json!({"role":"tool","call_id":cid,"content":c,"is_error":e}));
+                            }
+                            let tc_json: Vec<serde_json::Value> = tool_calls.iter().map(|tc| {
+                                serde_json::json!({"id":tc.id,"name":tc.name,"arguments":tc.arguments})
+                            }).collect();
+                            messages.push(serde_json::json!({
+                                "role":"assistant","content":content,"tool_calls":tc_json,
+                                "thinking": thinking
+                            }));
+                        }
+                        SessionEvent::ToolResult { call_id, content, is_error } => {
+                            pending_tool_results.push((call_id.clone(), content.clone(), *is_error));
+                        }
+                        SessionEvent::CompactionSummary { summary } => {
+                            for (cid, c, e) in pending_tool_results.drain(..) {
+                                messages.push(serde_json::json!({"role":"tool","call_id":cid,"content":c,"is_error":e}));
+                            }
+                            messages.push(serde_json::json!({"role":"user","content":format!("[Previous conversation summary]\n{summary}")}));
+                        }
+                        _ => {}
                     }
-                    crate::types::Message::Tool { call_id, content, is_error } => serde_json::json!({
-                        "role": "tool", "call_id": call_id, "content": content, "is_error": is_error
-                    }),
-                })
-                .collect();
+                }
+                for (cid, c, e) in pending_tool_results {
+                    messages.push(serde_json::json!({"role":"tool","call_id":cid,"content":c,"is_error":e}));
+                }
+            }
 
             // Build stats + trajectory by replaying session events
             let mut stats = serde_json::json!({
@@ -289,7 +306,7 @@ async fn handle_request(
                                 "type": "user_message", "content": content
                             }));
                         }
-                        SessionEvent::AssistantMessage { content, tool_calls, usage, ttft_ms, decode_ms } => {
+                        SessionEvent::AssistantMessage { content, tool_calls, usage, ttft_ms, decode_ms, .. } => {
                             // Track LLM time
                             if step_start_time > 0 {
                                 let now = std::time::SystemTime::now()

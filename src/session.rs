@@ -301,6 +301,7 @@ mod tests {
             usage: None,
             ttft_ms: 0,
             decode_ms: 0,
+            thinking: None,
         });
         log.end_step();
         log.end_turn(TurnEndReason::Completed);
@@ -332,6 +333,7 @@ mod tests {
             usage: None,
             ttft_ms: 0,
             decode_ms: 0,
+            thinking: None,
         });
         log.append(SessionEvent::ToolResult { call_id: "call_1".into(), content: "output".into(), is_error: false });
 
@@ -351,7 +353,7 @@ mod tests {
         log.append(SessionEvent::AssistantMessage {
             content: "doing first thing".into(),
             tool_calls: vec![ToolCall { id: "c1".into(), name: "tool_a".into(), arguments: serde_json::json!({}) }],
-            usage: None, ttft_ms: 0, decode_ms: 0,
+            usage: None, ttft_ms: 0, decode_ms: 0, thinking: None,
         });
         log.append(SessionEvent::ToolResult { call_id: "c1".into(), content: "result_a".into(), is_error: false });
         log.end_step();
@@ -359,7 +361,7 @@ mod tests {
         log.append(SessionEvent::AssistantMessage {
             content: "doing second thing".into(),
             tool_calls: vec![ToolCall { id: "c2".into(), name: "tool_b".into(), arguments: serde_json::json!({}) }],
-            usage: None, ttft_ms: 0, decode_ms: 0,
+            usage: None, ttft_ms: 0, decode_ms: 0, thinking: None,
         });
         log.append(SessionEvent::ToolResult { call_id: "c2".into(), content: "result_b".into(), is_error: false });
         log.end_step();
@@ -367,7 +369,7 @@ mod tests {
         log.append(SessionEvent::AssistantMessage {
             content: "done".into(),
             tool_calls: vec![],
-            usage: None, ttft_ms: 0, decode_ms: 0,
+            usage: None, ttft_ms: 0, decode_ms: 0, thinking: None,
         });
         log.end_step();
         log.end_turn(TurnEndReason::Completed);
@@ -394,7 +396,7 @@ mod tests {
         let mut log = SessionLog::new(128);
         log.append(SessionEvent::UserMessage { content: "hello".into() });
         log.append(SessionEvent::AssistantMessage {
-            content: "hi".into(), tool_calls: vec![], usage: None, ttft_ms: 0, decode_ms: 0,
+            content: "hi".into(), tool_calls: vec![], usage: None, ttft_ms: 0, decode_ms: 0, thinking: None,
         });
         assert_eq!(log.derive_messages().len(), 2);
         log.clear();

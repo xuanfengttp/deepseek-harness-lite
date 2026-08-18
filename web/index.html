@@ -2161,9 +2161,23 @@ function renderChatFromHistory(messages) {
     if (msg.role === 'user') {
       addMessage('user', msg.content);
     } else if (msg.role === 'assistant') {
-      // Render assistant text bubble (if non-empty)
-      if (msg.content && msg.content.trim()) {
-        addMessage('assistant', msg.content);
+      // Render assistant text bubble (if non-empty or has thinking content)
+      const hasThinking = msg.thinking && msg.thinking.trim();
+      const hasContent = msg.content && msg.content.trim();
+      const hasToolCalls = msg.tool_calls && msg.tool_calls.length > 0;
+      if (hasContent || hasThinking || !hasToolCalls) {
+        const el = addMessage('assistant', hasContent ? msg.content : '');
+        // If thinking content exists, render it inside the bubble before the output
+        if (hasThinking) {
+          const bubble = el.querySelector('.bubble');
+          // Restructure: insert thinking section before the output text
+          const thinkSection = document.createElement('div');
+          thinkSection.className = 'think-section'; // collapsed by default on reload
+          thinkSection.innerHTML = '<button class="think-toggle" type="button"><span class="think-chevron">▶</span>思考</button><div class="think-body">' + renderMd(msg.thinking) + '</div>';
+          thinkSection.querySelector('.think-toggle').onclick = () => thinkSection.classList.toggle('expanded');
+          // Insert before the existing text content in the bubble
+          bubble.insertBefore(thinkSection, bubble.firstChild);
+        }
       }
       // Render tool calls inline after the assistant message
       if (msg.tool_calls && msg.tool_calls.length > 0) {

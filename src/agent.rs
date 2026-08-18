@@ -317,6 +317,7 @@ impl AgentLoop {
 
         // Collect stream events.
         let mut full_content = String::new();
+        let mut thinking_content = String::new();
         let mut tool_calls: Vec<ToolCall> = Vec::new();
         let mut had_error = false;
         let mut captured_usage: Option<TokenUsage> = None;
@@ -334,9 +335,8 @@ impl AgentLoop {
                     let _ = event_tx.send(LoopEvent::Delta { text }).await;
                 }
                 StreamEvent::ThinkDelta(text) => {
-                    // Forward thinking/reasoning deltas to the frontend for display.
-                    // Thinking content is NOT stored in full_content — it's separate
-                    // from the assistant's final answer.
+                    // Accumulate thinking content for persistence + forward to frontend.
+                    thinking_content.push_str(&text);
                     let _ = event_tx.send(LoopEvent::ThinkDelta { text }).await;
                 }
                 StreamEvent::ToolCall(tc) => {
@@ -401,6 +401,7 @@ impl AgentLoop {
             usage,
             ttft_ms: ttft,
             decode_ms: decode,
+            thinking: if thinking_content.is_empty() { None } else { Some(thinking_content.clone()) },
         });
         let _ = event_tx
             .send(LoopEvent::AssistantMessage {
@@ -543,6 +544,7 @@ impl AgentLoop {
             usage: None,
             ttft_ms: 0,
             decode_ms: 0,
+            thinking: None,
         });
         let _ = event_tx
             .send(LoopEvent::AssistantMessage {

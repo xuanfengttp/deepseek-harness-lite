@@ -331,6 +331,7 @@ mod tests {
             usage: None,
             ttft_ms: 0,
             decode_ms: 0,
+            thinking: None,
         });
         session.append(SessionEvent::AssistantMessage {
             content: "final response".into(),
@@ -338,6 +339,7 @@ mod tests {
             usage: None,
             ttft_ms: 0,
             decode_ms: 0,
+            thinking: None,
         });
         assert_eq!(extract_final_output(&session), "final response");
     }
