@@ -210,18 +210,34 @@ User input
 ## Build
 
 ```sh
-# Prerequisites: Rust 1.75+, cargo-zigbuild + zig for cross-compilation
+# Prerequisites: Rust 1.75+
 
 # Native build
 cargo build --release
 # → target/release/dsh-lite
+```
 
-# Cross-compile to embedded targets (musl static)
+### Cross-compilation (5 targets)
+
+Cross-compile uses `cargo-zigbuild` + **zig 0.13.0** as the linker.
+
+> **每次编译前必须把 zig 加入 PATH**（本机已下载，路径固定）：
+> ```pwsh
+> $env:Path = "C:\Users\xuanfengttp\AppData\Local\Temp\zig-clean\zig-windows-x86_64-0.13.0;$env:Path"
+> ```
+
+```pwsh
+# Windows x86_64 (native)
+cargo build --release --target x86_64-pc-windows-msvc
+
+# Linux targets (zig required in PATH)
+cargo zigbuild --release --target x86_64-unknown-linux-musl
 cargo zigbuild --release --target aarch64-unknown-linux-musl
 cargo zigbuild --release --target armv7-unknown-linux-musleabihf
 cargo zigbuild --release --target armv7-unknown-linux-musleabi
-cargo zigbuild --release --target x86_64-unknown-linux-musl
 ```
+
+完整工具链安装、zig 下载路径、打包和上传流程见 **[cross/README.md](cross/README.md)**。
 
 Supported targets:
 
@@ -233,7 +249,7 @@ Supported targets:
 | `armv7-unknown-linux-musleabi` | Linux ARMv7 soft-float (static) | ~2.9 MB |
 | `x86_64-unknown-linux-musl` | Linux x86_64 (static) | ~3.2 MB |
 
-All Linux binaries are statically linked (musl) — no runtime dependencies. See [cross/README.md](cross/README.md) for toolchain setup.
+All Linux binaries are statically linked (musl) — no runtime dependencies.
 
 ## Release
 
