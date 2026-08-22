@@ -24,7 +24,7 @@ name: <kebab-case-name>
 description: <one-line description>
 whenToUse: <optional: when to activate this skill>
 mode: <workflow | todo | plan>
-think: <true | false | "off" | "low" | "high" | "max">
+think: <true | false>
 tools:
   allow: [<tool1>, <tool2>, ...]
 variables:           # optional, workflow/todo only
@@ -69,14 +69,11 @@ steps:
 
 | Scenario | mode | think | LLM calls | Determinism |
 |----------|------|-------|-----------|-------------|
-| Fixed procedure, known steps (inspection, backup) | workflow | false (Off) | 0 (tool steps) + 1 per judge step | 100% |
-| Known steps, some need LLM judgment | workflow + llm_judge | false (Off) | 1 per judge step | High |
-| Steps roughly known, LLM fills details | todo | false (Off) | 1 per step | Medium |
-| Unknown problem, autonomous exploration | plan | true (High) | Multiple | Depends on LLM |
-| Orchestration: main agent delegates to subagents | plan | true (High) | Main per-step + subagent per-skill | Depends |
-
-> **think field**: accepts `true`/`false` (backward compat) or `"off"`/`"low"`/`"high"`/`"max"`.
-> `low` reduces reasoning tokens (faster, for embedded devices); `max` for maximum reasoning quality.
+| Fixed procedure, known steps (inspection, backup) | workflow | false | 0 (tool steps) + 1 per judge step | 100% |
+| Known steps, some need LLM judgment | workflow + llm_judge | false | 1 per judge step | High |
+| Steps roughly known, LLM fills details | todo | false | 1 per step | Medium |
+| Unknown problem, autonomous exploration | plan | true | Multiple | Depends on LLM |
+| Orchestration: main agent delegates to subagents | plan | true | Main per-step + subagent per-skill | Depends |
 
 ## Available Tools for tools.allow
 
