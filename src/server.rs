@@ -697,6 +697,7 @@ async fn handle_chat(
     let mut tools = crate::tools::ToolRegistry::new(policy);
     crate::tools::register_builtins(&mut tools, &config);
     crate::tools::register_subagent(&mut tools, &config);
+    crate::tools::register_workflow(&mut tools, &config);
 
     let llm = crate::llm::LlmClient::new(&config.model);
     let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model)
@@ -959,6 +960,7 @@ async fn handle_context_raw(state: Arc<ServerState>) -> Response<BoxBody<Bytes, 
     let mut tools = crate::tools::ToolRegistry::new(policy);
     crate::tools::register_builtins(&mut tools, &config);
     crate::tools::register_subagent(&mut tools, &config);
+    crate::tools::register_workflow(&mut tools, &config);
     let all_tools: Vec<ToolDefinition> = tools.definitions();
 
     // Assemble the system prompt (same logic as agent loop).

@@ -13,6 +13,7 @@ pub mod shell;
 pub mod file;
 pub mod memory;
 pub mod ssh;
+pub mod workflow;
 
 use crate::types::*;
 use crate::policy::Policy;
@@ -269,4 +270,34 @@ pub fn register_subagent(
 
     registry.register(Box::new(subagent));
     log::info!("Registered subagent tool (shared {} tools)", shared_count);
+}
+
+/// Register the workflow tool, sharing all currently-registered tools with it.
+///
+/// Call this after `register_subagent()` so workflow children get the same
+/// built-ins + subagent, but NOT the workflow tool itself (prevents
+/// workflow→workflow recursion). Registered under the name "workflow".
+pub fn register_workflow(
+    registry: &mut ToolRegistry,
+    config: &crate::types::Config,
+) {
+    let workflow = crate::tools::workflow::WorkflowTool::new(
+        crate::llm::LlmClient::new(&config.model),
+        config.model.clone(),
+        config.compaction.threshold,
+        config.compaction.keep_recent_turns,
+        config.skill.dir.clone(),
+    );
+
+    // Share all currently-registered tools with the workflow children.
+    // The workflow tool itself is not yet registered, so children won't
+    // get it — this prevents unbounded workflow→workflow recursion.
+    let plugins = registry.plugins_arc();
+    let shared_count = plugins.len();
+    for plugin in &plugins {
+        workflow.share_tool(Arc::clone(plugin));
+    }
+
+    registry.register(Box::new(workflow));
+    log::info!("Registered workflow tool (shared {} tools)", shared_count);
 }

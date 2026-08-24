@@ -124,6 +124,7 @@ async fn async_main() -> ExitCode {
     let mut tools = ToolRegistry::new(policy);
     crate::tools::register_builtins(&mut tools, &config);
     crate::tools::register_subagent(&mut tools, &config);
+    crate::tools::register_workflow(&mut tools, &config);
 
     log::info!("Registered {} tool(s)", tools.definitions().len());
 
@@ -308,6 +309,7 @@ fn preheat_kv_cache(config: &Config, skill: &Skill) {
     let mut tools = ToolRegistry::new(policy);
     crate::tools::register_builtins(&mut tools, config);
     crate::tools::register_subagent(&mut tools, config);
+    crate::tools::register_workflow(&mut tools, config);
     let all_tools = tools.definitions();
 
     // Assemble the system prompt with the same logic as the agent loop.

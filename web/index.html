@@ -465,6 +465,49 @@ body {
 .chat-tool-call.error .ctc-body { border-color: rgba(220,50,50,0.2); }
 .chat-tool-call.error .ctc-body pre { color: var(--red); }
 
+/* ── Workflow run panel ── */
+.wf-panel { margin: 4px 0; }
+.wf-run-header {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-radius: 6px; background: var(--bg-platform); border: 1px solid var(--border-l1);
+  font-size: 12px;
+}
+.wf-run-header .wf-run-name { font-weight: 600; color: var(--label-primary); }
+.wf-run-header .wf-run-stats { font-size: 11px; color: var(--label-secondary); }
+.wf-run-header .wf-run-stats .wf-ok { color: var(--green, #34a853); }
+.wf-run-header .wf-run-stats .wf-fail { color: var(--red); }
+.wf-phase {
+  margin: 4px 0 0 16px; border-radius: 6px; border: 1px solid var(--border-l1);
+  overflow: hidden;
+}
+.wf-phase-header {
+  display: flex; align-items: center; gap: 6px; padding: 4px 10px;
+  background: var(--bg-platform); font-size: 11px; cursor: pointer; user-select: none;
+}
+.wf-phase-header .wf-phase-chevron { font-size: 9px; color: var(--label-caption); transition: transform 150ms var(--ease); }
+.wf-phase.expanded .wf-phase-header .wf-phase-chevron { transform: rotate(90deg); }
+.wf-phase-header .wf-phase-name { font-weight: 500; color: var(--label-primary); }
+.wf-phase-header .wf-phase-count { color: var(--label-caption); }
+.wf-phase-body { display: none; padding: 2px 0; }
+.wf-phase.expanded .wf-phase-body { display: block; }
+.wf-member {
+  display: flex; align-items: flex-start; gap: 6px; padding: 3px 10px 3px 20px;
+  font-size: 11px; border-top: 1px solid var(--border-l2);
+}
+.wf-member .wf-member-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px;
+}
+.wf-member.completed .wf-member-dot { background: var(--green, #34a853); }
+.wf-member.failed .wf-member-dot { background: var(--red); }
+.wf-member .wf-member-label { font-weight: 500; color: var(--label-primary); min-width: 60px; }
+.wf-member .wf-member-status { font-size: 10px; color: var(--label-caption); }
+.wf-member .wf-member-result {
+  color: var(--label-secondary); white-space: pre-wrap; word-break: break-word;
+  max-height: 120px; overflow-y: auto; margin-top: 2px;
+}
+.wf-member.collapsed .wf-member-result { display: none; }
+.wf-member .wf-member-label { cursor: pointer; }
+
 /* ── Context meter: clickable ring + breakdown panel (matching original dsh) ── */
 .context-ring { position: relative; display: inline-flex; flex-shrink: 0; }
 .context-ring .ctx-trigger {
@@ -2184,9 +2227,32 @@ function handleEvent(event, showTraj) {
           label.className = 'ctc-result-label';
           label.textContent = event.is_error ? '错误' : '结果';
           body.appendChild(label);
-          const pre = document.createElement('pre');
-          pre.textContent = event.content;
-          body.appendChild(pre);
+          // Check if this is a workflow result — render as panel instead of raw pre.
+          const toolName = targetCard.querySelector('.ctc-name');
+          if (toolName && toolName.textContent === 'workflow' && !event.is_error) {
+            const wfHtml = renderWorkflowResult(event.content);
+            if (wfHtml) {
+              const wfDiv = document.createElement('div');
+              wfDiv.innerHTML = wfHtml;
+              body.appendChild(wfDiv);
+              // Wire phase toggle.
+              wfDiv.querySelectorAll('.wf-phase-header').forEach(h => {
+                h.onclick = () => h.parentElement.classList.toggle('expanded');
+              });
+              // Wire member result toggle.
+              wfDiv.querySelectorAll('.wf-member-label').forEach(l => {
+                l.onclick = () => l.parentElement.classList.toggle('collapsed');
+              });
+            } else {
+              const pre = document.createElement('pre');
+              pre.textContent = event.content;
+              body.appendChild(pre);
+            }
+          } else {
+            const pre = document.createElement('pre');
+            pre.textContent = event.content;
+            body.appendChild(pre);
+          }
         }
         if (event.is_error) targetCard.classList.add('error');
         if (targetCard === currentToolCallEl) currentToolCallEl = null;
@@ -2333,9 +2399,29 @@ function renderChatFromHistory(messages) {
           label.className = 'ctc-result-label';
           label.textContent = msg.is_error ? '错误' : '结果';
           body.appendChild(label);
-          const pre = document.createElement('pre');
-          pre.textContent = msg.content;
-          body.appendChild(pre);
+          const toolName = targetCard.querySelector('.ctc-name');
+          if (toolName && toolName.textContent === 'workflow' && !msg.is_error) {
+            const wfHtml = renderWorkflowResult(msg.content);
+            if (wfHtml) {
+              const wfDiv = document.createElement('div');
+              wfDiv.innerHTML = wfHtml;
+              body.appendChild(wfDiv);
+              wfDiv.querySelectorAll('.wf-phase-header').forEach(h => {
+                h.onclick = () => h.parentElement.classList.toggle('expanded');
+              });
+              wfDiv.querySelectorAll('.wf-member-label').forEach(l => {
+                l.onclick = () => l.parentElement.classList.toggle('collapsed');
+              });
+            } else {
+              const pre = document.createElement('pre');
+              pre.textContent = msg.content;
+              body.appendChild(pre);
+            }
+          } else {
+            const pre = document.createElement('pre');
+            pre.textContent = msg.content;
+            body.appendChild(pre);
+          }
         }
         if (msg.is_error) targetCard.classList.add('error');
         // Only clear currentToolCallEl if it was the matched card
@@ -2495,6 +2581,51 @@ function addChatToolCall(name, args, isError, callId) {
   chat.appendChild(el);
   currentToolCallEl = el;
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
+}
+
+// ── Workflow result renderer ───────────────────────────────────────────
+function renderWorkflowResult(jsonStr) {
+  let data;
+  try { data = JSON.parse(jsonStr); } catch (e) { return null; }
+  if (!data || !data.phases) return null;
+
+  const phases = Object.entries(data.phases);
+  let html = '<div class="wf-panel">';
+  // Run header
+  const ok = data.completed || 0;
+  const fail = data.failed || 0;
+  html += '<div class="wf-run-header">';
+  html += '<span class="wf-run-name">' + esc(data.name || 'workflow') + '</span>';
+  html += '<span class="wf-run-stats"><span class="wf-ok">' + ok + ' ok</span>';
+  if (fail > 0) html += ' <span class="wf-fail">' + fail + ' failed</span>';
+  html += ' · ' + (data.agentsStarted || 0) + ' agents</span>';
+  html += '</div>';
+
+  // Phase groups
+  for (const [phaseName, members] of phases) {
+    const allDone = members.every(m => m.status === 'completed');
+    const hasFail = members.some(m => m.status === 'failed');
+    html += '<div class="wf-phase expanded">';
+    html += '<div class="wf-phase-header">';
+    html += '<span class="wf-phase-chevron">▶</span>';
+    html += '<span class="wf-phase-name">' + esc(phaseName) + '</span>';
+    html += '<span class="wf-phase-count">' + members.length + ' members</span>';
+    html += '</div>';
+    html += '<div class="wf-phase-body">';
+    for (const m of members) {
+      html += '<div class="wf-member ' + (m.status === 'completed' ? 'completed' : 'failed') + ' collapsed">';
+      html += '<span class="wf-member-dot"></span>';
+      html += '<span class="wf-member-label">' + esc(m.label || '') + '</span>';
+      html += '<span class="wf-member-status">' + esc(m.status || '') + '</span>';
+      if (m.result) {
+        html += '<div class="wf-member-result">' + esc(truncate(m.result, 500)) + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 // ─── Markdown ──────────────────────────────────────────────────────────
