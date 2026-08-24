@@ -131,10 +131,13 @@ impl SessionLog {
                     for (call_id, content, is_error) in pending_tool_results.drain(..) {
                         messages.push(Message::Tool { call_id, content, is_error });
                     }
-                    // DeepSeek thinking-mode passback rule: reasoning_content
-                    // must return on tool-call turns; drop on plain turns to
-                    // save tokens.
-                    let reasoning = if !tool_calls.is_empty() { thinking.clone() } else { None };
+                    // DeepSeek thinking-mode passback rule (rc.8 corrected):
+                    // pass reasoning_content back on EVERY reasoning-carrying
+                    // turn, not just tool-call turns. A gateway re-encoding the
+                    // conversation for another vendor needs the thinking
+                    // signature on every reasoned turn; dropping it on
+                    // tool-call-free turns loses that signature.
+                    let reasoning = thinking.clone();
                     messages.push(Message::Assistant {
                         content: content.clone(),
                         tool_calls: tool_calls.clone(),
@@ -267,10 +270,32 @@ impl SessionLog {
         })
     }
 
-    /// Checkpoint the session to a flash file.
+    /// Checkpoint the session to a flash file (atomic write).
+    ///
+    /// Writes to a temp file, fsyncs, then renames over the target — so a
+    /// crash mid-write leaves the previous checkpoint intact rather than a
+    /// truncated file. Matches the durability discipline upstream DSH uses
+    /// for session persistence.
     pub fn checkpoint(&self, path: &str) -> Result<(), String> {
         let data = self.serialize();
-        std::fs::write(path, &data).map_err(|e| format!("checkpoint write: {e}"))
+        let target = std::path::Path::new(path);
+        let dir = target.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let tmp = target.with_extension("tmp");
+
+        // Write to temp file + fsync for durability.
+        {
+            use std::io::Write;
+            let mut file = std::fs::File::create(&tmp).map_err(|e| format!("checkpoint create: {e}"))?;
+            file.write_all(&data).map_err(|e| format!("checkpoint write: {e}"))?;
+            file.sync_all().map_err(|e| format!("checkpoint fsync: {e}"))?;
+        }
+
+        // Atomic rename over the target.
+        std::fs::rename(&tmp, target).map_err(|e| {
+            // Clean up temp file on rename failure.
+            let _ = std::fs::remove_file(&tmp);
+            format!("checkpoint rename: {e}")
+        })
     }
 
     /// Load a session from a flash file.

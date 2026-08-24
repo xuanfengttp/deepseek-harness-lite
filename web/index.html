@@ -320,7 +320,19 @@ body {
 }
 .bubble table {
   border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px;
-  display: block; overflow-x: auto;
+}
+/* Wide tables (≥4 columns): keep natural width, horizontal scroll on hover/focus. */
+.bubble table.md-table-wide {
+  display: block; overflow-x: hidden; white-space: nowrap;
+}
+.bubble table.md-table-wide:hover,
+.bubble table.md-table-wide:focus-within {
+  overflow-x: auto;
+}
+/* Narrow tables: fill column, allow text wrapping. */
+.bubble table:not(.md-table-wide) th,
+.bubble table:not(.md-table-wide) td {
+  word-break: break-word;
 }
 .bubble th, .bubble td {
   border: 1px solid var(--border-l2); padding: 6px 10px; text-align: left;
@@ -543,7 +555,7 @@ body {
 }
 .cmd-item-desc { font-size: 13px; color: var(--label-secondary); }
 .cmd-popup-empty { padding: 12px 14px; font-size: 13px; color: var(--label-caption); }
-.input-row { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 4px 2px; }
+.input-row { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; padding: 0 4px 2px; }
 .model-select {
   border: none; border-radius: 8px; outline: none;
   background-color: transparent; color: var(--label-secondary);
@@ -1760,7 +1772,10 @@ function updateStatsBar() {
   const billedInput = sessionStats.cacheHitTokens + sessionStats.cacheMissTokens;
   if (sessionStats.totalInputTokens > 0 || sessionStats.totalOutputTokens > 0) {
     if (billedInput > 0) {
-      const cachePct = Math.round(sessionStats.cacheHitTokens / billedInput * 100);
+      const ratio = sessionStats.cacheHitTokens / billedInput * 100;
+      // Keep integer % unless it would round to 100, then show decimals
+      // (e.g. 99.7% instead of misleading 100%).
+      const cachePct = Math.round(ratio) >= 100 ? ratio.toFixed(1) : String(Math.round(ratio));
       groups.push('缓存命中 ' + cachePct + '%');
     }
     groups.push('输入 ' + formatTokens(sessionStats.totalInputTokens) + ' tok · 输出 ' + formatTokens(sessionStats.totalOutputTokens) + ' tok');
@@ -2387,7 +2402,8 @@ function renderMd(md) {
     const lines = m.trim().split('\n');
     const headers = lines[0].split('|').slice(1, -1).map(s => s.trim());
     const rows = lines.slice(2).map(line => line.split('|').slice(1, -1).map(s => s.trim()));
-    let html = '<table><thead><tr>' + headers.map(hd => '<th>' + hd + '</th>').join('') + '</tr></thead><tbody>';
+    const wideClass = headers.length >= 4 ? ' class="md-table-wide"' : '';
+    let html = '<table' + wideClass + '><thead><tr>' + headers.map(hd => '<th>' + hd + '</th>').join('') + '</tr></thead><tbody>';
     for (const row of rows) {
       html += '<tr>' + row.map(c => '<td>' + c + '</td>').join('') + '</tr>';
     }

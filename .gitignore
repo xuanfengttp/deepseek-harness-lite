@@ -39,3 +39,6 @@ release/
 
 # Blog drafts (not tracked)
 blog/
+
+# Agent workflows (for the AI agent, not part of dsh-lite)
+.agent-workflows/
