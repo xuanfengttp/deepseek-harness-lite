@@ -52,7 +52,7 @@ fn render_messages_for_summary(messages: &[Message]) -> String {
     let mut out = String::new();
     for msg in messages {
         match msg {
-            Message::User { content } => {
+            Message::User { content, .. } => {
                 out.push_str(&format!("[User]: {content}\n"));
             }
             Message::Assistant { content, tool_calls, .. } => {
@@ -120,6 +120,7 @@ pub async fn compact(
         messages: vec![
             Message::User {
                 content: format!("{summary_instruction}\n\n--- CONVERSATION TO SUMMARIZE ---\n\n{conversation_text}"),
+                images: vec![],
             },
         ],
         tools: vec![],
@@ -185,7 +186,7 @@ mod tests {
     #[test]
     fn test_render_messages() {
         let messages = vec![
-            Message::User { content: "check interface".into() },
+            Message::User { content: "check interface".into(), images: vec![] },
             Message::Assistant { content: "I'll check now.".into(), tool_calls: vec![], reasoning_content: None },
             Message::Tool { call_id: "tc1".into(), content: "eth0 is up".into(), is_error: false },
         ];

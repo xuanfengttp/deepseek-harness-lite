@@ -237,7 +237,7 @@ impl ToolPlugin for SubagentTool {
                     while event_rx.recv().await.is_some() {}
                 });
 
-                child_loop.run_turn(prompt.to_string(), &skill, event_tx).await
+                child_loop.run_turn(prompt.to_string(), vec![], &skill, event_tx).await
             }),
             Err(e) => {
                 log::error!("Subagent: failed to create child runtime: {e}");
@@ -324,6 +324,7 @@ mod tests {
         let mut session = SessionLog::new(64);
         session.append(SessionEvent::UserMessage {
             content: "test".into(),
+            images: vec![],
         });
         session.append(SessionEvent::AssistantMessage {
             content: "first response".into(),

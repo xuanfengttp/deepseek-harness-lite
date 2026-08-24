@@ -510,7 +510,7 @@ mod tests {
             // Write some events.
             if let Some(log) = mgr.active_mut() {
                 log.begin_turn();
-                log.append(SessionEvent::UserMessage { content: "hello from session".into() });
+                log.append(SessionEvent::UserMessage { content: "hello from session".into(), images: vec![] });
                 log.end_turn(TurnEndReason::Completed);
             }
             mgr.checkpoint_active();

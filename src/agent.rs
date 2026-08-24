@@ -138,6 +138,7 @@ impl AgentLoop {
     pub async fn run_turn(
         &mut self,
         user_message: String,
+        images: Vec<crate::types::ImageBlock>,
         skill: &Skill,
         event_tx: mpsc::Sender<LoopEvent>,
     ) -> Result<TurnEndReason, String> {
@@ -146,7 +147,7 @@ impl AgentLoop {
 
         // Record the user message.
         self.session
-            .append(SessionEvent::UserMessage { content: user_message });
+            .append(SessionEvent::UserMessage { content: user_message, images });
 
         // Assemble the prompt from the active skill + available tools.
         // Inject runtime variables ({{cwd}}, {{model}}) for the identity section.
@@ -259,7 +260,7 @@ impl AgentLoop {
         // Inject guidance if provided (Todo mode).
         if let Some(text) = injection {
             self.session
-                .append(SessionEvent::UserMessage { content: text });
+                .append(SessionEvent::UserMessage { content: text, images: vec![] });
         }
 
         // Check if compaction is needed before building the request.
@@ -499,7 +500,7 @@ impl AgentLoop {
         system: String,
         prompt: String,
     ) -> StepOutcome {
-        let messages = vec![Message::User { content: prompt }];
+        let messages = vec![Message::User { content: prompt, images: vec![] }];
 
         let request = LlmRequest {
             model: self.model.clone(),

@@ -78,7 +78,7 @@ impl SessionLog {
     pub fn estimated_tokens(&self) -> usize {
         let messages = self.derive_messages();
         let total_chars: usize = messages.iter().map(|m| match m {
-            Message::User { content } => content.len(),
+            Message::User { content, .. } => content.len(),
             Message::Assistant { content, tool_calls, .. } => {
                 content.len() + tool_calls.iter().map(|tc| tc.arguments.to_string().len() + tc.name.len()).sum::<usize>()
             }
@@ -118,12 +118,12 @@ impl SessionLog {
 
         for event in &self.events {
             match event {
-                SessionEvent::UserMessage { content } => {
+                SessionEvent::UserMessage { content, images } => {
                     // Flush any pending tool results before the next user message.
                     for (call_id, content, is_error) in pending_tool_results.drain(..) {
                         messages.push(Message::Tool { call_id, content, is_error });
                     }
-                    messages.push(Message::User { content: content.clone() });
+                    messages.push(Message::User { content: content.clone(), images: images.clone() });
                 }
                 SessionEvent::AssistantMessage { content, tool_calls, thinking, .. } => {
                     // Flush tool results from the PREVIOUS step before this new
@@ -154,6 +154,7 @@ impl SessionLog {
                     }
                     messages.push(Message::User {
                         content: format!("[Previous conversation summary]\n{summary}"),
+                        images: vec![],
                     });
                 }
                 _ => {}
@@ -279,7 +280,6 @@ impl SessionLog {
     pub fn checkpoint(&self, path: &str) -> Result<(), String> {
         let data = self.serialize();
         let target = std::path::Path::new(path);
-        let dir = target.parent().unwrap_or_else(|| std::path::Path::new("."));
         let tmp = target.with_extension("tmp");
 
         // Write to temp file + fsync for durability.
@@ -323,7 +323,7 @@ mod tests {
     fn derive_messages_projects_surface_events() {
         let mut log = SessionLog::new(128);
         log.begin_turn();
-        log.append(SessionEvent::UserMessage { content: "hello".into() });
+        log.append(SessionEvent::UserMessage { content: "hello".into(), images: vec![] });
         log.begin_step();
         log.append(SessionEvent::AssistantMessage {
             content: "hi there".into(),
@@ -346,7 +346,7 @@ mod tests {
     fn ring_buffer_evicts_oldest() {
         let mut log = SessionLog::new(4);
         for i in 0..10 {
-            log.append(SessionEvent::UserMessage { content: format!("msg {i}") });
+            log.append(SessionEvent::UserMessage { content: format!("msg {i}"), images: vec![] });
         }
         assert_eq!(log.len(), 4);
         // Only the last 4 should remain.
@@ -378,7 +378,7 @@ mod tests {
         // Tool results must appear AFTER the assistant that triggered them, BEFORE the next assistant.
         let mut log = SessionLog::new(128);
         log.begin_turn();
-        log.append(SessionEvent::UserMessage { content: "do two things".into() });
+        log.append(SessionEvent::UserMessage { content: "do two things".into(), images: vec![] });
         log.begin_step();
         log.append(SessionEvent::AssistantMessage {
             content: "doing first thing".into(),
@@ -424,7 +424,7 @@ mod tests {
     #[test]
     fn clear_empties_log() {
         let mut log = SessionLog::new(128);
-        log.append(SessionEvent::UserMessage { content: "hello".into() });
+        log.append(SessionEvent::UserMessage { content: "hello".into(), images: vec![] });
         log.append(SessionEvent::AssistantMessage {
             content: "hi".into(), tool_calls: vec![], usage: None, ttft_ms: 0, decode_ms: 0, thinking: None,
         });
@@ -432,14 +432,14 @@ mod tests {
         log.clear();
         assert_eq!(log.derive_messages().len(), 0);
         // Can still append after clear.
-        log.append(SessionEvent::UserMessage { content: "fresh start".into() });
+        log.append(SessionEvent::UserMessage { content: "fresh start".into(), images: vec![] });
         assert_eq!(log.derive_messages().len(), 1);
     }
 
     #[test]
     fn estimated_tokens_positive() {
         let mut log = SessionLog::new(128);
-        log.append(SessionEvent::UserMessage { content: "This is a test message with enough characters".into() });
+        log.append(SessionEvent::UserMessage { content: "This is a test message with enough characters".into(), images: vec![] });
         let tokens = log.estimated_tokens();
         assert!(tokens > 0);
     }
@@ -449,7 +449,7 @@ mod tests {
         let mut log = SessionLog::new(128);
         // Add 10 user messages.
         for i in 0..10 {
-            log.append(SessionEvent::UserMessage { content: format!("msg {i}") });
+            log.append(SessionEvent::UserMessage { content: format!("msg {i}"), images: vec![] });
         }
         assert_eq!(log.len(), 10);
 
@@ -463,13 +463,13 @@ mod tests {
         let msgs = log.derive_messages();
         assert_eq!(msgs.len(), 4);
         // First message should be the summary.
-        if let Message::User { content } = &msgs[0] {
+        if let Message::User { content, .. } = &msgs[0] {
             assert!(content.contains("Summary of old messages"));
         } else {
             panic!("Expected first message to be summary User message");
         }
         // Last 3 should be msg 7, 8, 9.
-        if let Message::User { content } = &msgs[3] {
+        if let Message::User { content, .. } = &msgs[3] {
             assert_eq!(content, "msg 9");
         } else {
             panic!("Expected last message to be msg 9");
@@ -479,7 +479,7 @@ mod tests {
     #[test]
     fn apply_compaction_noop_when_few_events() {
         let mut log = SessionLog::new(128);
-        log.append(SessionEvent::UserMessage { content: "only one".into() });
+        log.append(SessionEvent::UserMessage { content: "only one".into(), images: vec![] });
         log.apply_compaction("summary".into(), 5);
         // Should not compact (only 1 event, keep 5).
         assert_eq!(log.len(), 1);

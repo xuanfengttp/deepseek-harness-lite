@@ -83,6 +83,7 @@ impl Dispatcher {
     pub async fn dispatch(
         &mut self,
         user_message: String,
+        images: Vec<crate::types::ImageBlock>,
         skill: &Skill,
         event_tx: mpsc::Sender<LoopEvent>,
     ) -> DispatchResult {
@@ -123,7 +124,7 @@ impl Dispatcher {
         .with_compaction(self.compaction_threshold, self.keep_recent_turns)
         .with_custom_prompt(self.custom_prompt.clone());
 
-        let result = agent_loop.run_turn(user_message, skill, event_tx).await;
+        let result = agent_loop.run_turn(user_message, images, skill, event_tx).await;
 
         // Take the parts back.
         let (session, tools, _llm) = agent_loop.into_parts();

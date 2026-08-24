@@ -69,12 +69,15 @@ struct ChatCompletionRequest {
 #[derive(Debug, Serialize)]
 struct ApiMessage {
     role: &'static str,
-    content: String,
+    /// Message content: either a plain string (text-only) or an array of
+    /// content parts (when images are present). The OpenAI API accepts both
+    /// forms under the `content` key.
+    content: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<ApiToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_call_id: Option<String>,
-    /// DeepSeek thinking-mode passback: sent only on tool-call turns.
+    /// DeepSeek thinking-mode passback: sent on every reasoning-carrying turn.
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_content: Option<String>,
 }
@@ -311,7 +314,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
         if !request.system.is_empty() {
             messages.push(ApiMessage {
                 role: "system",
-                content: request.system.clone(),
+                content: serde_json::Value::String(request.system.clone()),
                 tool_calls: None,
                 tool_call_id: None,
                 reasoning_content: None,
@@ -320,16 +323,39 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
         // Append conversation messages.
         for m in &request.messages {
             match m {
-                Message::User { content } => messages.push(ApiMessage {
-                    role: "user",
-                    content: content.clone(),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    reasoning_content: None,
-                }),
+                Message::User { content, images } => {
+                    if images.is_empty() {
+                        messages.push(ApiMessage {
+                            role: "user",
+                            content: serde_json::Value::String(content.clone()),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            reasoning_content: None,
+                        });
+                    } else {
+                        // Build OpenAI content parts: text + image_url blocks.
+                        let mut parts: Vec<serde_json::Value> = Vec::new();
+                        if !content.is_empty() {
+                            parts.push(serde_json::json!({ "type": "text", "text": content }));
+                        }
+                        for img in images {
+                            parts.push(serde_json::json!({
+                                "type": "image_url",
+                                "image_url": { "url": format!("data:{};base64,{}", img.media_type, img.data) }
+                            }));
+                        }
+                        messages.push(ApiMessage {
+                            role: "user",
+                            content: serde_json::Value::Array(parts),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            reasoning_content: None,
+                        });
+                    }
+                }
                 Message::Assistant { content, tool_calls, reasoning_content } => messages.push(ApiMessage {
                     role: "assistant",
-                    content: content.clone(),
+                    content: serde_json::Value::String(content.clone()),
                     tool_calls: if tool_calls.is_empty() {
                         None
                     } else {
@@ -347,7 +373,7 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                 }),
                 Message::Tool { call_id, content, .. } => messages.push(ApiMessage {
                     role: "tool",
-                    content: content.clone(),
+                    content: serde_json::Value::String(content.clone()),
                     tool_calls: None,
                     tool_call_id: Some(call_id.clone()),
                     reasoning_content: None,

@@ -217,7 +217,7 @@ async fn handle_request(
             if let Some(log) = mgr.active() {
                 for event in log.events() {
                     match event {
-                        SessionEvent::UserMessage { content } => {
+                        SessionEvent::UserMessage { content, .. } => {
                             for (cid, c, e) in pending_tool_results.drain(..) {
                                 messages.push(serde_json::json!({"role":"tool","call_id":cid,"content":c,"is_error":e}));
                             }
@@ -301,7 +301,7 @@ async fn handle_request(
                                 "type": "step_end"
                             }));
                         }
-                        SessionEvent::UserMessage { content } => {
+                        SessionEvent::UserMessage { content, .. } => {
                             trajectory.push(serde_json::json!({
                                 "type": "user_message", "content": content
                             }));
@@ -618,13 +618,29 @@ async fn handle_chat(
 ) -> Response<BoxBody<Bytes, Infallible>> {
     // Parse the request body to get the message.
     let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
-    let message = serde_json::from_slice::<serde_json::Value>(&body)
-        .ok()
-        .and_then(|v| v.get("message").and_then(|m| m.as_str()).map(String::from))
+    let parsed = serde_json::from_slice::<serde_json::Value>(&body).ok().unwrap_or(serde_json::json!({}));
+    let message = parsed.get("message").and_then(|m| m.as_str()).map(String::from).unwrap_or_default();
+
+    // Parse optional inline images: [{ "media_type": "image/png", "data": "<base64>" }]
+    let images: Vec<crate::types::ImageBlock> = parsed
+        .get("images")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|img| {
+                    let media_type = img.get("media_type")?.as_str()?.to_string();
+                    let data = img.get("data")?.as_str()?.to_string();
+                    if media_type.is_empty() || data.is_empty() {
+                        return None;
+                    }
+                    Some(crate::types::ImageBlock { media_type, data })
+                })
+                .collect()
+        })
         .unwrap_or_default();
 
-    if message.is_empty() {
-        return serve_json(r#"{"error":"message is required"}"#);
+    if message.is_empty() && images.is_empty() {
+        return serve_json(r#"{"error":"message or images required"}"#);
     }
 
     // Re-read config from disk so changes made in the settings panel
@@ -693,7 +709,7 @@ async fn handle_chat(
     // Spawn the dispatch task.
     let state_clone = state.clone();
     tokio::spawn(async move {
-        let result = dispatcher.dispatch(message, &skill, event_tx).await;
+        let result = dispatcher.dispatch(message, images, &skill, event_tx).await;
 
         // Return the session to the manager.
         let session = dispatcher.take_session();
@@ -969,7 +985,7 @@ async fn handle_context_raw(state: Arc<ServerState>) -> Response<BoxBody<Bytes, 
         if let Some(log) = mgr.active() {
             log.derive_messages().iter().map(|m| {
                 match m {
-                    crate::types::Message::User { content } => serde_json::json!({
+                    crate::types::Message::User { content, .. } => serde_json::json!({
                         "role": "user",
                         "content": content,
                     }),

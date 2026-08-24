@@ -242,7 +242,7 @@ async fn async_main() -> ExitCode {
             }
         });
 
-        match dispatcher.dispatch(prompt, &active_skill, event_tx).await {
+        match dispatcher.dispatch(prompt, vec![], &active_skill, event_tx).await {
             DispatchResult::Done { mode, reason } => log::info!("Dispatch done: mode={mode:?}, reason={reason:?}"),
             DispatchResult::Failed { mode, message } => log::error!("Dispatch failed: mode={mode:?}, {message}"),
         }
@@ -329,6 +329,7 @@ fn preheat_kv_cache(config: &Config, skill: &Skill) {
         system: assembled.system,
         messages: vec![Message::User {
             content: "ready".into(),
+            images: vec![],
         }],
         tools: assembled.tools,
         max_tokens: 1,

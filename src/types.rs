@@ -19,11 +19,29 @@ pub type CallId = String;
 
 // ─── Messages (LLM vocabulary) ─────────────────────────────────────────────
 
+/// An inline image attached to a user message (base64 data URL format).
+///
+/// Stored in session events as base64; serialized to the OpenAI
+/// `image_url` content part in the API request:
+/// `{ "type": "image_url", "image_url": { "url": "data:<media_type>;base64,<data>" } }`
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageBlock {
+    /// Media type: `image/png`, `image/jpeg`, `image/webp`, `image/gif`.
+    pub media_type: String,
+    /// Raw base64-encoded image data (no data-URL prefix).
+    pub data: String,
+}
+
 /// One message in the model conversation history, derived from the session log.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
     /// User-authored or injected content.
-    User { content: String },
+    User {
+        content: String,
+        /// Inline images attached to this message (empty = text-only).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<ImageBlock>,
+    },
     /// Assistant-generated content (may contain tool calls).
     Assistant {
         content: String,
@@ -86,7 +104,12 @@ pub enum SessionEvent {
     TurnEnd { turn: u64, reason: TurnEndReason },
     StepStart { turn: u64, step: u64 },
     StepEnd { turn: u64, step: u64 },
-    UserMessage { content: String },
+    UserMessage {
+        content: String,
+        /// Inline images attached to this message (empty = text-only).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<ImageBlock>,
+    },
     AssistantChunk { delta: String },
     AssistantMessage {
         content: String,
