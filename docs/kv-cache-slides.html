@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KV Cache 复用设计 · dsh-lite</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #1a1a2e; color: #e0e0e0; }
+  .deck { display: flex; flex-direction: column; gap: 40px; padding: 40px 20px; max-width: 960px; margin: 0 auto; }
+  .slide { background: #16213e; border-radius: 16px; padding: 48px 56px; min-height: 540px; display: flex; flex-direction: column; box-shadow: 0 4px 24px rgba(0,0,0,0.3); border: 1px solid #233; }
+  .slide-num { font-size: 12px; color: #555; margin-bottom: 8px; letter-spacing: 2px; }
+  .slide h1 { font-size: 28px; color: #7ec8e3; margin-bottom: 24px; font-weight: 600; }
+  .slide h2 { font-size: 18px; color: #a8d8ea; margin: 20px 0 10px; font-weight: 500; }
+  .slide p { font-size: 15px; line-height: 1.7; color: #ccc; margin-bottom: 8px; }
+  .slide ul { list-style: none; margin: 8px 0; }
+  .slide li { font-size: 14px; line-height: 1.8; color: #bbb; padding-left: 20px; position: relative; }
+  .slide li::before { content: "▸"; position: absolute; left: 0; color: #7ec8e3; }
+  .slide li b { color: #e0e0e0; }
+  .slide table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  .slide th { text-align: left; padding: 8px 12px; background: #1a2744; color: #7ec8e3; font-weight: 500; border-bottom: 1px solid #2a3a5c; }
+  .slide td { padding: 6px 12px; color: #aaa; border-bottom: 1px solid #1e2d4a; }
+  .slide td:first-child { color: #ccc; }
+  .block { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-family: "Cascadia Code", "Consolas", monospace; margin: 2px; }
+  .b-fixed { background: #1a3a2a; color: #6fd68a; border: 1px solid #2a5a3a; }
+  .b-semi  { background: #2a3a1a; color: #c8d86f; border: 1px solid #4a5a2a; }
+  .b-dyn   { background: #3a2a1a; color: #e8a86f; border: 1px solid #5a3a2a; }
+  .b-miss  { background: #3a1a1a; color: #e86f6f; border: 1px solid #5a2a2a; }
+  .b-new   { background: #1a2a3a; color: #6fa8e8; border: 1px solid #2a3a5a; }
+  .diag { font-family: "Cascadia Code", "Consolas", monospace; font-size: 12px; line-height: 2; background: #0f1626; padding: 16px 20px; border-radius: 8px; margin: 12px 0; border: 1px solid #1e2d4a; white-space: pre; overflow-x: auto; }
+  .principle { background: #1a2744; border-left: 3px solid #7ec8e3; padding: 12px 20px; margin: 12px 0; border-radius: 0 8px 8px 0; }
+  .principle b { color: #7ec8e3; }
+  .highlight { color: #7ec8e3; font-weight: 600; }
+  .strike { text-decoration: line-through; color: #666; }
+  .footer { text-align: center; font-size: 12px; color: #444; padding: 20px; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- Slide 1: Title -->
+<div class="slide">
+  <div class="slide-num">01 / 08</div>
+  <h1>KV Cache 复用设计</h1>
+  <p style="font-size: 16px; color: #888; margin-top: 12px;">DeepSeek Harness Lite · 上下文编排与缓存命中率优化</p>
+  <div style="margin-top: auto;">
+    <h2>核心问题</h2>
+    <p>DeepSeek API 的 KV cache 是<span class="highlight">前缀匹配</span>的 — 请求的前 N 个 token 与上次一致即可复用，不重新计算。</p>
+    <p>命中率越高 → TTFT 越低 → token 费用越省。</p>
+    <div class="principle"><b>黄金法则：</b>任何在中间插入或修改内容的操作，都会使其后所有 token 变成 cache miss。</div>
+  </div>
+</div>
+
+<!-- Slide 2: 前缀匹配原理 -->
+<div class="slide">
+  <div class="slide-num">02 / 08</div>
+  <h1>前缀匹配原理</h1>
+  <div class="diag"><span class="b-fixed">[A]</span><span class="b-fixed">[B]</span><span class="b-fixed">[C]</span><span class="b-fixed">[D]</span><span class="b-fixed">[E]</span><span class="b-fixed">[F]</span><span class="b-fixed">[G]</span>
+  ← 上次请求到这里
+
+<span class="b-fixed">[A]</span><span class="b-fixed">[B]</span><span class="b-fixed">[C]</span><span class="b-fixed">[D]</span><span class="b-fixed">[E]</span><span class="b-fixed">[F]</span><span class="b-fixed">[G]</span><span class="b-new">[H]</span><span class="b-new">[I]</span>
+                                  ↑ <span style="color:#6fd68a">命中（复用）</span>        ↑ <span style="color:#e86f6f">miss（重算）</span></div>
+  <h2>关键推论</h2>
+  <ul>
+    <li><b>追加在尾部</b> → 只 miss 新增部分，前缀全命中</li>
+    <li><b>插入在中间</b> → 插入点之后全部 miss</li>
+    <li><b>修改已有内容</b> → 修改点之后全部 miss</li>
+  </ul>
+  <div class="principle"><b>策略：</b>固定内容放前面，动态内容放后面，新增内容追加在尾部。</div>
+</div>
+
+<!-- Slide 3: 三层设计 -->
+<div class="slide">
+  <div class="slide-num">03 / 08</div>
+  <h1>三层缓存优化</h1>
+  <h2>① System Prompt 分层排序</h2>
+  <div class="diag"><span class="b-fixed">identity(-100)</span><span class="b-fixed">rules(-90)</span><span class="b-semi">tools(-80)</span><span class="b-dyn">persona(0)</span><span class="b-dyn">custom(10)</span>
+ <span style="color:#6fd68a">← 永不变，缓存价值最高</span>            <span style="color:#e8a86f">← 动态，改了只 invalidate 后缀</span></div>
+  <h2>② 启动预热</h2>
+  <ul>
+    <li>进程启动时发最小请求（max_tokens=1, think=off），让 API 提前缓存 system + tools 前缀</li>
+    <li>Fire-and-forget，错误不阻断</li>
+  </ul>
+  <h2>③ 压缩保持前缀</h2>
+  <ul>
+    <li>Summary 放消息头部（system + tools 之后），前缀仍命中</li>
+    <li>Summary 请求用独立上下文，不膨胀被摘要的对话</li>
+  </ul>
+</div>
+
+<!-- Slide 4: 动态内容注入 -->
+<div class="slide">
+  <div class="slide-num">04 / 08</div>
+  <h1>问题一：动态内容打断前缀</h1>
+  <h2>危险场景</h2>
+  <div class="diag"><span class="b-fixed">[system]</span><span class="b-fixed">[tools]</span><span class="b-fixed">[user1]</span><span class="b-fixed">[asst1]</span><span class="b-miss">[MEMORY注入]</span><span class="b-miss">[asst2]</span><span class="b-miss">[tool2]</span><span class="b-miss">[asst3]</span>
+                                            <span style="color:#e86f6f">↑ 从这里开始全部 miss</span></div>
+  <h2>设计原则：Append-Only</h2>
+  <table>
+    <tr><th>动态内容</th><th>注入方式</th><th>缓存影响</th></tr>
+    <tr><td>Memory recall</td><td>工具调用 → tool result 追加尾部</td><td style="color:#6fd68a">✅ 不破坏前缀</td></tr>
+    <tr><td>Todo guidance</td><td>user message 追加尾部</td><td style="color:#6fd68a">✅ 不破坏前缀</td></tr>
+    <tr><td>Skill 切换</td><td>改 system prompt persona</td><td style="color:#e8a86f">⚠️ invalidate persona 后缀</td></tr>
+    <tr><td>插入 memory 到中间</td><td class="strike">插入历史消息之间</td><td style="color:#e86f6f">❌ 打断后缀</td></tr>
+  </table>
+  <div class="principle"><b>原则：</b>所有动态内容一律追加在尾部。<span class="strike">不插入中间</span>，<span class="strike">不修改已有消息</span>。</div>
+</div>
+
+<!-- Slide 5: 分块协调 -->
+<div class="slide">
+  <div class="slide-num">05 / 08</div>
+  <h1>问题二：分块协调</h1>
+  <h2>思路</h2>
+  <p>部署端 KV cache 按 block 管理（如 16 token/block）。如果 agent 知道分词器和 block 大小，可让 section 边界对齐 block 边界。</p>
+  <h2>为什么不做</h2>
+  <table>
+    <tr><th>问题</th><th>说明</th></tr>
+    <tr><td>分词器依赖</td><td>需知道模型 tokenizer，破坏 OpenAI 兼容抽象</td></tr>
+    <tr><td>Block 大小不透明</td><td>部署端配置，API 不暴露</td></tr>
+    <tr><td>边际收益低</td><td>主要收益来自前缀稳定（已实现），对齐只省边界几个 token</td></tr>
+    <tr><td>维护成本高</td><td>多模型、版本变化都需同步</td></tr>
+  </table>
+  <div class="principle"><b>替代策略：</b>Trust the API — API 内部已做 block-level matching，agent 只需保证前缀稳定。通过 <code>prompt_cache_hit_tokens</code> 观察实际命中率。</div>
+</div>
+
+<!-- Slide 6: 追加策略 + 压缩重排 -->
+<div class="slide">
+  <div class="slide-num">06 / 08</div>
+  <h1>问题三：追加优先 + 压缩重排</h1>
+  <h2>正常运行（两次压缩之间）— Append-Only</h2>
+  <div class="diag">请求1: <span class="b-fixed">[sys]</span><span class="b-fixed">[tools]</span><span class="b-new">[user1]</span>
+                                                      miss 只有 user1
+
+请求2: <span class="b-fixed">[sys]</span><span class="b-fixed">[tools]</span><span class="b-fixed">[user1]</span><span class="b-fixed">[asst1]</span><span class="b-new">[tool1]</span><span class="b-new">[asst2]</span>
+                                                      miss 只有最后一轮
+
+请求3: <span class="b-fixed">[sys]</span><span class="b-fixed">[tools]</span><span class="b-fixed">[user1]</span><span class="b-fixed">[asst1]</span><span class="b-fixed">[tool1]</span><span class="b-fixed">[asst2]</span><span class="b-new">[user2]</span>
+                                                      miss 只有 user2</div>
+  <h2>压缩时 — 唯一的重排窗口</h2>
+  <div class="diag"><span class="b-fixed">[sys]</span><span class="b-fixed">[tools]</span><span class="b-new">[Summary]</span><span class="b-new">[userN-1]</span><span class="b-new">[asstN-1]</span><span class="b-new">[userN]</span>
+                              <span style="color:#6fd68a">前缀仍命中</span>  <span style="color:#e86f6f">新内容 miss</span>   <span style="color:#e8a86f">保留最近消息</span></div>
+  <div class="principle"><b>Summary 放头部</b>（system 之后），最近消息在尾部 → 追加新消息不破坏 Summary 缓存，且语义正确（摘要是背景，最近对话是主线）。</div>
+</div>
+
+<!-- Slide 7: 命中率 -->
+<div class="slide">
+  <div class="slide-num">07 / 08</div>
+  <h1>实际命中率</h1>
+  <p>数据来自 API 返回的 <code>prompt_cache_hit_tokens</code> / <code>prompt_cache_miss_tokens</code>（模型返回，非 agent 估算）</p>
+  <table>
+    <tr><th>阶段</th><th>预期命中率</th><th>原因</th></tr>
+    <tr><td>首次对话</td><td>60-80%</td><td>system + tools 前缀命中（预热），对话内容 miss</td></tr>
+    <tr><td>第二轮起</td><td style="color:#6fd68a">85-99%</td><td>前缀 + 之前所有消息命中，只 miss 最后一轮</td></tr>
+    <tr><td>compaction 后</td><td>70-85%</td><td>system + tools 仍命中，Summary 是新的 miss</td></tr>
+    <tr><td>skill 切换后</td><td>50-70%</td><td>identity + rules 命中，从 tools/persona 开始 miss</td></tr>
+  </table>
+  <p style="margin-top: 16px; font-size: 13px; color: #666;">前端底部状态栏实时显示「缓存命中 XX%」</p>
+</div>
+
+<!-- Slide 8: 总结 -->
+<div class="slide">
+  <div class="slide-num">08 / 08</div>
+  <h1>设计原则总结</h1>
+  <ul style="font-size: 15px; line-height: 2.2;">
+    <li><b>固定在前，动态在后</b> — system prompt 5 层排序，固定内容最大化前缀缓存</li>
+    <li><b>Append-only</b> — 所有动态内容追加在尾部，<span class="strike">不插入中间</span>，<span class="strike">不修改已有</span></li>
+    <li><b>压缩时重排</b> — 压缩是唯一重排窗口，Summary 放头部，最近消息在尾部</li>
+    <li><b>不与部署端耦合</b> — 不猜分词器和 block 大小，trust the API 内部 block matching</li>
+    <li><b>预热建缓存</b> — 启动时发最小请求，提前建立 system + tools 前缀缓存</li>
+  </ul>
+  <div style="margin-top: auto;">
+    <p style="font-size: 13px; color: #555;">详细设计文档：docs/kv-cache-design.md</p>
+  </div>
+</div>
+
+</div>
+<div class="footer">dsh-lite · KV Cache 复用设计 · 2025</div>
+</body>
+</html>
