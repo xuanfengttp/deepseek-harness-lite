@@ -82,6 +82,16 @@ compaction:
 
 修改后在下一个 chat 请求即时生效（热重载——无需重启）。Web UI 设置面板「通用」页提供压缩滑块，或点「打开配置文件」用系统编辑器编辑。
 
+### KV 缓存优化
+
+三层设计最大化 DeepSeek API 前缀缓存命中率（首轮之后通常 85-99%）：
+
+1. **System prompt 分层排序** — 固定内容（身份、规则）在前，动态内容（persona、自定义 prompt）在后，修改只 invalidate 后缀。见 `src/prompt.rs` 的 `ORDER_*` 常量。
+2. **启动预热** — 进程启动时发一个最小请求，让 API 提前缓存 system prompt + tools schema。见 `src/main.rs:preheat_kv_cache()`。
+3. **压缩保持前缀稳定** — 摘要插入消息列表头部（system + tools 之后），缓存前缀在压缩后仍然命中。
+
+详细设计：[docs/kv-cache-design.md](docs/kv-cache-design.md)
+
 ### 两层记忆
 
 - **短期**：session 事件日志（环形缓冲区 + flash checkpoint）

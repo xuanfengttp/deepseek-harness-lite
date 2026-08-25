@@ -82,6 +82,16 @@ compaction:
 
 Changes take effect on the next chat request (hot-reload — no restart needed). The web UI settings panel provides compaction sliders and a button to open the config file in the system editor.
 
+### KV cache optimization
+
+Three-layer design maximizes DeepSeek API prefix-cache hit rate (typically 85-99% after the first turn):
+
+1. **Layered system prompt** — fixed content (identity, rules) at the head, dynamic content (persona, custom prompt) at the tail, so changes only invalidate the suffix. See `src/prompt.rs` `ORDER_*` constants.
+2. **Startup preheat** — sends a minimal request on boot to warm the API's KV cache for the system prompt + tools schema. See `src/main.rs:preheat_kv_cache()`.
+3. **Compaction preserves prefix** — the summary is inserted at the head of the message list (after system + tools), so the cached prefix stays stable across compaction events.
+
+Details: [docs/kv-cache-design.md](docs/kv-cache-design.md)
+
 ### Two-layer memory
 
 - **Short-term**: session event log (ring buffer + flash checkpoint)
