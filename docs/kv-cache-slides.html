@@ -54,11 +54,12 @@
 <h1>KV Cache 复用设计 — dsh-lite 上下文编排</h1>
 
 <div class="flow">
-  <span class="flow-step">① 前缀匹配原理</span><span class="flow-arrow">→</span>
+  <span class="flow-step">① 前缀匹配</span><span class="flow-arrow">→</span>
   <span class="flow-step">② 首选 Append</span><span class="flow-arrow">→</span>
-  <span class="flow-step">③ 固定插入的代价对比</span><span class="flow-arrow">→</span>
-  <span class="flow-step">④ Block 对齐能否缓解</span><span class="flow-arrow">→</span>
-  <span class="flow-step">⑤ 命中率验证</span>
+  <span class="flow-step">③ 压缩重排</span><span class="flow-arrow">→</span>
+  <span class="flow-step">④ 固定插入代价对比</span><span class="flow-arrow">→</span>
+  <span class="flow-step">⑤ Block 对齐缓解</span><span class="flow-arrow">→</span>
+  <span class="flow-step">⑥ 命中率验证</span>
 </div>
 
 <div class="grid">
@@ -94,13 +95,25 @@
       <p>Summary 放头部，之后追加不破坏其缓存。<b>不在压缩前重排</b>：被移动消息马上要压缩掉，重排代价无回收窗口。</p>
     </div>
 
+    <div class="card">
+      <h2>④ 实际命中率</h2>
+      <table>
+        <tr><th>阶段</th><th>命中率</th><th>原因</th></tr>
+        <tr><td>首轮</td><td>60-80%</td><td>system+tools 命中（预热），对话 miss</td></tr>
+        <tr><td>第二轮起</td><td class="ok">85-99%</td><td>只 miss 最后一轮</td></tr>
+        <tr><td>压缩后</td><td>70-85%</td><td>前缀仍命中，Summary miss</td></tr>
+        <tr><td>skill 切换</td><td>50-70%</td><td>identity 命中，persona 后缀 miss</td></tr>
+      </table>
+      <p style="font-size:10px;color:#888;margin-top:2px">数据来自 API 返回 <code>prompt_cache_hit_tokens</code>，非 agent 估算</p>
+    </div>
+
   </div>
 
   <!-- 右列: 固定插入代价 → block → 命中率 -->
   <div class="col">
 
     <div class="card">
-      <h2>④ 固定位置插入 vs Append：代价对比</h2>
+      <h2>⑤ 固定位置插入 vs Append：代价对比</h2>
       <div class="q">设备状态注入、会话恢复 context 必须插在固定位置，损失多大？</div>
       <div class="vs">
         <div class="vs-card ok-card">
@@ -124,7 +137,7 @@
     </div>
 
     <div class="card">
-      <h2>⑤ Block 对齐：缓解固定插入的损失</h2>
+      <h2>⑥ Block 对齐：缓解固定插入的损失</h2>
       <div class="q">Block 是 prefix matching 最小粒度，对齐 section 边界能否减少连带 miss？</div>
       <div class="diag">未对齐: <span class="b b-block">blk0</span><span class="b b-block">blk1</span><span class="b b-block">blk2</span><span class="b b-block">blk3</span>
           [identity+rules  | tools |persona|custom]
@@ -140,18 +153,6 @@
         <li>append-only 运行中<b>无浪费</b>，仅 section 变化时触发</li>
       </ul>
       <div class="key"><b>储备方案：</b>三层设计已达 85-99%，5% 边际收益暂不够。被迫固定插入场景增多或命中率瓶颈时再启用。</div>
-    </div>
-
-    <div class="card">
-      <h2>⑥ 实际命中率</h2>
-      <table>
-        <tr><th>阶段</th><th>命中率</th><th>原因</th></tr>
-        <tr><td>首轮</td><td>60-80%</td><td>system+tools 命中（预热），对话 miss</td></tr>
-        <tr><td>第二轮起</td><td class="ok">85-99%</td><td>只 miss 最后一轮</td></tr>
-        <tr><td>压缩后</td><td>70-85%</td><td>前缀仍命中，Summary miss</td></tr>
-        <tr><td>skill 切换</td><td>50-70%</td><td>identity 命中，persona 后缀 miss</td></tr>
-      </table>
-      <p style="font-size:10px;color:#888;margin-top:2px">数据来自 API 返回 <code>prompt_cache_hit_tokens</code>，非 agent 估算</p>
     </div>
 
   </div>
