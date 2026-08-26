@@ -141,22 +141,42 @@ let request = LlmRequest {
 
 ### 思路
 
-模型部署端（如 vLLM）的 KV cache 按固定大小的 block 管理（通常 16 token/block）。如果 agent 能知道分词器和 block 大小，就可以让 section 边界对齐 block 边界，减少跨 block 的浪费。
+模型部署端（如 vLLM）的 KV cache 按固定大小的 block 管理（默认 16 token/block）。block 是 prefix matching 的最小粒度：一个 block 内的 token 序列完全一致才复用该 block 的 KV，否则整个 block miss。
 
-### 为什么不做
+如果 agent 知道分词器和 block 大小，就可以让 section 边界对齐 block 边界。这样当后面的 section 变化时，前面 section 占用的 block 不受影响，可以独立复用。
 
-| 问题 | 说明 |
+### 自部署场景下分词器可行
+
+在自部署场景（如 vLLM + DeepSeek 模型）中：
+
+- **分词器已知** — 用同款分词器（如 `tiktoken-rs` 或模型发布的 tokenizer.json），agent 可以精确计数 token
+- **Block 大小已知** — vLLM 配置项 `block_size`（默认 16），自部署可以直接读取
+- **运行时对齐可行** — 在 section 之间补充换行/空格，让 token 数对齐 block 边界，对模型理解几乎无影响
+
+### 为什么当前不做
+
+| 因素 | 分析 |
 |------|------|
-| 分词器依赖 | agent 需要知道模型的 tokenizer 才能精确计数 token，破坏 OpenAI 兼容抽象 |
-| Block 大小不透明 | block size 是部署端配置，API 不暴露，不同部署可能不同 |
-| 边际收益低 | 主要收益来自保持前缀稳定（已实现），block 对齐只省 block 边界的几个 token |
-| 维护成本高 | 分词器版本变化、多模型支持都需要同步维护 |
+| **边际收益低** | section 边界处最多浪费 `block_size - 1 = 15` 个 token 的缓存。整个 system prompt 约 300-500 token，浪费率最多 15/300 ≈ 5%。且只有后续 section 变化时才触发这个浪费 — 正常 append-only 运行中前缀完全一致，无浪费 |
+| **收益场景窄** | 只有 skill 切换（persona 变化）时，block 对齐能让 identity+rules+tools 的 block 独立复用。但 skill 切换是低频操作，切换后命中率本就要重新爬升 |
+| **复杂度引入** | 需要：(1) Rust 引入分词器依赖（增加二进制体积）；(2) 运行时 tokenize system prompt 计算 token 数；(3) 动态填充对齐字符；(4) block_size 作为配置项 |
+| **已有收益足够** | 三层设计（分层排序 + 预热 + 压缩保前缀）在实测中已达 85-99% 命中率，block 对齐的 5% 边际收益难以体现 |
 
-### 替代策略
+### 可选的后续优化
 
-- Trust the API：API 内部已做 block-level prefix matching，agent 只需保证前缀稳定
-- 自然边界：section 之间用 `\n\n` 分隔，让 block 边界自然落在段落边界附近
-- 观察命中率：通过 `prompt_cache_hit_tokens` 验证实际命中率，不需要猜测 block 行为
+如果未来命中率有明确瓶颈（如 skill 频繁切换导致长期低于 70%），可以引入 block 对齐作为可选优化：
+
+```toml
+# config/default.yaml
+[cache]
+align_blocks = true          # 开启 block 对齐
+block_size = 16              # vLLM block_size
+tokenizer = "deepseek-v3"    # 分词器类型
+```
+
+实现路径：启动时 tokenize system prompt 各 section，在边界处补 `\n` 填充到 block 整数倍。填充字符不影响模型理解（就是多了几个空行）。
+
+当前阶段优先保证前缀稳定（已实现），block 对齐作为低优先级储备方案。
 
 ---
 
@@ -249,7 +269,7 @@ let request = LlmRequest {
 1. **固定在前，动态在后** — system prompt 分层排序，固定内容最大化前缀缓存
 2. **Append-only** — 所有动态内容追加在尾部，永不插入中间
 3. **压缩时重排** — 压缩是唯一的重排窗口，Summary 放头部，最近消息在尾部
-4. **不与部署端耦合** — 不猜测分词器和 block 大小，trust the API 的内部 block-level matching
+4. **前缀稳定优先，block 对齐储备** — 当前靠前缀稳定已达 85-99% 命中率，block 对齐（自部署可行）作为低优先储备方案，边际收益约 5%
 5. **预热建缓存** — 启动时发最小请求，提前建立 system + tools 前缀缓存
 
 ## 相关代码

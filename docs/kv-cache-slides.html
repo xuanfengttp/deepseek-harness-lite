@@ -6,33 +6,36 @@
 <title>KV Cache 复用设计</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #fff; color: #222; display: flex; justify-content: center; padding: 20px; }
-  .slide { width: 1280px; height: 720px; background: #fff; padding: 36px 48px; display: flex; flex-direction: column; gap: 14px; }
-  h1 { font-size: 24px; font-weight: 700; border-bottom: 2px solid #2563eb; padding-bottom: 8px; margin-bottom: 4px; }
-  h2 { font-size: 15px; font-weight: 600; color: #2563eb; margin: 0; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; flex: 1; }
-  .col { display: flex; flex-direction: column; gap: 10px; }
-  .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 16px; }
-  .card h2 { margin-bottom: 6px; }
-  .card p, .card li { font-size: 13px; line-height: 1.6; color: #444; }
-  ul { list-style: none; margin: 0; }
-  li { padding-left: 14px; position: relative; font-size: 13px; line-height: 1.8; color: #444; }
-  li::before { content: "▪"; position: absolute; left: 0; color: #2563eb; }
-  li b { color: #111; }
-  .b { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; font-family: "Cascadia Code", "Consolas", monospace; margin: 1px; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #222; display: flex; justify-content: center; padding: 20px; }
+  .slide { width: 1280px; height: 720px; background: #fff; padding: 32px 44px; display: flex; flex-direction: column; gap: 10px; }
+  h1 { font-size: 22px; font-weight: 700; border-bottom: 2px solid #2563eb; padding-bottom: 6px; }
+  .flow { display: flex; align-items: center; gap: 6px; margin: 2px 0 8px; }
+  .flow-step { font-size: 12px; font-weight: 600; color: #2563eb; white-space: nowrap; }
+  .flow-arrow { color: #bbb; font-size: 14px; }
+  .b { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-family: "Cascadia Code","Consolas",monospace; margin: 1px; }
   .b-fix { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
-  .b-semi { background: #fff8e1; color: #f57c00; border: 1px solid #ffe0b2; }
+  .b-semi { background: #fff8e1; color: #e65100; border: 1px solid #ffe0b2; }
   .b-dyn { background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb; }
   .b-miss { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
   .b-new { background: #f3e5f5; color: #7b1fa2; border: 1px solid #e1bee7; }
-  .diag { font-family: "Cascadia Code", "Consolas", monospace; font-size: 11px; line-height: 1.9; background: #f8f9fa; padding: 8px 12px; border-radius: 6px; border: 1px solid #eee; white-space: pre; overflow-x: auto; }
-  .key { background: #eff6ff; border-left: 3px solid #2563eb; padding: 8px 14px; border-radius: 0 6px 6px 0; font-size: 13px; color: #1e40af; }
-  .key b { color: #1e3a8a; }
+  .diag { font-family: "Cascadia Code","Consolas",monospace; font-size: 11px; line-height: 1.85; background: #f8f9fa; padding: 7px 11px; border-radius: 5px; border: 1px solid #eee; white-space: pre; overflow-x: auto; }
+  .ok { color: #2e7d32; } .warn { color: #e65100; } .bad { color: #c62828; }
   .strike { text-decoration: line-through; color: #999; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { text-align: left; padding: 5px 8px; background: #f0f4f8; color: #2563eb; font-weight: 600; border-bottom: 1px solid #d0d8e0; }
-  td { padding: 4px 8px; color: #555; border-bottom: 1px solid #f0f0f0; }
-  .ok { color: #2e7d32; } .warn { color: #f57c00; } .bad { color: #c62828; }
+  th { text-align: left; padding: 4px 8px; background: #f0f4f8; color: #2563eb; font-weight: 600; border-bottom: 1px solid #d0d8e0; }
+  td { padding: 3px 8px; color: #555; border-bottom: 1px solid #f0f0f0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; flex: 1; }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+  .card { border: 1px solid #e0e0e0; border-radius: 7px; padding: 10px 14px; flex: 1; }
+  .card h2 { font-size: 13px; font-weight: 700; color: #2563eb; margin-bottom: 4px; }
+  .card .q { font-size: 12px; color: #999; font-style: italic; margin-bottom: 5px; }
+  .card p, .card li { font-size: 12px; line-height: 1.6; color: #444; }
+  ul { list-style: none; margin: 0; }
+  li { padding-left: 12px; position: relative; font-size: 12px; line-height: 1.7; color: #444; }
+  li::before { content: "▪"; position: absolute; left: 0; color: #2563eb; }
+  li b { color: #111; }
+  .key { background: #eff6ff; border-left: 3px solid #2563eb; padding: 6px 10px; border-radius: 0 5px 5px 0; font-size: 12px; color: #1e40af; margin-top: 6px; }
+  .key b { color: #1e3a8a; }
   .footer { font-size: 11px; color: #aaa; text-align: right; }
 </style>
 </head>
@@ -41,67 +44,93 @@
 
 <h1>KV Cache 复用设计 — dsh-lite 上下文编排</h1>
 
-<div class="row">
-  <!-- 左列 -->
+<!-- 推导链 -->
+<div class="flow">
+  <span class="flow-step">前缀匹配</span><span class="flow-arrow">→</span>
+  <span class="flow-step">固定在前 动态在后</span><span class="flow-arrow">→</span>
+  <span class="flow-step">动态内容追加尾部</span><span class="flow-arrow">→</span>
+  <span class="flow-step">超窗口→压缩重排</span><span class="flow-arrow">→</span>
+  <span class="flow-step">分块对齐？可行但储备</span><span class="flow-arrow">→</span>
+  <span class="flow-step">命中率验证</span>
+</div>
+
+<div class="grid">
+
+  <!-- 列1: 前缀匹配 → 分层排序 → 预热 -->
   <div class="col">
 
     <div class="card">
-      <h2>原理：前缀匹配</h2>
-      <div class="diag"><span class="b b-fix">[A]</span><span class="b b-fix">[B]</span><span class="b b-fix">[C]</span><span class="b b-fix">[D]</span><span class="b b-new">[E]</span><span class="b b-new">[F]</span>
-                                     <span class="ok">↑ 命中（复用）</span>  <span class="bad">↑ miss（重算）</span></div>
-      <p style="margin-top:6px"><b>追加在尾部</b> → 只 miss 新增部分<br><b>插入在中间</b> → 插入点之后全部 miss</p>
+      <h2>① 前缀匹配原理</h2>
+      <div class="diag"><span class="b b-fix">[A]</span><span class="b b-fix">[B]</span><span class="b b-fix">[C]</span><span class="b b-fix">[D]</span><span class="b b-new">[E]</span>
+                                     <span class="ok">↑ 命中</span>  <span class="bad">↑ miss</span></div>
+      <p style="margin-top:5px">API 逐 token 比对前缀，一致则复用 KV，否则重算。</p>
+      <p><b>追加尾部</b>→只 miss 新增；<b>插入中间</b>→打断后缀。</p>
     </div>
 
     <div class="card">
-      <h2>三层优化</h2>
+      <h2>② 固定在前，动态在后</h2>
+      <div class="diag" style="margin-top:4px"><span class="b b-fix">identity</span><span class="b b-fix">rules</span><span class="b b-semi">tools</span><span class="b b-dyn">persona</span><span class="b b-dyn">custom</span>
+ <span class="ok">永不变</span>     <span class="warn">半固定</span>   <span class="b-dyn">动态</span></div>
+      <p style="margin-top:5px">改 persona/custom 只失效后缀，identity+rules+tools 缓存不受影响。</p>
+    </div>
+
+    <div class="card">
+      <h2>③ 启动预热</h2>
       <ul>
-        <li><b>① 分层排序</b> — system prompt 固定内容在前，动态在后</li>
-        <li><b>② 启动预热</b> — 发最小请求提前缓存 system + tools 前缀</li>
-        <li><b>③ 压缩保前缀</b> — Summary 放头部，system + tools 缓存不失效</li>
+        <li>启动时发最小请求（<b>max_tokens=1</b>），提前缓存 system+tools 前缀</li>
+        <li>Fire-and-forget，错误不阻断启动</li>
       </ul>
-      <div class="diag" style="margin-top:6px"><span class="b b-fix">identity</span><span class="b b-fix">rules</span><span class="b b-semi">tools</span><span class="b b-dyn">persona</span><span class="b b-dyn">custom</span>
- <span class="ok">永不变</span>        <span class="warn">半固定</span>    <span class="b-dyn">动态</span></div>
-    </div>
-
-    <div class="card">
-      <h2>动态内容：Append-Only</h2>
-      <table>
-        <tr><th>内容</th><th>注入方式</th><th>缓存</th></tr>
-        <tr><td>Memory recall</td><td>tool result 追加尾部</td><td class="ok">✅ 不破坏</td></tr>
-        <tr><td>Todo guidance</td><td>user msg 追加尾部</td><td class="ok">✅ 不破坏</td></tr>
-        <tr><td>Skill 切换</td><td>改 system persona</td><td class="warn">⚠️ 后缀失效</td></tr>
-        <tr><td>插入中间</td><td class="strike">插入历史之间</td><td class="bad">❌ 打断</td></tr>
-      </table>
     </div>
 
   </div>
 
-  <!-- 右列 -->
+  <!-- 列2: 动态注入问题 → append-only → 压缩重排 -->
   <div class="col">
 
     <div class="card">
-      <h2>追加策略 + 压缩重排</h2>
-      <p style="margin-bottom:4px"><b>正常运行</b>（两次压缩之间）— Append-Only：</p>
-      <div class="diag">请求2: <span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-new">[tool1]</span><span class="b b-new">[asst2]</span>
-                                                     <span class="bad">miss 只有最后一轮</span></div>
-      <p style="margin:4px 0"><b>压缩时</b>—唯一的重排窗口：</p>
+      <h2>④ 动态内容：只追加，不插入</h2>
+      <div class="q">运行中 memory/skill/todo 动态注入，如何不打断前缀？</div>
+      <div class="diag" style="margin-bottom:5px"><span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-miss">[MEMORY]</span><span class="b b-miss">[asst2]</span>
+                                            <span class="bad">↑ 插中间：后续全 miss</span></div>
+      <table>
+        <tr><th>动态内容</th><th>注入方式</th><th>缓存</th></tr>
+        <tr><td>Memory recall</td><td>tool result 追加尾部</td><td class="ok">✅</td></tr>
+        <tr><td>Todo guidance</td><td>user msg 追加尾部</td><td class="ok">✅</td></tr>
+        <tr><td>Skill 切换</td><td>改 system persona</td><td class="warn">⚠️ 后缀</td></tr>
+        <tr><td>插入中间</td><td class="strike">历史消息之间</td><td class="bad">❌</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>⑤ 压缩：唯一的重排窗口</h2>
+      <div class="q">持续追加会超窗口，何时重排？</div>
+      <div class="diag" style="margin-bottom:4px">正常: <span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-new">[user2]</span>
+                                                <span class="bad">miss 只有最后一轮</span></div>
       <div class="diag"><span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-new">[Summary]</span><span class="b b-new">[userN]</span><span class="b b-new">[asstN]</span>
-                       <span class="ok">前缀仍命中</span>  <span class="bad">新内容 miss，之后恢复 append</span></div>
-      <p style="margin-top:4px"><b>为什么不在压缩前重排？</b> 被移动的消息马上就要被压缩掉了，重排的缓存代价没有回收窗口。</p>
+                       <span class="ok">前缀仍命中</span> <span class="bad">新内容 miss</span> <span class="warn">→之后恢复 append</span></div>
+      <p style="margin-top:5px"><b>Summary 放头部</b>：之后追加不破坏 Summary 缓存。<b>不在压缩前重排</b>：被移动消息马上要压缩掉，重排代价无回收窗口。</p>
     </div>
 
+  </div>
+
+  <!-- 列3: 分块不耦合 + 命中率 -->
+  <div class="col">
+
     <div class="card">
-      <h2>分块协调：为什么不耦合</h2>
+      <h2>⑥ Block 对齐：可行但储备</h2>
+      <div class="q">自部署可用同款分词器对齐 block 边界，做不做？</div>
+      <p style="margin-bottom:4px"><b>技术上可行</b>（自部署分词器+block_size 已知），但：</p>
       <ul>
-        <li>需知道模型 <b>tokenizer</b> → 破坏 OpenAI 兼容抽象</li>
-        <li>Block 大小是<b>部署端配置</b>，API 不暴露</li>
-        <li>边际收益低：主要收益来自前缀稳定（已实现）</li>
+        <li>边界处最多浪费 <b>15 token</b>（block_size-1），占 system prompt 的 ~5%</li>
+        <li>只有后续 section 变化时才触发浪费 — append-only 运行中无浪费</li>
+        <li>需引入分词器依赖 + 运行时 tokenize + 动态填充</li>
       </ul>
-      <div class="key"><b>替代：</b>Trust the API — API 内部已做 block-level matching，agent 只需保证前缀稳定，通过 <code>prompt_cache_hit_tokens</code> 观察命中率。</div>
+      <div class="key"><b>当前不做</b>：三层设计已达 85-99% 命中率，5% 边际收益不够。作为储备方案，命中率瓶颈时再启用。</div>
     </div>
 
     <div class="card">
-      <h2>实际命中率</h2>
+      <h2>⑦ 实际命中率</h2>
+      <div class="q">上述策略的实际效果如何？</div>
       <table>
         <tr><th>阶段</th><th>命中率</th><th>原因</th></tr>
         <tr><td>首轮</td><td>60-80%</td><td>system+tools 命中（预热），对话 miss</td></tr>
@@ -109,9 +138,16 @@
         <tr><td>压缩后</td><td>70-85%</td><td>前缀仍命中，Summary miss</td></tr>
         <tr><td>skill 切换</td><td>50-70%</td><td>identity 命中，persona 后缀 miss</td></tr>
       </table>
+      <p style="margin-top:5px;font-size:11px;color:#888">数据来自 API 返回的 <code>prompt_cache_hit_tokens</code>，非 agent 估算。</p>
+    </div>
+
+    <div class="card" style="flex:0">
+      <h2 style="font-size:12px">设计原则</h2>
+      <p style="font-size:12px;line-height:1.5">固定在前 · 追加在后 · 压缩时重排 · block 对齐储备 · 启动预热</p>
     </div>
 
   </div>
+
 </div>
 
 <div class="footer">dsh-lite · docs/kv-cache-design.md</div>
