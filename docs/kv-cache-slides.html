@@ -6,12 +6,18 @@
 <title>KV Cache 复用设计</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #222; display: flex; justify-content: center; padding: 20px; }
-  .slide { width: 1280px; height: 760px; background: #fff; padding: 28px 40px; display: flex; flex-direction: column; gap: 8px; }
-  h1 { font-size: 22px; font-weight: 700; border-bottom: 2px solid #2563eb; padding-bottom: 5px; }
-  .flow { display: flex; align-items: center; gap: 4px; margin: 2px 0 6px; }
-  .flow-step { font-size: 11px; font-weight: 600; color: #2563eb; white-space: nowrap; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #e8e8e8; color: #222; display: flex; justify-content: center; padding: 20px; }
+  .slide { width: 1280px; height: 800px; background: #fff; padding: 28px 36px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+  h1 { font-size: 22px; font-weight: 700; border-bottom: 2px solid #2563eb; padding-bottom: 6px; }
+  .flow { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .flow-step { font-size: 11px; font-weight: 600; color: #2563eb; }
   .flow-arrow { color: #ccc; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; min-height: 0; }
+  .col { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .card { border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 14px; }
+  .card h2 { font-size: 13px; font-weight: 700; color: #2563eb; margin-bottom: 4px; }
+  .card .q { font-size: 11px; color: #999; font-style: italic; margin-bottom: 4px; }
+  .card p { font-size: 12px; line-height: 1.55; color: #444; margin-bottom: 2px; }
   .b { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-family: "Cascadia Code","Consolas",monospace; margin: 1px; }
   .b-fix { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
   .b-semi { background: #fff8e1; color: #e65100; border: 1px solid #ffe0b2; }
@@ -19,18 +25,12 @@
   .b-miss { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
   .b-new { background: #f3e5f5; color: #7b1fa2; border: 1px solid #e1bee7; }
   .b-block { background: #f5f5f5; color: #666; border: 1px solid #ddd; }
-  .diag { font-family: "Cascadia Code","Consolas",monospace; font-size: 10px; line-height: 1.8; background: #f8f9fa; padding: 6px 10px; border-radius: 5px; border: 1px solid #eee; white-space: pre; overflow-x: auto; }
+  .diag { font-family: "Cascadia Code","Consolas",monospace; font-size: 10px; line-height: 1.75; background: #f8f9fa; padding: 6px 10px; border-radius: 5px; border: 1px solid #eee; white-space: pre; overflow-x: auto; margin: 3px 0; }
   .ok { color: #2e7d32; } .warn { color: #e65100; } .bad { color: #c62828; }
   .strike { text-decoration: line-through; color: #999; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 2px 0; }
   th { text-align: left; padding: 3px 7px; background: #f0f4f8; color: #2563eb; font-weight: 600; border-bottom: 1px solid #d0d8e0; }
   td { padding: 3px 7px; color: #555; border-bottom: 1px solid #f0f0f0; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; flex: 1; }
-  .col { display: flex; flex-direction: column; gap: 8px; }
-  .card { border: 1px solid #e0e0e0; border-radius: 6px; padding: 9px 13px; }
-  .card h2 { font-size: 13px; font-weight: 700; color: #2563eb; margin-bottom: 3px; }
-  .card .q { font-size: 11px; color: #999; font-style: italic; margin-bottom: 4px; }
-  .card p, .card li { font-size: 11px; line-height: 1.55; color: #444; }
   ul { list-style: none; margin: 0; }
   li { padding-left: 11px; position: relative; font-size: 11px; line-height: 1.7; color: #444; }
   li::before { content: "▪"; position: absolute; left: 0; color: #2563eb; }
@@ -39,8 +39,8 @@
   .key b { color: #1e3a8a; }
   .vs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0; }
   .vs-card { border: 1px solid #e0e0e0; border-radius: 5px; padding: 6px 10px; }
-  .vs-card.bad-card { border-color: #ffcdd2; background: #fff5f5; }
-  .vs-card.ok-card { border-color: #c8e6c9; background: #f5fff5; }
+  .vs-card.bad-card { border-color: #ffcdd2; background: #fff8f8; }
+  .vs-card.ok-card { border-color: #c8e6c9; background: #f6fff6; }
   .vs-card h3 { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
   .vs-card.bad-card h3 { color: #c62828; }
   .vs-card.ok-card h3 { color: #2e7d32; }
@@ -53,134 +53,105 @@
 
 <h1>KV Cache 复用设计 — dsh-lite 上下文编排</h1>
 
-<!-- 推导链 -->
 <div class="flow">
-  <span class="flow-step">前缀匹配原理</span><span class="flow-arrow">→</span>
-  <span class="flow-step">首选 Append</span><span class="flow-arrow">→</span>
-  <span class="flow-step">固定位置插入的代价对比</span><span class="flow-arrow">→</span>
-  <span class="flow-step">Block 对齐能否缓解</span><span class="flow-arrow">→</span>
-  <span class="flow-step">命中率验证</span>
+  <span class="flow-step">① 前缀匹配原理</span><span class="flow-arrow">→</span>
+  <span class="flow-step">② 首选 Append</span><span class="flow-arrow">→</span>
+  <span class="flow-step">③ 固定插入的代价对比</span><span class="flow-arrow">→</span>
+  <span class="flow-step">④ Block 对齐能否缓解</span><span class="flow-arrow">→</span>
+  <span class="flow-step">⑤ 命中率验证</span>
 </div>
 
 <div class="grid">
 
-  <!-- 列1: 原理 → Append 首选 -->
+  <!-- 左列: 原理 → Append → 压缩 -->
   <div class="col">
 
     <div class="card">
-      <h2>① 前缀匹配原理</h2>
+      <h2>① 前缀匹配：追加只 miss 新增，插入打断后缀</h2>
       <div class="diag"><span class="b b-fix">[A]</span><span class="b b-fix">[B]</span><span class="b b-fix">[C]</span><span class="b b-fix">[D]</span><span class="b b-new">[E]</span>
-                                     <span class="ok">↑ 命中（复用KV）</span> <span class="bad">↑ miss（重算）</span></div>
-      <p style="margin-top:4px">API 逐 token 比对前缀，一致则复用，否则重算。追加尾部只 miss 新增；插入中间则打断插入点之后的全部缓存。</p>
+                                     <span class="ok">↑ 命中</span>           <span class="bad">↑ miss</span></div>
+      <p>API 逐 token 比对前缀，一致则复用 KV，否则重算。</p>
     </div>
 
     <div class="card">
-      <h2>② 首选策略：Append-Only</h2>
-      <div class="q">动态内容（memory/skill/todo）如何注入而不破坏缓存？</div>
-      <p style="margin-bottom:4px"><b>答案：全部追加在消息尾部。</b></p>
-      <div class="diag"><span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-new">[memory_result]</span>
+      <h2>② 首选策略：所有动态内容追加尾部</h2>
+      <div class="q">Memory / skill / todo 动态注入如何不打断缓存？</div>
+      <div class="diag"><span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-new">[memory]</span>
                                                      <span class="ok">前缀全命中</span>      <span class="bad">只 miss 新增</span></div>
-      <table style="margin-top:4px">
+      <table>
         <tr><th>动态内容</th><th>注入方式</th><th>缓存</th></tr>
         <tr><td>Memory recall</td><td>tool result 追加</td><td class="ok">✅</td></tr>
         <tr><td>Todo guidance</td><td>user msg 追加</td><td class="ok">✅</td></tr>
         <tr><td>Workflow 指令</td><td>user msg 追加</td><td class="ok">✅</td></tr>
       </table>
-      <div class="key"><b>原则：</b>动态内容一律追加尾部，<span class="strike">不插入中间</span>，<span class="strike">不修改已有</span>。压缩是唯一的重排窗口。</div>
+      <div class="key"><b>原则：</b>一律追加尾部，<span class="strike">不插入中间</span>，<span class="strike">不修改已有</span>。压缩是唯一重排时机。</div>
     </div>
 
     <div class="card">
-      <h2>③ 压缩：唯一重排时机</h2>
-      <div class="diag" style="margin-bottom:3px">正常: <span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-new">[user2]</span>  <span class="bad">miss 最后一轮</span></div>
-      <div class="diag"><span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-new">[Summary]</span><span class="b b-new">[recent]</span>
-                       <span class="ok">前缀仍命中</span> <span class="bad">新内容 miss</span> <span class="warn">→恢复append</span></div>
-      <p style="margin-top:3px">Summary 放头部，之后追加不破坏其缓存。<b>不在压缩前重排</b>：被移动消息马上要压缩掉，重排代价无回收窗口。</p>
+      <h2>③ 压缩：唯一重排窗口</h2>
+      <div class="diag">正常: <span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-new">[user2]</span>  <span class="bad">miss 最后一轮</span>
+压缩: <span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-new">[Summary]</span><span class="b b-new">[recent]</span>  <span class="ok">前缀命中</span> <span class="warn">→恢复append</span></div>
+      <p>Summary 放头部，之后追加不破坏其缓存。<b>不在压缩前重排</b>：被移动消息马上要压缩掉，重排代价无回收窗口。</p>
     </div>
 
   </div>
 
-  <!-- 列2: 固定位置插入的代价对比 -->
+  <!-- 右列: 固定插入代价 → block → 命中率 -->
   <div class="col">
 
     <div class="card">
-      <h2>④ 固定位置插入的代价</h2>
-      <div class="q">有些场景必须把内容插在固定位置（如 system 后插设备状态），与 append 对比？</div>
-
+      <h2>④ 固定位置插入 vs Append：代价对比</h2>
+      <div class="q">设备状态注入、会话恢复 context 必须插在固定位置，损失多大？</div>
       <div class="vs">
         <div class="vs-card ok-card">
           <h3>Append 尾部追加</h3>
-          <div class="diag" style="margin:2px 0"><span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-new">[memory]</span></div>
-          <p><b class="ok">前缀全命中</b>，只 miss 新增部分。命中率随对话持续爬升。</p>
+          <div class="diag"><span class="b b-fix">[sys]</span><span class="b b-fix">[tools]</span><span class="b b-fix">[user1]</span><span class="b b-fix">[asst1]</span><span class="b b-new">[memory]</span></div>
+          <p><b class="ok">前缀全命中</b>，只 miss 新增。命中率持续爬升。</p>
         </div>
         <div class="vs-card bad-card">
           <h3>固定位置插入</h3>
-          <div class="diag" style="margin:2px 0"><span class="b b-fix">[sys]</span><span class="b b-miss">[memory]</span><span class="b b-miss">[user1]</span><span class="b b-miss">[asst1]</span></div>
-          <p><b class="bad">插入点之后全部 miss</b>。即使内容格式固定，只要内容变化就打断缓存。已有对话缓存全部失效。</p>
+          <div class="diag"><span class="b b-fix">[sys]</span><span class="b b-miss">[memory]</span><span class="b b-miss">[user1]</span><span class="b b-miss">[asst1]</span></div>
+          <p><b class="bad">插入点后全部 miss</b>。已有对话缓存全失效。</p>
         </div>
       </div>
-
       <table>
-        <tr><th>场景</th><th>Append</th><th>固定插入</th></tr>
-        <tr><td>首轮命中率</td><td class="ok">60-80%</td><td class="bad">~0%</td></tr>
-        <tr><td>第二轮命中率</td><td class="ok">85-99%</td><td class="warn">取决于插入位置</td></tr>
-        <tr><td>每次新内容</td><td class="ok">只 miss 新增</td><td class="bad">miss 插入点后全部</td></tr>
-      </table>
-    </div>
-
-    <div class="card">
-      <h2>⑤ 哪些场景被迫固定插入</h2>
-      <table>
-        <tr><th>场景</th><th>是否可 append</th><th>说明</th></tr>
-        <tr><td>Memory recall</td><td class="ok">✅ 可追加</td><td>通过工具调用，结果天然在尾部</td></tr>
+        <tr><th>场景</th><th>能否 append</th><th>说明</th></tr>
+        <tr><td>Memory recall</td><td class="ok">✅ 可追加</td><td>工具调用结果天然在尾部</td></tr>
         <tr><td>Skill 切换</td><td class="warn">⚠️ 改 system</td><td>persona 变化，后缀失效（低频）</td></tr>
-        <tr><td>设备状态注入</td><td class="bad">❌ 需固定位置</td><td>必须在 system 后、消息前，否则语义不对</td></tr>
+        <tr><td>设备状态注入</td><td class="bad">❌ 需固定位置</td><td>必须在 system 后、消息前</td></tr>
         <tr><td>会话恢复 context</td><td class="bad">❌ 需固定位置</td><td>历史 context 需在对话前</td></tr>
       </table>
-      <div class="key"><b>结论：</b>能用 append 的都用 append。被迫固定插入的场景，需评估缓存损失 → 下一节 Block 对齐能否缓解。</div>
-    </div>
-
-  </div>
-
-  <!-- 列3: Block 对齐原理 + 命中率 -->
-  <div class="col">
-
-    <div class="card">
-      <h2>⑥ Block 对齐原理</h2>
-      <div class="q">固定插入不可避免时，能否减少缓存损失？</div>
-      <p style="margin-bottom:3px"><b>Block 是 prefix matching 的最小粒度。</b>一个 block 内 token 序列完全一致才复用，否则整个 block miss。</p>
-      <div class="diag" style="margin:3px 0">未对齐:
-<span class="b b-block">blk0</span><span class="b b-block">blk1</span><span class="b b-block">blk2</span><span class="b b-block">blk3</span>
-  [identity+rules  | tools |persona|custom]
-                      ↑ section 跨 block 边界
-
-对齐后:
-<span class="b b-fix">blk0</span><span class="b b-fix">blk1</span><span class="b b-semi">blk2</span><span class="b b-dyn">blk3</span><span class="b b-dyn">blk4</span>
-  [identity+rules ] [tools] [persona] [custom]
-                     ↑ section 边界 = block 边界</div>
-      <p style="margin-top:3px"><b>对齐后</b>：persona 变化只 miss blk3+blk4，blk0+blk1+blk2 独立复用。<b>未对齐</b>：persona 变化可能连带 blk2 也 miss（因为 persona 跨了 blk2 的尾部）。</p>
     </div>
 
     <div class="card">
-      <h2>⑦ 自部署可行，但当前不做</h2>
+      <h2>⑤ Block 对齐：缓解固定插入的损失</h2>
+      <div class="q">Block 是 prefix matching 最小粒度，对齐 section 边界能否减少连带 miss？</div>
+      <div class="diag">未对齐: <span class="b b-block">blk0</span><span class="b b-block">blk1</span><span class="b b-block">blk2</span><span class="b b-block">blk3</span>
+          [identity+rules  | tools |persona|custom]
+                              ↑ section 跨 block 边界
+
+对齐后: <span class="b b-fix">blk0</span><span class="b b-fix">blk1</span><span class="b b-semi">blk2</span><span class="b b-dyn">blk3</span><span class="b b-dyn">blk4</span>
+          [identity+rules ] [tools] [persona] [custom]
+                             ↑ 边界 = block 边界</div>
+      <p><b>对齐后</b>：persona 变化只 miss blk3+blk4，blk0~blk2 独立复用。<b>未对齐</b>：persona 跨 blk2 尾部，连带 miss。</p>
       <ul>
         <li>自部署 → 同款分词器 + block_size 已知 → <b>技术可行</b></li>
-        <li>边界浪费 ≤ <b>15 token</b>（block_size-1），占 system prompt ~5%</li>
-        <li>只在 section 变化时触发浪费，append-only 运行中<b>无浪费</b></li>
-        <li>需引入分词器依赖 + 运行时 tokenize + 动态填充</li>
+        <li>边界浪费 ≤ 15 token，占 system prompt ~5%</li>
+        <li>append-only 运行中<b>无浪费</b>，仅 section 变化时触发</li>
       </ul>
-      <div class="key"><b>储备方案：</b>三层设计已达 85-99%，5% 边际收益不够。被迫固定插入场景增多或命中率瓶颈出现时再启用。配置项已预留 <code>cache.align_blocks</code>。</div>
+      <div class="key"><b>储备方案：</b>三层设计已达 85-99%，5% 边际收益暂不够。被迫固定插入场景增多或命中率瓶颈时再启用。</div>
     </div>
 
     <div class="card">
-      <h2>⑧ 实际命中率</h2>
+      <h2>⑥ 实际命中率</h2>
       <table>
         <tr><th>阶段</th><th>命中率</th><th>原因</th></tr>
-        <tr><td>首轮</td><td>60-80%</td><td>system+tools 命中（预热）</td></tr>
+        <tr><td>首轮</td><td>60-80%</td><td>system+tools 命中（预热），对话 miss</td></tr>
         <tr><td>第二轮起</td><td class="ok">85-99%</td><td>只 miss 最后一轮</td></tr>
-        <tr><td>压缩后</td><td>70-85%</td><td>前缀命中，Summary miss</td></tr>
+        <tr><td>压缩后</td><td>70-85%</td><td>前缀仍命中，Summary miss</td></tr>
         <tr><td>skill 切换</td><td>50-70%</td><td>identity 命中，persona 后缀 miss</td></tr>
       </table>
-      <p style="margin-top:3px;font-size:10px;color:#888">数据来自 API 返回的 <code>prompt_cache_hit_tokens</code>，非 agent 估算。</p>
+      <p style="font-size:10px;color:#888;margin-top:2px">数据来自 API 返回 <code>prompt_cache_hit_tokens</code>，非 agent 估算</p>
     </div>
 
   </div>
