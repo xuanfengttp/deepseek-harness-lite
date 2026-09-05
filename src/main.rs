@@ -272,6 +272,7 @@ async fn async_main() -> ExitCode {
             skills,
             active_skill_name: std::sync::Arc::new(tokio::sync::Mutex::new(active_skill.name.clone())),
             config: config.clone(),
+            active_cancel: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
         });
 
         // KV cache preheat: send the fixed system prompt to the LLM on startup

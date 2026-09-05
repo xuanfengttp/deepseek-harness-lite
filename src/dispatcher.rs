@@ -40,6 +40,8 @@ pub struct Dispatcher {
     compaction_threshold: f32,
     keep_recent_turns: usize,
     custom_prompt: String,
+    /// Cancellation receiver — when the sender signals true, the active turn aborts.
+    cancel_rx: Option<tokio::sync::watch::Receiver<bool>>,
 }
 
 impl Dispatcher {
@@ -60,6 +62,7 @@ impl Dispatcher {
             compaction_threshold: 0.7,
             keep_recent_turns: 3,
             custom_prompt: String::new(),
+            cancel_rx: None,
         }
     }
 
@@ -73,6 +76,12 @@ impl Dispatcher {
     /// Set custom system prompt from config.
     pub fn with_custom_prompt(mut self, prompt: String) -> Self {
         self.custom_prompt = prompt;
+        self
+    }
+
+    /// Set cancellation receiver for turn abort support.
+    pub fn with_cancel_rx(mut self, cancel_rx: tokio::sync::watch::Receiver<bool>) -> Self {
+        self.cancel_rx = Some(cancel_rx);
         self
     }
 
@@ -123,6 +132,13 @@ impl Dispatcher {
         .with_hooks(hooks)
         .with_compaction(self.compaction_threshold, self.keep_recent_turns)
         .with_custom_prompt(self.custom_prompt.clone());
+
+        // Pass cancellation receiver if set.
+        let mut agent_loop = if let Some(rx) = self.cancel_rx.take() {
+            agent_loop.with_cancel_rx(rx)
+        } else {
+            agent_loop
+        };
 
         let result = agent_loop.run_turn(user_message, images, skill, event_tx).await;
 

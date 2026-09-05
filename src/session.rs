@@ -116,7 +116,23 @@ impl SessionLog {
         // They are flushed as Tool messages before the next User/Assistant message.
         let mut pending_tool_results: Vec<(CallId, String, bool)> = Vec::new();
 
-        for event in &self.events {
+        // Surface-replace: find the last CompactionSummary event.
+        // Everything before it is replaced by the summary (not projected).
+        // Events at and after the summary are projected normally.
+        // This preserves the full trajectory in the event log while keeping
+        // the derived message list compact.
+        let mut last_compaction_idx: Option<usize> = None;
+        for (i, event) in self.events.iter().enumerate() {
+            if matches!(event, SessionEvent::CompactionSummary { .. }) {
+                last_compaction_idx = Some(i);
+            }
+        }
+        let skip_before = last_compaction_idx.map(|i| i).unwrap_or(0);
+
+        for (i, event) in self.events.iter().enumerate() {
+            if i < skip_before {
+                continue; // Pre-compaction events are replaced by summary.
+            }
             match event {
                 SessionEvent::UserMessage { content, images } => {
                     // Flush any pending tool results before the next user message.
@@ -174,35 +190,31 @@ impl SessionLog {
         self.events.iter()
     }
 
-    /// Apply compaction: replace older events with a summary message.
+    /// Apply compaction using surface-replace strategy.
     ///
-    /// Takes a summary string and the number of recent events to keep.
-    /// All older events are discarded and replaced with a single
-    /// `CompactionSummary` event containing the summary text.
-    /// The `keep_recent` most recent events are preserved.
+    /// Inserts a `CompactionSummary` event before the `keep_recent` most recent
+    /// events. Old events BEFORE the summary are preserved in the event log
+    /// (for trajectory/debugging) but are NOT projected by `derive_messages` —
+    /// the summary replaces them in the surface message list.
+    ///
+    /// This matches upstream DSH's surface-replace compaction: the event log
+    /// is append-only (no destructive clear), and `derive_messages` respects
+    /// the last CompactionSummary as a boundary.
     pub fn apply_compaction(&mut self, summary: String, keep_recent: usize) {
         if self.events.len() <= keep_recent {
             return; // Not enough events to compact.
         }
 
-        // Collect the recent events to keep.
-        let recent: Vec<SessionEvent> = self.events
-            .iter()
-            .rev()
-            .take(keep_recent)
-            .rev()
-            .cloned()
-            .collect();
-
-        // Clear and rebuild: summary first, then recent events.
-        self.events.clear();
+        // Surface-replace: split at (len - keep_recent), insert CompactionSummary.
+        let split_pos = self.events.len() - keep_recent;
+        let recent: Vec<SessionEvent> = self.events.drain(split_pos..).collect();
         self.events.push_back(SessionEvent::CompactionSummary { summary });
         for event in recent {
             self.events.push_back(event);
         }
 
         log::info!(
-            "Compaction applied: {} events → 1 summary + {} recent",
+            "Compaction applied (surface-replace): {} total events in log, {} recent kept, trajectory preserved",
             self.events.len(),
             keep_recent
         );
@@ -544,13 +556,15 @@ mod tests {
         }
         assert_eq!(log.len(), 10);
 
-        // Compact: keep 3 recent, replace rest with summary.
+        // Compact: keep 3 recent, insert summary before them.
         log.apply_compaction("Summary of old messages".into(), 3);
 
-        // Should have: 1 summary + 3 recent = 4 events.
-        assert_eq!(log.len(), 4);
+        // Surface-replace: log preserves ALL events (10 old + 1 summary = 11).
+        // Old events stay for trajectory, but derive_messages skips them.
+        assert_eq!(log.len(), 11);
 
         // Derived messages: summary (as User) + 3 recent User messages = 4.
+        // Old events (msg 0-6) are NOT projected — replaced by summary.
         let msgs = log.derive_messages();
         assert_eq!(msgs.len(), 4);
         // First message should be the summary.

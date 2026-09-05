@@ -6,6 +6,7 @@
 //! Endpoints:
 //! - GET  /            → web client HTML
 //! - POST /api/chat    → SSE stream of LoopEvents for one turn
+//! - POST /api/chat/cancel → cancel the active turn (aborts agent loop)
 //! - POST /api/command → execute a slash command locally (no LLM)
 //! - GET  /api/sessions → list all sessions (JSON)
 //! - POST /api/sessions/create → create a new session
@@ -44,6 +45,10 @@ pub struct ServerState {
     pub skills: Vec<Skill>,
     pub active_skill_name: Arc<Mutex<String>>,
     pub config: Config,
+    /// Cancellation sender for the currently active turn.
+    /// When a turn starts, the sender is stored here; POST /api/chat/cancel
+    /// sends `true` to abort the turn. Cleared when the turn completes.
+    pub active_cancel: Arc<Mutex<Option<tokio::sync::watch::Sender<bool>>>>,
 }
 
 /// Start the HTTP server. Blocks until the server is shut down.
@@ -441,6 +446,11 @@ async fn handle_request(
             handle_chat(req, state).await
         }
 
+        // Cancel the active turn
+        (Method::POST, "/api/chat/cancel") => {
+            handle_cancel_turn(state).await
+        }
+
         // Slash command (local, not sent to LLM)
         (Method::POST, "/api/command") => {
             handle_command(req, state).await
@@ -700,9 +710,18 @@ async fn handle_chat(
     crate::tools::register_workflow(&mut tools, &config);
 
     let llm = crate::llm::LlmClient::new(&config.model);
+
+    // Create cancellation channel for this turn.
+    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+    {
+        let mut ac = state.active_cancel.lock().await;
+        *ac = Some(cancel_tx);
+    }
+
     let mut dispatcher = crate::dispatcher::Dispatcher::new(session, tools, llm, &config.model)
         .with_compaction(config.compaction.threshold, config.compaction.keep_recent_turns)
-        .with_custom_prompt(config.prompt.custom.clone());
+        .with_custom_prompt(config.prompt.custom.clone())
+        .with_cancel_rx(cancel_rx);
 
     // Create SSE stream.
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<LoopEvent>(128);
@@ -711,6 +730,12 @@ async fn handle_chat(
     let state_clone = state.clone();
     tokio::spawn(async move {
         let result = dispatcher.dispatch(message, images, &skill, event_tx).await;
+
+        // Clear the cancel sender (turn is done).
+        {
+            let mut ac = state_clone.active_cancel.lock().await;
+            *ac = None;
+        }
 
         // Return the session to the manager.
         let session = dispatcher.take_session();
@@ -747,6 +772,18 @@ async fn handle_chat(
     );
     *response.status_mut() = StatusCode::OK;
     response
+}
+
+/// Handle POST /api/chat/cancel — aborts the currently active turn.
+async fn handle_cancel_turn(state: Arc<ServerState>) -> Response<BoxBody<Bytes, Infallible>> {
+    let mut ac = state.active_cancel.lock().await;
+    if let Some(tx) = ac.take() {
+        let _ = tx.send(true);
+        log::info!("Turn cancellation requested via /api/chat/cancel");
+        serve_json(r#"{"ok":true,"message":"turn cancelled"}"#)
+    } else {
+        serve_json(r#"{"ok":false,"message":"no active turn to cancel"}"#)
+    }
 }
 
 /// Format a LoopEvent as JSON for SSE.

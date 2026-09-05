@@ -33,6 +33,7 @@ use crate::llm::{LlmClient, LlmRequest, StreamEvent};
 use crate::tools::ToolRegistry;
 use crate::hooks::*;
 use tokio::sync::mpsc;
+use tokio::sync::watch;
 
 /// Events emitted by the agent loop for UI/trajectory consumption.
 #[derive(Debug, Clone)]
@@ -91,6 +92,9 @@ pub struct AgentLoop {
     /// Reentrancy guard: true while a compaction is in progress.
     /// Prevents triggering a second compaction on the same history.
     compacting: bool,
+    /// Cancellation receiver — when the sender signals true, the turn aborts.
+    /// Checked between steps, during stream collection, and between tool calls.
+    cancel_rx: Option<watch::Receiver<bool>>,
 }
 
 impl AgentLoop {
@@ -113,6 +117,7 @@ impl AgentLoop {
             custom_prompt: String::new(),
             hooks: Vec::new(),
             compacting: false,
+            cancel_rx: None,
         }
     }
 
@@ -133,6 +138,20 @@ impl AgentLoop {
     pub fn with_custom_prompt(mut self, prompt: String) -> Self {
         self.custom_prompt = prompt;
         self
+    }
+
+    /// Set cancellation receiver for turn abort support.
+    pub fn with_cancel_rx(mut self, cancel_rx: watch::Receiver<bool>) -> Self {
+        self.cancel_rx = Some(cancel_rx);
+        self
+    }
+
+    /// Check if the turn has been cancelled.
+    fn is_cancelled(&self) -> bool {
+        self.cancel_rx
+            .as_ref()
+            .map(|rx| *rx.borrow())
+            .unwrap_or(false)
     }
 
     /// Run one turn with a user message and an active skill.
@@ -165,6 +184,16 @@ impl AgentLoop {
 
         // Loop: steps continue as long as hooks say Continue.
         loop {
+            // Check for cancellation at the top of each step.
+            if self.is_cancelled() {
+                log::info!("Turn cancelled by user at step boundary");
+                self.session.end_turn(TurnEndReason::Aborted);
+                let _ = event_tx
+                    .send(LoopEvent::TurnEnd { turn, reason: TurnEndReason::Aborted })
+                    .await;
+                return Ok(TurnEndReason::Aborted);
+            }
+
             let step = self.session.begin_step();
             let _ = event_tx.send(LoopEvent::StepStart { turn, step }).await;
 
@@ -339,8 +368,15 @@ impl AgentLoop {
         let step_start = std::time::Instant::now();
         let mut first_token_time: Option<std::time::Instant> = None;
         let mut done_time: Option<std::time::Instant> = None;
+        let mut cancelled_during_stream = false;
 
         while let Some(event) = stream_rx.recv().await {
+            // Check for cancellation during stream collection.
+            if self.is_cancelled() {
+                log::info!("Turn cancelled during LLM streaming");
+                cancelled_during_stream = true;
+                break;
+            }
             match event {
                 StreamEvent::Delta(text) => {
                     if first_token_time.is_none() {
@@ -408,6 +444,21 @@ impl AgentLoop {
             log::warn!("Stream task panicked: {e}");
         }
 
+        if cancelled_during_stream {
+            // Record whatever partial content was received, then signal abort.
+            if !full_content.is_empty() {
+                self.session.append(SessionEvent::AssistantMessage {
+                    content: full_content.clone(),
+                    tool_calls: vec![],
+                    usage: captured_usage.clone(),
+                    ttft_ms: 0,
+                    decode_ms: 0,
+                    thinking: if thinking_content.is_empty() { None } else { Some(thinking_content.clone()) },
+                });
+            }
+            return StepOutcome::Error("Turn cancelled by user".into());
+        }
+
         if had_error {
             return StepOutcome::Error("LLM stream error".into());
         }
@@ -437,6 +488,11 @@ impl AgentLoop {
 
         // Execute tool calls (enforcing skill's tool allow-list).
         for call in &tool_calls {
+            // Check for cancellation before each tool execution.
+            if self.is_cancelled() {
+                log::info!("Turn cancelled before tool call {}", call.name);
+                break;
+            }
             self.session.append(SessionEvent::ToolCall { call: call.clone() });
             let _ = event_tx.send(LoopEvent::ToolCall { call: call.clone() }).await;
 
