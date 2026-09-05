@@ -906,9 +906,23 @@ async fn fetch_models_blocking(url: &str, api_key: &str) -> Result<String, Strin
     tokio::spawn(async move { let _ = conn.await; });
 
     let res = sender.send_request(req).await.map_err(|e| format!("send: {e}"))?;
+
+    // Check HTTP status code — provide a helpful hint for auth failures.
+    let status = res.status();
+    if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
+        return Err(format!("HTTP {status}: authentication failed — check API key"));
+    }
+    if !status.is_success() {
+        return Err(format!("HTTP {status} from {url}"));
+    }
+
+    // Bounded read: limit response to 4 MiB to prevent unbounded memory.
     let body = res.into_body().collect().await
         .map_err(|e| format!("read body: {e}"))?
         .to_bytes();
+    if body.len() > 4 * 1024 * 1024 {
+        return Err("response too large (>4 MiB)".into());
+    }
     String::from_utf8(body.to_vec()).map_err(|e| format!("utf8: {e}"))
 }
 

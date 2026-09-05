@@ -88,6 +88,9 @@ pub struct AgentLoop {
     custom_prompt: String,
     /// Step hooks — control execution flow (strategy, compaction, etc.).
     hooks: Vec<Box<dyn StepHook>>,
+    /// Reentrancy guard: true while a compaction is in progress.
+    /// Prevents triggering a second compaction on the same history.
+    compacting: bool,
 }
 
 impl AgentLoop {
@@ -109,6 +112,7 @@ impl AgentLoop {
             keep_recent_turns: 3,
             custom_prompt: String::new(),
             hooks: Vec::new(),
+            compacting: false,
         }
     }
 
@@ -278,7 +282,8 @@ impl AgentLoop {
             image_tokens,
             self.context_window,
             self.compaction_threshold,
-        ) {
+        ) && !self.compacting {
+            self.compacting = true;
             log::info!(
                 "Compaction triggered: {message_count} messages, threshold {:.0}%",
                 self.compaction_threshold * 100.0
@@ -304,6 +309,7 @@ impl AgentLoop {
                 messages = self.session.derive_messages();
                 log::info!("Post-compaction message count: {}", messages.len());
             }
+            self.compacting = false;
         }
 
         // Build and send the LLM request.

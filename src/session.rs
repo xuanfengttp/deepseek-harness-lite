@@ -263,13 +263,88 @@ impl SessionLog {
                 events.pop_front();
             }
         }
-        Some(Self {
+
+        let mut log = Self {
             next_seq: snapshot.next_seq,
             events,
             max_in_memory,
             current_turn: snapshot.current_turn,
             current_step: snapshot.current_step,
-        })
+        };
+
+        // Repair interrupted turns (upstream interruptedTurnClosers):
+        // If the session was saved while a turn was still open (crash mid-turn),
+        // synthesize error tool results for pending tool calls and a TurnEnd
+        // with Aborted reason. This ensures derive_messages produces a valid
+        // transcript (no dangling tool calls without results).
+        log.repair_interrupted_turn();
+
+        Some(log)
+    }
+
+    /// Scan for an unclosed turn and synthesize closure events.
+    ///
+    /// If the last TurnStart has no matching TurnEnd, this is a crashed session.
+    /// We check for any ToolCall events after the last AssistantMessage that
+    /// don't have a corresponding ToolResult, and synthesize error results +
+    /// a TurnEnd{reason: Aborted}.
+    fn repair_interrupted_turn(&mut self) {
+        // Find the last TurnStart and check if it's closed.
+        let mut last_turn_start: Option<u64> = None;
+        let mut turn_closed = true;
+        for event in self.events.iter() {
+            match event {
+                SessionEvent::TurnStart { turn } => {
+                    last_turn_start = Some(*turn);
+                    turn_closed = false;
+                }
+                SessionEvent::TurnEnd { .. } => {
+                    turn_closed = true;
+                }
+                _ => {}
+            }
+        }
+
+        if turn_closed {
+            return; // All turns properly closed.
+        }
+
+        let turn = last_turn_start.unwrap_or(0);
+        log::warn!("Repairing interrupted turn {turn}: synthesizing closure events");
+
+        // Find pending tool calls (ToolCall events without matching ToolResult).
+        let mut pending_calls: Vec<ToolCall> = Vec::new();
+        let mut seen_results: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for event in self.events.iter() {
+            match event {
+                SessionEvent::ToolCall { call } => {
+                    pending_calls.push(call.clone());
+                }
+                SessionEvent::ToolResult { call_id, .. } => {
+                    seen_results.insert(call_id.clone());
+                }
+                _ => {}
+            }
+        }
+        // Keep only calls without results.
+        pending_calls.retain(|c| !seen_results.contains(&c.id));
+
+        // Synthesize error ToolResult for each pending call.
+        for call in &pending_calls {
+            self.events.push_back(SessionEvent::ToolResult {
+                call_id: call.id.clone(),
+                content: "[Tool execution was interrupted — session recovered after crash]".into(),
+                is_error: true,
+            });
+            self.next_seq += 1;
+        }
+
+        // Synthesize TurnEnd with Aborted reason.
+        self.events.push_back(SessionEvent::TurnEnd {
+            turn,
+            reason: TurnEndReason::Aborted,
+        });
+        self.next_seq += 1;
     }
 
     /// Checkpoint the session to a flash file (atomic write).
