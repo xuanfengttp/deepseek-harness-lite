@@ -114,7 +114,7 @@ impl SessionLog {
         let mut messages = Vec::new();
         // Collect tool results that belong to the current assistant step.
         // They are flushed as Tool messages before the next User/Assistant message.
-        let mut pending_tool_results: Vec<(CallId, String, bool)> = Vec::new();
+        let mut pending_tool_results: Vec<(CallId, String, bool, Vec<ImageBlock>)> = Vec::new();
 
         // Surface-replace: find the last CompactionSummary event.
         // Everything before it is replaced by the summary (not projected).
@@ -136,16 +136,16 @@ impl SessionLog {
             match event {
                 SessionEvent::UserMessage { content, images } => {
                     // Flush any pending tool results before the next user message.
-                    for (call_id, content, is_error) in pending_tool_results.drain(..) {
-                        messages.push(Message::Tool { call_id, content, is_error });
+                    for (call_id, content, is_error, imgs) in pending_tool_results.drain(..) {
+                        messages.push(Message::Tool { call_id, content, is_error, images: imgs });
                     }
                     messages.push(Message::User { content: content.clone(), images: images.clone() });
                 }
                 SessionEvent::AssistantMessage { content, tool_calls, thinking, .. } => {
                     // Flush tool results from the PREVIOUS step before this new
                     // assistant message (tool results belong between steps).
-                    for (call_id, content, is_error) in pending_tool_results.drain(..) {
-                        messages.push(Message::Tool { call_id, content, is_error });
+                    for (call_id, content, is_error, imgs) in pending_tool_results.drain(..) {
+                        messages.push(Message::Tool { call_id, content, is_error, images: imgs });
                     }
                     // DeepSeek thinking-mode passback rule (rc.8 corrected):
                     // pass reasoning_content back on EVERY reasoning-carrying
@@ -160,13 +160,13 @@ impl SessionLog {
                         reasoning_content: reasoning,
                     });
                 }
-                SessionEvent::ToolResult { call_id, content, is_error } => {
-                    pending_tool_results.push((call_id.clone(), content.clone(), *is_error));
+                SessionEvent::ToolResult { call_id, content, is_error, images } => {
+                    pending_tool_results.push((call_id.clone(), content.clone(), *is_error, images.clone()));
                 }
                 SessionEvent::CompactionSummary { summary } => {
                     // Flush pending tool results, then emit summary as a user message.
-                    for (call_id, content, is_error) in pending_tool_results.drain(..) {
-                        messages.push(Message::Tool { call_id, content, is_error });
+                    for (call_id, content, is_error, imgs) in pending_tool_results.drain(..) {
+                        messages.push(Message::Tool { call_id, content, is_error, images: imgs });
                     }
                     messages.push(Message::User {
                         content: format!("[Previous conversation summary]\n{summary}"),
@@ -178,8 +178,8 @@ impl SessionLog {
         }
 
         // Flush any remaining tool results (e.g. after the last assistant step).
-        for (call_id, content, is_error) in pending_tool_results {
-            messages.push(Message::Tool { call_id, content, is_error });
+        for (call_id, content, is_error, imgs) in pending_tool_results {
+            messages.push(Message::Tool { call_id, content, is_error, images: imgs });
         }
 
         messages
@@ -347,6 +347,7 @@ impl SessionLog {
                 call_id: call.id.clone(),
                 content: "[Tool execution was interrupted — session recovered after crash]".into(),
                 is_error: true,
+                images: vec![],
             });
             self.next_seq += 1;
         }
@@ -468,7 +469,7 @@ mod tests {
             decode_ms: 0,
             thinking: None,
         });
-        log.append(SessionEvent::ToolResult { call_id: "call_1".into(), content: "output".into(), is_error: false });
+        log.append(SessionEvent::ToolResult { call_id: "call_1".into(), content: "output".into(), is_error: false, images: vec![] });
 
         let msgs = log.derive_messages();
         assert_eq!(msgs.len(), 2);
@@ -488,7 +489,7 @@ mod tests {
             tool_calls: vec![ToolCall { id: "c1".into(), name: "tool_a".into(), arguments: serde_json::json!({}) }],
             usage: None, ttft_ms: 0, decode_ms: 0, thinking: None,
         });
-        log.append(SessionEvent::ToolResult { call_id: "c1".into(), content: "result_a".into(), is_error: false });
+        log.append(SessionEvent::ToolResult { call_id: "c1".into(), content: "result_a".into(), is_error: false, images: vec![] });
         log.end_step();
         log.begin_step();
         log.append(SessionEvent::AssistantMessage {
@@ -496,7 +497,7 @@ mod tests {
             tool_calls: vec![ToolCall { id: "c2".into(), name: "tool_b".into(), arguments: serde_json::json!({}) }],
             usage: None, ttft_ms: 0, decode_ms: 0, thinking: None,
         });
-        log.append(SessionEvent::ToolResult { call_id: "c2".into(), content: "result_b".into(), is_error: false });
+        log.append(SessionEvent::ToolResult { call_id: "c2".into(), content: "result_b".into(), is_error: false, images: vec![] });
         log.end_step();
         log.begin_step();
         log.append(SessionEvent::AssistantMessage {

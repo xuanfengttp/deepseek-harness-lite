@@ -22,6 +22,8 @@ mod hooks;
 mod strategies;
 mod commands;
 mod subagent;
+mod image_preproc;
+mod read_image;
 
 use crate::types::*;
 use crate::session::SessionLog;

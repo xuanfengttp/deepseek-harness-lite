@@ -128,6 +128,7 @@ impl Dispatcher {
             context_window: self.context_window,
             max_tokens: self.max_tokens,
             temperature: self.temperature,
+            proxy: String::new(),
         })
         .with_hooks(hooks)
         .with_compaction(self.compaction_threshold, self.keep_recent_turns)

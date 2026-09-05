@@ -240,7 +240,7 @@ async fn handle_request(
                                 "thinking": thinking
                             }));
                         }
-                        SessionEvent::ToolResult { call_id, content, is_error } => {
+                        SessionEvent::ToolResult { call_id, content, is_error, .. } => {
                             pending_tool_results.push((call_id.clone(), content.clone(), *is_error));
                         }
                         SessionEvent::CompactionSummary { summary } => {
@@ -374,7 +374,7 @@ async fn handle_request(
                                 .map(|d| d.as_millis() as u64)
                                 .unwrap_or(0);
                         }
-                        SessionEvent::ToolResult { call_id: _, content, is_error } => {
+                        SessionEvent::ToolResult { call_id: _, content, is_error, .. } => {
                             if tool_call_time > 0 {
                                 let now = std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
@@ -632,6 +632,8 @@ async fn handle_chat(
     let message = parsed.get("message").and_then(|m| m.as_str()).map(String::from).unwrap_or_default();
 
     // Parse optional inline images: [{ "media_type": "image/png", "data": "<base64>" }]
+    // Images are preprocessed (resized to max 1920px, re-encoded as JPEG) to
+    // avoid exceeding API limits with large device screenshots.
     let images: Vec<crate::types::ImageBlock> = parsed
         .get("images")
         .and_then(|v| v.as_array())
@@ -645,9 +647,17 @@ async fn handle_chat(
                     }
                     Some(crate::types::ImageBlock { media_type, data })
                 })
-                .collect()
+                .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+
+    // Preprocess images (resize + format conversion).
+    let images = if !images.is_empty() {
+        log::info!("Preprocessing {} image(s) before sending to LLM", images.len());
+        crate::image_preproc::preprocess_all(&images)
+    } else {
+        images
+    };
 
     if message.is_empty() && images.is_empty() {
         return serve_json(r#"{"error":"message or images required"}"#);
@@ -906,8 +916,9 @@ async fn handle_fetch_models(
     }
 }
 
-/// Fetch the /models endpoint via hyper client.
+/// Fetch the /models endpoint via hyper client (supports HTTP and HTTPS).
 async fn fetch_models_blocking(url: &str, api_key: &str) -> Result<String, String> {
+    let is_https = url.starts_with("https://");
     let no_scheme = url.strip_prefix("http://")
         .or_else(|| url.strip_prefix("https://"))
         .unwrap_or(url);
@@ -916,20 +927,53 @@ async fn fetch_models_blocking(url: &str, api_key: &str) -> Result<String, Strin
         None => (no_scheme, "/"),
     };
     let (host, port) = match host_port.rsplit_once(':') {
-        Some((h, p)) => (h, p.parse::<u16>().unwrap_or(80)),
-        None => (host_port, 80),
+        Some((h, p)) => (h.to_string(), p.parse::<u16>().unwrap_or(if is_https { 443 } else { 80 })),
+        None => (host_port.to_string(), if is_https { 443 } else { 80 }),
     };
 
     let addr = format!("{host}:{port}");
-    let stream = tokio::net::TcpStream::connect(&addr)
-        .await
-        .map_err(|e| format!("connect {addr}: {e}"))?;
 
-    let io = TokioIo::new(stream);
+    // Connect via TCP or TLS depending on scheme.
+    let sender = if is_https {
+        use tokio_rustls::TlsConnector;
+        let mut roots = rustls::RootCertStore::empty();
+        if let Ok(certs) = rustls_native_certs::load_native_certs() {
+            for cert in certs { let _ = roots.add(cert); }
+        }
+        let config = rustls::ClientConfig::builder()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+        let connector = TlsConnector::from(std::sync::Arc::new(config));
+        let dns_name = rustls::pki_types::ServerName::try_from(host.clone())
+            .map_err(|e| format!("invalid TLS server name: {e}"))?;
+        let tcp_stream = tokio::net::TcpStream::connect(&addr)
+            .await
+            .map_err(|e| format!("connect {addr}: {e}"))?;
+        let tls_stream = connector.connect(dns_name, tcp_stream)
+            .await
+            .map_err(|e| format!("TLS handshake: {e}"))?;
+        let io = TokioIo::new(tls_stream);
+        let (sender, conn) = hyper::client::conn::http1::handshake::<_, BoxBody<Bytes, Infallible>>(io)
+            .await
+            .map_err(|e| format!("handshake: {e}"))?;
+        tokio::spawn(async move { let _ = conn.await; });
+        sender
+    } else {
+        let stream = tokio::net::TcpStream::connect(&addr)
+            .await
+            .map_err(|e| format!("connect {addr}: {e}"))?;
+        let io = TokioIo::new(stream);
+        let (sender, conn) = hyper::client::conn::http1::handshake::<_, BoxBody<Bytes, Infallible>>(io)
+            .await
+            .map_err(|e| format!("handshake: {e}"))?;
+        tokio::spawn(async move { let _ = conn.await; });
+        sender
+    };
+
     let mut req_builder = Request::builder()
         .method(Method::GET)
         .uri(path)
-        .header(hyper::header::HOST, host);
+        .header(hyper::header::HOST, host.as_str());
     if !api_key.is_empty() {
         req_builder = req_builder.header(hyper::header::AUTHORIZATION, format!("Bearer {api_key}"));
     }
@@ -937,11 +981,7 @@ async fn fetch_models_blocking(url: &str, api_key: &str) -> Result<String, Strin
         .body(empty_body())
         .map_err(|e| format!("build request: {e}"))?;
 
-    let (mut sender, conn) = hyper::client::conn::http1::handshake::<_, BoxBody<Bytes, Infallible>>(io)
-        .await
-        .map_err(|e| format!("handshake: {e}"))?;
-    tokio::spawn(async move { let _ = conn.await; });
-
+    let mut sender = sender;
     let res = sender.send_request(req).await.map_err(|e| format!("send: {e}"))?;
 
     // Check HTTP status code — provide a helpful hint for auth failures.

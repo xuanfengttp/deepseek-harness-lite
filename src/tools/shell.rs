@@ -39,6 +39,7 @@ impl ToolPlugin for ShellTool {
             return ToolResult {
                 content: "Error: `command` parameter is required and must be non-empty".into(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -75,11 +76,13 @@ impl ToolPlugin for ShellTool {
                 ToolResult {
                     content,
                     is_error: !out.status.success(),
+                    images: vec![],
                 }
             }
             Err(e) => ToolResult {
                 content: format!("Error: failed to execute command: {e}"),
                 is_error: true,
+                images: vec![],
             },
         }
     }

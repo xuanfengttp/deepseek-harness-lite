@@ -77,7 +77,7 @@ fn render_messages_for_summary(messages: &[Message]) -> String {
                     out.push_str(&format!("[Tool Call]: {}({})\n", tc.name, tc.arguments));
                 }
             }
-            Message::Tool { call_id, content, is_error } => {
+            Message::Tool { call_id, content, is_error, .. } => {
                 let tag = if *is_error { "ERROR" } else { "RESULT" };
                 out.push_str(&format!("[Tool {tag} {call_id}]: {content}\n"));
             }
@@ -204,7 +204,7 @@ mod tests {
         let messages = vec![
             Message::User { content: "check interface".into(), images: vec![] },
             Message::Assistant { content: "I'll check now.".into(), tool_calls: vec![], reasoning_content: None },
-            Message::Tool { call_id: "tc1".into(), content: "eth0 is up".into(), is_error: false },
+            Message::Tool { call_id: "tc1".into(), content: "eth0 is up".into(), is_error: false, images: vec![] },
         ];
         let text = render_messages_for_summary(&messages);
         assert!(text.contains("[User]: check interface"));
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn test_render_error_tool() {
         let messages = vec![
-            Message::Tool { call_id: "tc1".into(), content: "command not found".into(), is_error: true },
+            Message::Tool { call_id: "tc1".into(), content: "command not found".into(), is_error: true, images: vec![] },
         ];
         let text = render_messages_for_summary(&messages);
         assert!(text.contains("[Tool ERROR tc1]: command not found"));

@@ -317,6 +317,7 @@ impl ToolPlugin for SshExecTool {
             return ToolResult {
                 content: "Error: `command` parameter is required and must be non-empty".into(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -333,6 +334,7 @@ impl ToolPlugin for SshExecTool {
                 return ToolResult {
                     content: format!("Error: {}", e),
                     is_error: true,
+                    images: vec![],
                 }
             }
         };
@@ -346,6 +348,7 @@ impl ToolPlugin for SshExecTool {
                 ToolResult {
                     content: output,
                     is_error: false,
+                    images: vec![],
                 }
             }
             Err(e) => {
@@ -353,6 +356,7 @@ impl ToolPlugin for SshExecTool {
                 ToolResult {
                     content: format!("SSH error: {}", e),
                     is_error: true,
+                    images: vec![],
                 }
             }
         }

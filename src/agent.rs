@@ -505,6 +505,7 @@ impl AgentLoop {
                 call_id: call.id.clone(),
                 content: result.content.clone(),
                 is_error: result.is_error,
+                images: result.images.clone(),
             });
             let _ = event_tx
                 .send(LoopEvent::ToolResult {
@@ -545,6 +546,7 @@ impl AgentLoop {
             call_id: call.id.clone(),
             content: result.content.clone(),
             is_error: result.is_error,
+            images: result.images.clone(),
         });
         let _ = event_tx
             .send(LoopEvent::ToolResult {

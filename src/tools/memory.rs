@@ -34,10 +34,11 @@ impl ToolPlugin for MemoryReadTool {
     fn execute(&self, args: serde_json::Value) -> ToolResult {
         let key = args.get("key").and_then(|v| v.as_str()).unwrap_or("");
         match self.store.read(key) {
-            Some(value) => ToolResult { content: value, is_error: false },
+            Some(value) => ToolResult { content: value, is_error: false, images: vec![] },
             None => ToolResult {
                 content: format!("No memory entry for key: {key}"),
                 is_error: false,
+                images: vec![],
             },
         }
     }
@@ -76,6 +77,7 @@ impl ToolPlugin for MemoryWriteTool {
             return ToolResult {
                 content: "Error: key is required".into(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -83,6 +85,7 @@ impl ToolPlugin for MemoryWriteTool {
         ToolResult {
             content: format!("Stored: {key} = {value}"),
             is_error: false,
+            images: vec![],
         }
     }
 }
@@ -117,6 +120,7 @@ impl ToolPlugin for MemoryRecallTool {
             ToolResult {
                 content: format!("No memory entries matching: {query}"),
                 is_error: false,
+                images: vec![],
             }
         } else {
             let formatted: Vec<String> = results
@@ -129,6 +133,7 @@ impl ToolPlugin for MemoryRecallTool {
             ToolResult {
                 content: format!("Found {} entries:\n{}", results.len(), formatted.join("\n")),
                 is_error: false,
+                images: vec![],
             }
         }
     }

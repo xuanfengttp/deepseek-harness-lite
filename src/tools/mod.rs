@@ -124,6 +124,7 @@ impl ToolRegistry {
             return ToolResult {
                 content: format!("Error: tool `{}` is not allowed by the active skill", call.name),
                 is_error: true,
+                images: vec![],
             };
         }
         self.execute(call).await
@@ -140,6 +141,7 @@ impl ToolRegistry {
                 return ToolResult {
                     content: format!("Error: permission denied — {reason}"),
                     is_error: true,
+                    images: vec![],
                 };
             }
             CheckResult::Allow => {}
@@ -152,6 +154,7 @@ impl ToolRegistry {
                 return ToolResult {
                     content: format!("Error: unknown tool `{}`", call.name),
                     is_error: true,
+                    images: vec![],
                 };
             }
         };
@@ -173,6 +176,7 @@ impl ToolRegistry {
                 ToolResult {
                     content: format!("Error: tool `{}` panicked: {e}", tool_name),
                     is_error: true,
+                    images: vec![],
                 }
             }
             Err(_) => {
@@ -180,6 +184,7 @@ impl ToolRegistry {
                 ToolResult {
                     content: format!("Error: tool `{}` timed out after {timeout_ms}ms", tool_name),
                     is_error: true,
+                    images: vec![],
                 }
             }
         }
@@ -250,6 +255,8 @@ pub fn register_builtins(registry: &mut ToolRegistry, config: &crate::types::Con
         }
         registry.register(Box::new(ssh_tool));
     }
+    // read_image tool — always available (no config gate, it's read-only and safe).
+    registry.register(Box::new(crate::read_image::ReadImageTool));
 }
 
 /// Register the subagent tool, sharing all currently-registered tools with it.
@@ -266,6 +273,7 @@ pub fn register_subagent(
         config.compaction.threshold,
         config.compaction.keep_recent_turns,
         config.skill.dir.clone(),
+        config.models.clone(),
     );
 
     // Share all currently-registered tools with the subagent.

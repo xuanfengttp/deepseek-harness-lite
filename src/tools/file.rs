@@ -38,14 +38,16 @@ impl ToolPlugin for FileReadTool {
             return ToolResult {
                 content: "Error: `path` is required".into(),
                 is_error: true,
+                images: vec![],
             };
         }
         log::info!("file_read: {path}");
         match std::fs::read_to_string(path) {
-            Ok(content) => ToolResult { content, is_error: false },
+            Ok(content) => ToolResult { content, is_error: false, images: vec![] },
             Err(e) => ToolResult {
                 content: format!("Error: {e}"),
                 is_error: true,
+                images: vec![],
             },
         }
     }
@@ -90,6 +92,7 @@ impl ToolPlugin for FileWriteTool {
             return ToolResult {
                 content: "Error: `path` is required".into(),
                 is_error: true,
+                images: vec![],
             };
         }
         log::info!("file_write: {path} ({} bytes)", content.len());
@@ -97,10 +100,12 @@ impl ToolPlugin for FileWriteTool {
             Ok(()) => ToolResult {
                 content: format!("Wrote {} bytes to {path}", content.len()),
                 is_error: false,
+                images: vec![],
             },
             Err(e) => ToolResult {
                 content: format!("Error: {e}"),
                 is_error: true,
+                images: vec![],
             },
         }
     }
@@ -143,7 +148,7 @@ impl ToolPlugin for FileSearchTool {
         } else {
             matches.join("\n")
         };
-        ToolResult { content, is_error: false }
+        ToolResult { content, is_error: false, images: vec![] }
     }
 }
 

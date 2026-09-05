@@ -189,6 +189,7 @@ impl ToolPlugin for WorkflowTool {
             _ => return ToolResult {
                 content: "Error: `tasks` parameter is required and must be a non-empty array".into(),
                 is_error: true,
+                images: vec![],
             },
         };
 
@@ -196,6 +197,7 @@ impl ToolPlugin for WorkflowTool {
             return ToolResult {
                 content: format!("Error: too many tasks ({}). Maximum is {}.", tasks.len(), MAX_CONCURRENT),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -205,6 +207,7 @@ impl ToolPlugin for WorkflowTool {
             return ToolResult {
                 content: format!("Error: workflow delegation depth limit ({}) reached.", MAX_DEPTH),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -221,6 +224,7 @@ impl ToolPlugin for WorkflowTool {
             return ToolResult {
                 content: "Error: no valid tasks found (each task needs label, phase, and non-empty prompt)".into(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -285,6 +289,7 @@ impl ToolPlugin for WorkflowTool {
         ToolResult {
             content,
             is_error: failed > 0 && completed == 0,
+            images: vec![],
         }
     }
 }

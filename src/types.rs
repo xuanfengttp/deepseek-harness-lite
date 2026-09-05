@@ -52,7 +52,15 @@ pub enum Message {
         reasoning_content: Option<String>,
     },
     /// The outcome of one tool call, fed back to the model.
-    Tool { call_id: CallId, content: String, is_error: bool },
+    Tool {
+        call_id: CallId,
+        content: String,
+        is_error: bool,
+        /// Images returned by tools (e.g. read_image). Sent to the model as
+        /// multi-part content (text + image_url parts).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<ImageBlock>,
+    },
 }
 
 /// A tool call requested by the model.
@@ -132,7 +140,14 @@ pub enum SessionEvent {
         thinking: Option<String>,
     },
     ToolCall { call: ToolCall },
-    ToolResult { call_id: CallId, content: String, is_error: bool },
+    ToolResult {
+        call_id: CallId,
+        content: String,
+        is_error: bool,
+        /// Images from tools (e.g. read_image). Forwarded to Message::Tool.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<ImageBlock>,
+    },
     TodoWrite { todos: Vec<String> },
     RequestHeader { model: String },
     /// A compaction summary that replaced older events. Derives into a
@@ -176,6 +191,23 @@ pub struct ToolDefinition {
 pub struct ToolResult {
     pub content: String,
     pub is_error: bool,
+    /// Optional images returned by tools (e.g. read_image tool).
+    /// When present, these are attached to the next User message in
+    /// derive_messages so the model can see them.
+    #[allow(dead_code)]
+    pub images: Vec<ImageBlock>,
+}
+
+impl Default for ToolResult {
+    fn default() -> Self {
+        Self { content: String::new(), is_error: false, images: Vec::new() }
+    }
+}
+
+impl ToolResult {
+    pub fn new(content: String, is_error: bool) -> Self {
+        Self { content, is_error, images: Vec::new() }
+    }
 }
 
 // ─── Configuration ─────────────────────────────────────────────────────────
@@ -217,6 +249,8 @@ pub struct ModelPreset {
     pub max_tokens: usize,
     #[serde(default = "default_temperature")]
     pub temperature: f32,
+    #[serde(default)]
+    pub proxy: String,
 }
 
 fn default_context_window() -> usize { 8192 }
@@ -231,6 +265,10 @@ pub struct ModelConfig {
     pub context_window: usize,
     pub max_tokens: usize,
     pub temperature: f32,
+    /// HTTP/HTTPS proxy URL (e.g. "http://127.0.0.1:7890").
+    /// Empty = no proxy (direct connection).
+    #[serde(default)]
+    pub proxy: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -44,6 +44,10 @@ pub struct SubagentTool {
     /// Shared registry of tool plugins (for re-registration in child).
     /// We store Arc so child can clone and register the same tools.
     tool_plugins: Arc<Mutex<Vec<Arc<dyn ToolPlugin>>>>,
+    /// Available model presets for subagent model selection.
+    /// When the caller specifies a model preset name, the child agent
+    /// uses that preset's config instead of the parent's.
+    model_presets: Vec<ModelPreset>,
 }
 
 impl std::fmt::Debug for SubagentTool {
@@ -61,6 +65,7 @@ impl SubagentTool {
         compaction_threshold: f32,
         keep_recent_turns: usize,
         skills_dir: String,
+        model_presets: Vec<ModelPreset>,
     ) -> Self {
         Self {
             llm,
@@ -69,6 +74,7 @@ impl SubagentTool {
             keep_recent_turns,
             skills_dir,
             tool_plugins: Arc::new(Mutex::new(Vec::new())),
+            model_presets,
         }
     }
 
@@ -104,6 +110,10 @@ impl ToolPlugin for SubagentTool {
                     "skill": {
                         "type": "string",
                         "description": "Optional skill name to use for strategy selection. If specified, child uses that skill's mode (workflow=deterministic, plan=autonomous). If omitted, child uses plan mode (full LLM autonomy)."
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Optional model preset name to use for the child. If specified, child uses that preset's model config (base_url, api_key, model, etc.). If omitted, child uses the same model as the parent."
                     }
                 },
                 "required": ["description", "prompt"]
@@ -125,11 +135,16 @@ impl ToolPlugin for SubagentTool {
             .get("skill")
             .and_then(|s| s.as_str())
             .map(String::from);
+        let model_preset_name = args
+            .get("model")
+            .and_then(|m| if m.is_null() { None } else { m.as_str() })
+            .map(String::from);
 
         if prompt.is_empty() {
             return ToolResult {
                 content: "Error: `prompt` parameter is required and must be non-empty".into(),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -146,6 +161,7 @@ impl ToolPlugin for SubagentTool {
                     MAX_DEPTH
                 ),
                 is_error: true,
+                images: vec![],
             };
         }
 
@@ -199,11 +215,34 @@ impl ToolPlugin for SubagentTool {
         let llm = self.llm.clone();
         let hooks: Vec<Box<dyn StepHook>> = strategies::build_hooks(&skill);
 
+        // Resolve model config: if a preset is specified, use it; otherwise use parent's.
+        let child_model_config = match &model_preset_name {
+            Some(preset_name) => {
+                if let Some(preset) = self.model_presets.iter().find(|p| &p.name == preset_name) {
+                    log::info!("Subagent: using model preset `{preset_name}` ({})", preset.model);
+                    ModelConfig {
+                        base_url: preset.base_url.clone(),
+                        api_key: preset.api_key.clone(),
+                        model: preset.model.clone(),
+                        context_window: preset.context_window,
+                        max_tokens: preset.max_tokens,
+                        temperature: preset.temperature,
+                        proxy: preset.proxy.clone(),
+                    }
+                } else {
+                    log::warn!("Subagent: model preset `{preset_name}` not found, using parent model");
+                    self.model_config.clone()
+                }
+            }
+            None => self.model_config.clone(),
+        };
+        let child_llm = LlmClient::new(&child_model_config);
+
         let mut child_loop = AgentLoop::new(
             child_session,
             child_tools,
-            llm,
-            &self.model_config,
+            child_llm,
+            &child_model_config,
         )
         .with_hooks(hooks)
         .with_compaction(self.compaction_threshold, self.keep_recent_turns);
@@ -263,6 +302,7 @@ impl ToolPlugin for SubagentTool {
                 ToolResult {
                     content,
                     is_error: matches!(reason, TurnEndReason::Error),
+                    images: vec![],
                 }
             }
             Err(e) => {
@@ -270,6 +310,7 @@ impl ToolPlugin for SubagentTool {
                 ToolResult {
                     content: format!("Subagent failed: {e}"),
                     is_error: true,
+                    images: vec![],
                 }
             }
         }

@@ -837,6 +837,24 @@ body {
 }
 .stats-bar .sep { color: var(--border-l2); margin: 0 8px; }
 
+/* ─── Connection status indicator ─────────────────────────────────── */
+.conn-status {
+  display: flex; align-items: center; gap: 6px; justify-content: center;
+  padding: 2px 0 6px; font-size: 11px; color: var(--label-tertiary);
+}
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  transition: background 0.2s;
+}
+.conn-dot.idle { background: var(--label-quaternary); }
+.conn-dot.connecting { background: #f0a020; animation: pulse 1s infinite; }
+.conn-dot.streaming { background: #22c55e; animation: pulse 2s infinite; }
+.conn-dot.error { background: #ef4444; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ── Context viewer: expand button + modal ──────────────────────────── */
 .ctx-expand-btn {
   display: inline-block; padding: 6px 14px; margin-top: 4px;
@@ -996,6 +1014,7 @@ body {
         </div>
       </div>
       <div class="stats-bar" id="stats-bar"></div>
+      <div class="conn-status" id="conn-status"><span class="conn-dot idle"></span><span class="conn-label">就绪</span></div>
     </div>
   </div>
 </div>
@@ -1734,6 +1753,7 @@ async function sendMessage() {
   input.value = ''; input.style.height = '44px';
   isStreaming = true;
   setSendButtonMode('stop');
+  setConnStatus('connecting', '连接中');
 
   // Auto-name the session from the first message if it's still "New session".
   autoNameSession(msg);
@@ -1767,8 +1787,10 @@ async function sendMessage() {
     if (e.name === 'AbortError') {
       // User clicked stop — finalize whatever partial text we got.
       console.log('Chat stopped by user');
+      setConnStatus('idle', '已停止');
     } else {
       console.error('chat', e);
+      setConnStatus('error', '连接错误');
     }
   }
 
@@ -1778,7 +1800,17 @@ async function sendMessage() {
   isStreaming = false;
   chatAbort = null;
   setSendButtonMode('send');
+  setConnStatus('idle', '就绪');
   loadSessions();
+}
+
+// Update connection status indicator.
+function setConnStatus(state, label) {
+  const dot = document.querySelector('#conn-status .conn-dot');
+  const lbl = document.querySelector('#conn-status .conn-label');
+  if (!dot || !lbl) return;
+  dot.className = 'conn-dot ' + state;
+  lbl.textContent = label || state;
 }
 
 // Toggle the send button between send (arrow) and stop (square) modes.
@@ -2180,6 +2212,7 @@ function handleEvent(event, showTraj) {
       document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
       break;
     case 'delta':
+      setConnStatus('streaming', '接收中');
       if (!currentAssistantEl) { currentAssistantEl = addMessage('assistant',''); currentAssistantText=''; }
       currentAssistantText += event.text;
       // If a thinking section exists, write output to the .think-output div.

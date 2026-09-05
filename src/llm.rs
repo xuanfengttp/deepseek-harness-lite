@@ -188,6 +188,8 @@ struct CompletionTokensDetails {
 pub struct LlmClient {
     base_url: String,
     api_key: String,
+    /// HTTP proxy URL (e.g. "http://127.0.0.1:7890"). Empty = direct connection.
+    proxy: String,
 }
 
 impl LlmClient {
@@ -195,6 +197,7 @@ impl LlmClient {
         Self {
             base_url: model.base_url.trim_end_matches('/').to_string(),
             api_key: model.api_key.clone(),
+            proxy: model.proxy.clone(),
         }
     }
 
@@ -408,13 +411,33 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                     tool_call_id: None,
                     reasoning_content: reasoning_content.clone(),
                 }),
-                Message::Tool { call_id, content, .. } => messages.push(ApiMessage {
-                    role: "tool",
-                    content: serde_json::Value::String(content.clone()),
-                    tool_calls: None,
-                    tool_call_id: Some(call_id.clone()),
-                    reasoning_content: None,
-                }),
+                Message::Tool { call_id, content, images, .. } => {
+                    // If tool result has images, use multi-part content (text + image_url).
+                    let content_val = if images.is_empty() {
+                        serde_json::Value::String(content.clone())
+                    } else {
+                        let mut parts = vec![serde_json::json!({
+                            "type": "text",
+                            "text": content
+                        })];
+                        for img in images {
+                            parts.push(serde_json::json!({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": format!("data:{};base64,{}", img.media_type, img.data)
+                                }
+                            }));
+                        }
+                        serde_json::Value::Array(parts)
+                    };
+                    messages.push(ApiMessage {
+                        role: "tool",
+                        content: content_val,
+                        tool_calls: None,
+                        tool_call_id: Some(call_id.clone()),
+                        reasoning_content: None,
+                    });
+                }
             }
         }
 
@@ -471,30 +494,75 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
             .body(Full::<Bytes>::new(body.as_bytes().to_vec().into()))
             .map_err(|e| LlmError::BuildRequest(e.to_string()))?;
 
-        // Connect. For P1 we support HTTP only (local inference service).
-        // TLS support is added when remote servers need it (config-driven).
-        if is_https {
-            return Err(LlmError::Unsupported("HTTPS not yet supported; use HTTP for local inference".into()));
+        // Connect. Support both HTTP (local inference) and HTTPS (remote APIs).
+        let addr = format!("{host}:{port}");
+
+        // If proxy is configured, connect through proxy using HTTP CONNECT tunnel.
+        // For HTTPS: connect to proxy → CONNECT host:port → TLS over tunnel.
+        // For HTTP: connect to proxy → send request with full URL (not just path).
+        if !self.proxy.is_empty() {
+            return self.do_stream_request_via_proxy(url, body, tx, host, port, is_https, &addr).await;
         }
 
-        let addr = format!("{host}:{port}");
-        let stream = tokio::net::TcpStream::connect(&addr)
-            .await
-            .map_err(|e| LlmError::Connect(e.to_string()))?;
-        let io = TokioIo::new(stream);
-
-        let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
-            .await
-            .map_err(|e| LlmError::Handshake(e.to_string()))?;
-
-        // Drive the connection in background.
-        tokio::spawn(async move {
-            if let Err(e) = conn.await {
-                log::warn!("LLM connection closed: {e}");
+        // Get a SendRequest by connecting via TCP (HTTP) or TLS (HTTPS).
+        // Both produce the same SendRequest<Full<Bytes>> type, so the rest
+        // of the flow (send request, process SSE) is shared.
+        let sender = if is_https {
+            // TLS connection: load native root certs, connect TCP, handshake TLS.
+            use tokio_rustls::TlsConnector;
+            let mut roots = rustls::RootCertStore::empty();
+            match rustls_native_certs::load_native_certs() {
+                Ok(certs) => {
+                    for cert in certs {
+                        let _ = roots.add(cert);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to load native certs: {e} — using rustls built-in roots");
+                }
             }
-        });
+            let config = rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            let connector = TlsConnector::from(std::sync::Arc::new(config));
+            let dns_name = rustls::pki_types::ServerName::try_from(host.to_string())
+                .map_err(|e| LlmError::BadUrl(format!("invalid TLS server name: {e}")))?;
+            let tcp_stream = tokio::net::TcpStream::connect(&addr)
+                .await
+                .map_err(|e| LlmError::Connect(e.to_string()))?;
+            let tls_stream = connector.connect(dns_name, tcp_stream)
+                .await
+                .map_err(|e| LlmError::Handshake(format!("TLS handshake: {e}")))?;
+            let io = TokioIo::new(tls_stream);
+
+            let (sender, conn) = hyper::client::conn::http1::handshake(io)
+                .await
+                .map_err(|e| LlmError::Handshake(e.to_string()))?;
+            tokio::spawn(async move {
+                if let Err(e) = conn.await {
+                    log::warn!("LLM TLS connection closed: {e}");
+                }
+            });
+            sender
+        } else {
+            let stream = tokio::net::TcpStream::connect(&addr)
+                .await
+                .map_err(|e| LlmError::Connect(e.to_string()))?;
+            let io = TokioIo::new(stream);
+
+            let (sender, conn) = hyper::client::conn::http1::handshake(io)
+                .await
+                .map_err(|e| LlmError::Handshake(e.to_string()))?;
+            tokio::spawn(async move {
+                if let Err(e) = conn.await {
+                    log::warn!("LLM connection closed: {e}");
+                }
+            });
+            sender
+        };
 
         // Send request and get response.
+        let mut sender = sender;
         let response = sender.send_request(req)
             .await
             .map_err(|e| LlmError::Request(e.to_string()))?;
@@ -647,6 +715,248 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
             finish_reason: final_finish_reason,
         }).await;
 
+        Ok(())
+    }
+
+    /// Stream request via HTTP proxy (CONNECT tunnel for HTTPS, direct proxy for HTTP).
+    async fn do_stream_request_via_proxy(
+        &self,
+        url: &str,
+        body: &str,
+        tx: &mpsc::Sender<StreamEvent>,
+        host: &str,
+        port: u16,
+        is_https: bool,
+        target_addr: &str,
+    ) -> Result<(), LlmError> {
+        use http_body_util::Full;
+        use hyper::body::Bytes;
+        use hyper_util::rt::TokioIo;
+        use hyper::{Request, Method};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // Parse proxy URL.
+        let proxy_uri: hyper::Uri = self.proxy.parse()
+            .map_err(|e: http::uri::InvalidUri| LlmError::BadUrl(format!("invalid proxy URL: {e}")))?;
+        let proxy_host = proxy_uri.host().ok_or_else(|| LlmError::BadUrl("proxy URL has no host".into()))?;
+        let proxy_port = proxy_uri.port_u16().unwrap_or(8080);
+        let proxy_addr = format!("{proxy_host}:{proxy_port}");
+
+        log::debug!("Connecting via proxy {proxy_addr} to {target_addr}");
+
+        // Connect to proxy.
+        let mut tcp_stream = tokio::net::TcpStream::connect(&proxy_addr)
+            .await
+            .map_err(|e| LlmError::Connect(format!("proxy connect {proxy_addr}: {e}")))?;
+
+        if is_https {
+            // HTTPS via proxy: CONNECT tunnel + TLS.
+            // Step 1: Send CONNECT request on raw TCP.
+            let connect_req = format!(
+                "CONNECT {target_addr} HTTP/1.1\r\nHost: {target_addr}\r\n\r\n"
+            );
+            tcp_stream.write_all(connect_req.as_bytes()).await
+                .map_err(|e| LlmError::Connect(format!("proxy CONNECT write: {e}")))?;
+
+            // Step 2: Read CONNECT response (expect 200).
+            let mut response_buf = Vec::new();
+            let mut byte = [0u8; 1];
+            loop {
+                let n = tcp_stream.read(&mut byte).await
+                    .map_err(|e| LlmError::Connect(format!("proxy CONNECT read: {e}")))?;
+                if n == 0 { break; }
+                response_buf.push(byte[0]);
+                if response_buf.ends_with(b"\r\n\r\n") { break; }
+                if response_buf.len() > 4096 {
+                    return Err(LlmError::Connect("proxy CONNECT response too large".into()));
+                }
+            }
+            let response_str = String::from_utf8_lossy(&response_buf);
+            if !response_str.starts_with("HTTP/1.1 200") && !response_str.starts_with("HTTP/1.0 200") {
+                return Err(LlmError::Connect(format!("proxy CONNECT failed: {}", response_str.lines().next().unwrap_or("empty"))));
+            }
+            log::debug!("Proxy CONNECT tunnel established to {target_addr}");
+
+            // Step 3: TLS handshake over the tunnel.
+            use tokio_rustls::TlsConnector;
+            let mut roots = rustls::RootCertStore::empty();
+            if let Ok(certs) = rustls_native_certs::load_native_certs() {
+                for cert in certs { let _ = roots.add(cert); }
+            }
+            let config = rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            let connector = TlsConnector::from(std::sync::Arc::new(config));
+            let dns_name = rustls::pki_types::ServerName::try_from(host.to_string())
+                .map_err(|e| LlmError::BadUrl(format!("invalid TLS server name: {e}")))?;
+
+            let tls_stream = connector.connect(dns_name, tcp_stream)
+                .await
+                .map_err(|e| LlmError::Handshake(format!("TLS over proxy: {e}")))?;
+            let io = TokioIo::new(tls_stream);
+
+            let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+                .await
+                .map_err(|e| LlmError::Handshake(e.to_string()))?;
+            tokio::spawn(async move {
+                if let Err(e) = conn.await { log::warn!("Proxy TLS connection closed: {e}"); }
+            });
+
+            // Rebuild request for tunnel (use path only, not full URL).
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(format!("/v1/chat/completions"))
+                .header("Host", host)
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Connection", "close")
+                .body(Full::<Bytes>::new(body.as_bytes().to_vec().into()))
+                .map_err(|e| LlmError::BuildRequest(e.to_string()))?;
+
+            let response = sender.send_request(req)
+                .await
+                .map_err(|e| LlmError::Request(e.to_string()))?;
+            return self.process_sse(response, tx).await;
+        } else {
+            // HTTP via proxy: send request with full URL as target.
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(url)  // Full URL for HTTP proxy
+                .header("Host", host)
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Connection", "close")
+                .body(Full::<Bytes>::new(body.as_bytes().to_vec().into()))
+                .map_err(|e| LlmError::BuildRequest(e.to_string()))?;
+
+            let io = TokioIo::new(tcp_stream);
+            let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+                .await
+                .map_err(|e| LlmError::Handshake(e.to_string()))?;
+            tokio::spawn(async move {
+                if let Err(e) = conn.await { log::warn!("Proxy HTTP connection closed: {e}"); }
+            });
+
+            let response = sender.send_request(req)
+                .await
+                .map_err(|e| LlmError::Request(e.to_string()))?;
+            return self.process_sse(response, tx).await;
+        }
+    }
+
+    /// Process SSE response — shared by direct and proxy paths.
+    async fn process_sse(
+        &self,
+        response: hyper::Response<hyper::body::Incoming>,
+        tx: &mpsc::Sender<StreamEvent>,
+    ) -> Result<(), LlmError> {
+        use http_body_util::BodyExt;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.into_body().collect().await
+                .map_err(|e| LlmError::Read(e.to_string()))?
+                .to_bytes();
+            return Err(LlmError::Status(status.as_u16(), String::from_utf8_lossy(&body).to_string()));
+        }
+
+        let body = response.into_body();
+        let frame_stream = body.into_data_stream();
+        let mut buffer = String::new();
+        let mut tool_call_accum: std::collections::BTreeMap<usize, (String, String, String)> = std::collections::BTreeMap::new();
+        let mut full_content = String::new();
+        let mut final_usage: Option<TokenUsage> = None;
+        let mut final_finish_reason: Option<String> = None;
+
+        use tokio_stream::StreamExt;
+        pin_mut!(frame_stream);
+        while let Some(chunk_result) = frame_stream.next().await {
+            let chunk = chunk_result.map_err(|e| LlmError::Read(e.to_string()))?;
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+            while let Some(pos) = buffer.find('\n') {
+                let line = buffer[..pos].trim_end_matches('\r').to_string();
+                buffer = buffer[pos + 1..].to_string();
+
+                if line.is_empty() || line.starts_with(':') { continue; }
+                if let Some(data) = line.strip_prefix("data: ") {
+                    if data.trim() == "[DONE]" {
+                        let tool_calls: Vec<ToolCall> = tool_call_accum.into_values()
+                            .map(|(id, name, args)| ToolCall {
+                                id, name,
+                                arguments: serde_json::from_str(&args).unwrap_or(serde_json::Value::Null),
+                            }).collect();
+                        let _ = tx.send(StreamEvent::Done {
+                            content: full_content.clone(),
+                            tool_calls,
+                            usage: final_usage.take(),
+                            finish_reason: final_finish_reason.take(),
+                        }).await;
+                        return Ok(());
+                    }
+                    if let Ok(chunk_dto) = serde_json::from_str::<StreamChunkDto>(data) {
+                        if let Some(usage) = chunk_dto.usage {
+                            let cache_hit = if usage.prompt_cache_hit_tokens > 0 {
+                                usage.prompt_cache_hit_tokens
+                            } else {
+                                usage.prompt_tokens_details.map(|d| d.cached_tokens).unwrap_or(0)
+                            };
+                            let reasoning_tokens = usage.completion_tokens_details.map(|d| d.reasoning_tokens).unwrap_or(0);
+                            final_usage = Some(TokenUsage {
+                                prompt_tokens: usage.prompt_tokens,
+                                completion_tokens: usage.completion_tokens,
+                                cache_hit_tokens: cache_hit,
+                                cache_miss_tokens: usage.prompt_cache_miss_tokens,
+                                reasoning_tokens,
+                            });
+                        }
+                        for choice in chunk_dto.choices {
+                            if let Some(content) = choice.delta.content {
+                                full_content.push_str(&content);
+                                let _ = tx.send(StreamEvent::Delta(content)).await;
+                            }
+                            if let Some(reasoning) = choice.delta.reasoning_content {
+                                if !reasoning.is_empty() {
+                                    let _ = tx.send(StreamEvent::ThinkDelta(reasoning)).await;
+                                }
+                            }
+                            if let Some(fr) = choice.finish_reason {
+                                final_finish_reason = Some(fr);
+                            }
+                            if let Some(tc_deltas) = choice.delta.tool_calls {
+                                for tc in tc_deltas {
+                                    let entry = tool_call_accum
+                                        .entry(tc.index)
+                                        .or_insert_with(|| (String::new(), String::new(), String::new()));
+                                    if let Some(id) = tc.id {
+                                        if !id.is_empty() { entry.0 = id; }
+                                    }
+                                    if let Some(func) = tc.function {
+                                        if let Some(name) = func.name {
+                                            if !name.is_empty() { entry.1 = name; }
+                                        }
+                                        if let Some(args) = func.arguments {
+                                            entry.2.push_str(&args);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let tool_calls: Vec<ToolCall> = tool_call_accum.into_values()
+            .map(|(id, name, args)| ToolCall {
+                id, name,
+                arguments: serde_json::from_str(&args).unwrap_or(serde_json::Value::Null),
+            }).collect();
+        let _ = tx.send(StreamEvent::Done {
+            content: full_content,
+            tool_calls,
+            usage: final_usage,
+            finish_reason: final_finish_reason,
+        }).await;
         Ok(())
     }
 }
