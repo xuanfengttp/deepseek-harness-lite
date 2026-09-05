@@ -230,6 +230,7 @@ impl SessionLog {
     /// and TokenUsage allow old logs to load with defaults for new fields.
     pub fn serialize(&self) -> Vec<u8> {
         let snapshot = SessionSnapshot {
+            version: 1,  // Current format version.
             next_seq: self.next_seq,
             events: self.events.iter().cloned().collect(),
             current_turn: self.current_turn,
@@ -290,12 +291,22 @@ impl SessionLog {
             file.sync_all().map_err(|e| format!("checkpoint fsync: {e}"))?;
         }
 
-        // Atomic rename over the target.
-        std::fs::rename(&tmp, target).map_err(|e| {
-            // Clean up temp file on rename failure.
-            let _ = std::fs::remove_file(&tmp);
-            format!("checkpoint rename: {e}")
-        })
+        // Atomic rename over the target (retry on Windows file-lock contention).
+        let mut rename_err = None;
+        for attempt in 0..3u32 {
+            match std::fs::rename(&tmp, target) {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    rename_err = Some(e);
+                    if attempt < 2 {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
+            }
+        }
+        // Clean up temp file on rename failure.
+        let _ = std::fs::remove_file(&tmp);
+        Err(format!("checkpoint rename: {}", rename_err.unwrap()))
     }
 
     /// Load a session from a flash file.
@@ -307,8 +318,13 @@ impl SessionLog {
 }
 
 /// Serializable snapshot of a session log for flash persistence.
+/// Includes a format version for future migrations. Old logs without the
+/// version field deserialize with version=0 (serde default).
 #[derive(serde::Serialize, serde::Deserialize)]
 struct SessionSnapshot {
+    /// Format version: 0 = pre-versioning (legacy), 1 = current.
+    #[serde(default)]
+    version: u64,
     next_seq: u64,
     events: Vec<SessionEvent>,
     current_turn: u64,

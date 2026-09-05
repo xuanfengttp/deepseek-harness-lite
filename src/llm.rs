@@ -161,6 +161,25 @@ struct ApiUsage {
     prompt_cache_hit_tokens: u64,
     #[serde(default)]
     prompt_cache_miss_tokens: u64,
+    /// OpenAI-compatible alias: some gateways send prompt_tokens_details.cached_tokens
+    /// instead of prompt_cache_hit_tokens. Fallback resolved in `to_token_usage`.
+    #[serde(default)]
+    prompt_tokens_details: Option<PromptTokensDetails>,
+    /// Reasoning tokens from completion_tokens_details (thinking consumption).
+    #[serde(default)]
+    completion_tokens_details: Option<CompletionTokensDetails>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PromptTokensDetails {
+    #[serde(default)]
+    cached_tokens: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct CompletionTokensDetails {
+    #[serde(default)]
+    reasoning_tokens: u64,
 }
 
 /// The LLM client. Stateless between requests — each call is a fresh HTTP stream.
@@ -183,6 +202,7 @@ impl LlmClient {
     ///
     /// This is the single entry point for model interaction. The caller
     /// (agent loop) collects deltas and assembles the final assistant message.
+    /// Retries on transient connection errors with exponential backoff.
     pub async fn stream(
         &self,
         request: LlmRequest,
@@ -195,18 +215,35 @@ impl LlmClient {
         let url = format!("{}/chat/completions", self.base_url);
         log::debug!("LLM request to {url}, {} bytes", body_json.len());
 
-        // For P1, we use a blocking approach with ureq-like simplicity via
-        // hyper. Full async streaming is wired in P6 with the server.
-        // This implementation uses hyper's async client with a single-thread runtime.
-        let stream_result = self.do_stream_request(&url, &body_json, &tx).await;
+        // Retry on transient connection errors (up to 3 attempts).
+        // Backoff: 100ms, 400ms, 1600ms (exponential with base 4).
+        let mut last_err = None;
+        for attempt in 0..3u32 {
+            if attempt > 0 {
+                let backoff_ms = 100u64 * (4u64.pow(attempt - 1));
+                log::warn!("LLM retry {attempt}/3 after {backoff_ms}ms: {}", last_err.as_ref().map(|e: &LlmError| e.to_string()).unwrap_or_default());
+                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+            }
 
-        match stream_result {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                let _ = tx.send(StreamEvent::Error(e.to_string())).await;
-                Err(e)
+            match self.do_stream_request(&url, &body_json, &tx).await {
+                Ok(()) => return Ok(()),
+                Err(LlmError::Connect(e)) | Err(LlmError::Handshake(e)) => {
+                    log::warn!("LLM transient error (attempt {}): {e}", attempt + 1);
+                    last_err = Some(LlmError::Connect(e));
+                    continue;
+                }
+                Err(e) => {
+                    // Non-transient error — don't retry.
+                    let _ = tx.send(StreamEvent::Error(e.to_string())).await;
+                    return Err(e);
+                }
             }
         }
+
+        // All retries exhausted.
+        let err = last_err.unwrap_or(LlmError::Connect("retry exhausted".into()));
+        let _ = tx.send(StreamEvent::Error(err.to_string())).await;
+        Err(err)
     }
 
     /// Generate a concise session title from the first user message.
@@ -519,11 +556,27 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                     // Parse JSON chunk.
                     if let Ok(chunk_dto) = serde_json::from_str::<StreamChunkDto>(data) {
                         if let Some(usage) = chunk_dto.usage {
+                            // Resolve cache hit: prefer prompt_cache_hit_tokens,
+                            // fallback to prompt_tokens_details.cached_tokens
+                            // (OpenAI-compatible alias used by some gateways).
+                            let cache_hit = if usage.prompt_cache_hit_tokens > 0 {
+                                usage.prompt_cache_hit_tokens
+                            } else {
+                                usage.prompt_tokens_details
+                                    .map(|d| d.cached_tokens)
+                                    .unwrap_or(0)
+                            };
+                            // Reasoning tokens from completion_tokens_details.
+                            let reasoning_tokens = usage
+                                .completion_tokens_details
+                                .map(|d| d.reasoning_tokens)
+                                .unwrap_or(0);
                             final_usage = Some(TokenUsage {
                                 prompt_tokens: usage.prompt_tokens,
                                 completion_tokens: usage.completion_tokens,
-                                cache_hit_tokens: usage.prompt_cache_hit_tokens,
+                                cache_hit_tokens: cache_hit,
                                 cache_miss_tokens: usage.prompt_cache_miss_tokens,
+                                reasoning_tokens,
                             });
                         }
                         for choice in chunk_dto.choices {
@@ -548,11 +601,21 @@ Use the language of the message. Aim for about 6 words in non-CJK languages or 1
                                         .entry(tc.index)
                                         .or_insert_with(|| (String::new(), String::new(), String::new()));
                                     if let Some(id) = tc.id {
-                                        entry.0 = id;
+                                        // Guard against empty-string identity erasure:
+                                        // some OpenAI-compatible gateways send "" or
+                                        // null on continuation deltas. null → None
+                                        // (serde handles), but "" → Some("") must NOT
+                                        // overwrite an established id. (upstream fix
+                                        // a1271a4903 — acceptIdentity)
+                                        if !id.is_empty() {
+                                            entry.0 = id;
+                                        }
                                     }
                                     if let Some(func) = tc.function {
                                         if let Some(name) = func.name {
-                                            entry.1 = name;
+                                            if !name.is_empty() {
+                                                entry.1 = name;
+                                            }
                                         }
                                         if let Some(args) = func.arguments {
                                             entry.2.push_str(&args);

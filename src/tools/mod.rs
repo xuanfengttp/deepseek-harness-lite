@@ -82,8 +82,13 @@ impl ToolRegistry {
     }
 
     /// Get all registered tool definitions (for prompt assembly).
+    /// Sorted by name for deterministic ordering — non-deterministic HashMap
+    /// iteration would make the system prompt's tool guidance section unstable,
+    /// hurting KV cache prefix reuse.
     pub fn definitions(&self) -> Vec<ToolDefinition> {
-        self.tools.values().map(|p| p.definition()).collect()
+        let mut defs: Vec<ToolDefinition> = self.tools.values().map(|p| p.definition()).collect();
+        defs.sort_by(|a, b| a.name.cmp(&b.name));
+        defs
     }
 
     /// Get definitions filtered to a specific allow-list.
@@ -92,11 +97,13 @@ impl ToolRegistry {
         if allow.is_empty() {
             return self.definitions();
         }
-        self.tools
+        let mut defs: Vec<ToolDefinition> = self.tools
             .values()
             .filter(|p| allow.iter().any(|n| n == &p.definition().name))
             .map(|p| p.definition())
-            .collect()
+            .collect();
+        defs.sort_by(|a, b| a.name.cmp(&b.name));
+        defs
     }
 
     /// Check whether a tool name is in the allow-list.

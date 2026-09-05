@@ -86,12 +86,16 @@ pub struct ToolCallDelta {
 pub struct TokenUsage {
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
-    /// Cache-hit tokens (DeepSeek prompt_cache_hit_tokens); 0 if not reported.
+    /// Cache-hit tokens (DeepSeek prompt_cache_hit_tokens, or OpenAI
+    /// prompt_tokens_details.cached_tokens fallback); 0 if not reported.
     #[serde(default)]
     pub cache_hit_tokens: u64,
     /// Cache-miss tokens (DeepSeek prompt_cache_miss_tokens); 0 if not reported.
     #[serde(default)]
     pub cache_miss_tokens: u64,
+    /// Reasoning/thinking tokens (completion_tokens_details.reasoning_tokens).
+    #[serde(default)]
+    pub reasoning_tokens: u64,
 }
 
 // ─── Session Events (durable log) ──────────────────────────────────────────

@@ -30,20 +30,34 @@ pub struct CompactionResult {
     pub turns_compacted: usize,
 }
 
-/// Check if compaction is needed based on message count and threshold.
+/// Check if compaction is needed based on message count, image count, and threshold.
 ///
 /// `message_count` = number of derived messages
+/// `image_token_estimate` = estimated tokens from inline images (0 if none)
 /// `context_window` = model's context window size (in tokens, approximated by char count / 4)
 /// `threshold` = fraction of context window that triggers compaction (e.g. 0.7)
-pub fn needs_compaction(message_count: usize, context_window: usize, threshold: f32) -> bool {
+pub fn needs_compaction(message_count: usize, image_token_estimate: usize, context_window: usize, threshold: f32) -> bool {
     if context_window == 0 {
         return false;
     }
-    // Rough estimate: 1 message ≈ 200 tokens average. Trigger when estimated
-    // token usage exceeds threshold * context_window.
-    let estimated_tokens = message_count * 200;
+    // Rough estimate: 1 message ≈ 200 tokens average. Images add their own
+    // token cost (a 4K screenshot can be thousands of tokens).
+    let estimated_tokens = message_count * 200 + image_token_estimate;
     let trigger_at = (context_window as f32 * threshold) as usize;
     estimated_tokens > trigger_at
+}
+
+/// Estimate token cost of inline images for compaction triggering.
+/// Uses a conservative estimate: base64-decoded byte count / 4 (rough token ratio),
+/// capped at 384 per image (DeepSeek v4 vision-token cap).
+pub fn estimate_image_tokens(images: &[ImageBlock]) -> usize {
+    images.iter().map(|img| {
+        // base64 data: decode length ≈ data.len() * 3/4, then /4 for token estimate.
+        let raw_bytes = img.data.len() * 3 / 4;
+        let tokens = raw_bytes / 4;
+        // Cap at 384 (DeepSeek v4 per-image vision token cap).
+        tokens.min(384).max(64) // floor at 64 for any image
+    }).sum()
 }
 
 /// Render a slice of messages into plain text for the summary LLM call.
@@ -176,11 +190,13 @@ mod tests {
     #[test]
     fn test_needs_compaction() {
         // 0 context window = no compaction
-        assert!(!needs_compaction(100, 0, 0.7));
+        assert!(!needs_compaction(100, 0, 0, 0.7));
         // Small message count, large window = no
-        assert!(!needs_compaction(5, 8192, 0.7));
+        assert!(!needs_compaction(5, 0, 8192, 0.7));
         // Large message count, small window = yes
-        assert!(needs_compaction(100, 8192, 0.7));
+        assert!(needs_compaction(100, 0, 8192, 0.7));
+        // Images push over threshold
+        assert!(needs_compaction(5, 6000, 8192, 0.7));
     }
 
     #[test]

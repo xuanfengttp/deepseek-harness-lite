@@ -312,11 +312,34 @@ impl SessionManager {
         self.persist_dir.join("session-index.bin")
     }
 
-    /// Save the metadata index to flash.
+    /// Save the metadata index to flash using atomic write (temp + rename).
+    /// Prevents index corruption on crash — direct fs::write can leave a
+    /// truncated file if the process is killed mid-write.
     fn save_index(&self) {
         let data = bincode::serialize(&self.sessions)
             .unwrap_or_default();
-        let _ = std::fs::write(self.index_path(), &data);
+        let index_path = self.index_path();
+        let target = std::path::Path::new(&index_path);
+        let tmp = target.with_extension("tmp");
+        // Write to temp file.
+        if let Ok(mut file) = std::fs::File::create(&tmp) {
+            use std::io::Write;
+            if file.write_all(&data).is_ok() {
+                let _ = file.sync_all();
+                // Atomic rename over the target (retry on Windows file-lock contention).
+                for attempt in 0..3u32 {
+                    if std::fs::rename(&tmp, target).is_ok() {
+                        return;
+                    }
+                    if attempt < 2 {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                }
+                // Last resort: direct write if rename kept failing.
+                let _ = std::fs::write(target, &data);
+                let _ = std::fs::remove_file(&tmp);
+            }
+        }
     }
 
     /// Load the metadata index from flash.

@@ -266,8 +266,16 @@ impl AgentLoop {
         // Check if compaction is needed before building the request.
         let mut messages = self.session.derive_messages();
         let message_count = messages.len();
+        // Estimate image token cost for compaction triggering.
+        let image_tokens: usize = messages.iter()
+            .map(|m| match m {
+                Message::User { images, .. } => crate::compaction::estimate_image_tokens(images),
+                _ => 0,
+            })
+            .sum();
         if crate::compaction::needs_compaction(
             message_count,
+            image_tokens,
             self.context_window,
             self.compaction_threshold,
         ) {

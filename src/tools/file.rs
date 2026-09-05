@@ -79,8 +79,13 @@ impl ToolPlugin for FileWriteTool {
     }
 
     fn execute(&self, args: serde_json::Value) -> ToolResult {
-        let path = args.get("path").and_then(|p| p.as_str()).unwrap_or("");
-        let content = args.get("content").and_then(|c| c.as_str()).unwrap_or("");
+        // Handle null placeholders: some models send null for unused optional fields.
+        let path = args.get("path")
+            .and_then(|p| if p.is_null() { None } else { p.as_str() })
+            .unwrap_or("");
+        let content = args.get("content")
+            .and_then(|c| if c.is_null() { None } else { c.as_str() })
+            .unwrap_or("");
         if path.is_empty() {
             return ToolResult {
                 content: "Error: `path` is required".into(),

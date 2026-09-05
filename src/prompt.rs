@@ -151,9 +151,10 @@ pub fn assemble_sections(
     tools: Vec<ToolDefinition>,
     variables: &HashMap<String, String>,
 ) -> AssembledPrompt {
-    // Sort sections by order, then join.
+    // Sort sections by order, then by name as tie-breaker for deterministic
+    // ordering when multiple sections share the same order value.
     let mut sorted = sections;
-    sorted.sort_by_key(|s| s.order);
+    sorted.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
     let mut system = sorted
         .into_iter()
         .map(|s| s.text)
