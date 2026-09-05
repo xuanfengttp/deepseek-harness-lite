@@ -62,6 +62,8 @@ pub enum LoopEvent {
         completion_tokens: u64,
         cache_hit_tokens: u64,
         cache_miss_tokens: u64,
+        /// Reasoning/thinking tokens consumed.
+        reasoning_tokens: u64,
         /// Wall time from step start to first token (TTFT), in milliseconds.
         ttft_ms: u64,
         /// Wall time from first token to done (decode), in milliseconds.
@@ -426,6 +428,7 @@ impl AgentLoop {
                                 completion_tokens: u.completion_tokens,
                                 cache_hit_tokens: u.cache_hit_tokens,
                                 cache_miss_tokens: u.cache_miss_tokens,
+                                reasoning_tokens: u.reasoning_tokens,
                                 ttft_ms: ttft,
                                 decode_ms: decode,
                             })

@@ -232,11 +232,12 @@ async fn async_main() -> ExitCode {
                     }
                     LoopEvent::StepEnd { turn, step } => log::info!("[step {turn}.{step} ended]"),
                     LoopEvent::TurnEnd { turn, reason } => log::info!("[turn {turn} ended: {reason:?}]"),
-                    LoopEvent::Usage { prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, ttft_ms, decode_ms } => {
+                    LoopEvent::Usage { prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, reasoning_tokens, ttft_ms, decode_ms } => {
                         let cache_pct = if cache_hit_tokens + cache_miss_tokens > 0 {
                             (cache_hit_tokens * 100 / (cache_hit_tokens + cache_miss_tokens)) as u64
                         } else { 0 };
-                        log::info!("[tokens: {prompt_tokens} in (cache hit {cache_pct}%), {completion_tokens} out | ttft {ttft_ms}ms, decode {decode_ms}ms]");
+                        let reasoning_str = if reasoning_tokens > 0 { format!(", {reasoning_tokens} reasoning") } else { String::new() };
+                        log::info!("[tokens: {prompt_tokens} in (cache hit {cache_pct}%), {completion_tokens} out{reasoning_str} | ttft {ttft_ms}ms, decode {decode_ms}ms]");
                     }
                     LoopEvent::Error { message } => log::error!("[error: {message}]"),
                 }

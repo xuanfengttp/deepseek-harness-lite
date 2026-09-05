@@ -825,8 +825,8 @@ fn format_loop_event(event: &LoopEvent) -> String {
         LoopEvent::TurnEnd { turn, reason } => {
             format!(r#"{{"type":"turn_end","turn":{turn},"reason":"{:?}"}}"#, reason)
         }
-        LoopEvent::Usage { prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, ttft_ms, decode_ms } => {
-            format!(r#"{{"type":"usage","prompt_tokens":{prompt_tokens},"completion_tokens":{completion_tokens},"cache_hit_tokens":{cache_hit_tokens},"cache_miss_tokens":{cache_miss_tokens},"ttft_ms":{ttft_ms},"decode_ms":{decode_ms}}}"#)
+        LoopEvent::Usage { prompt_tokens, completion_tokens, cache_hit_tokens, cache_miss_tokens, reasoning_tokens, ttft_ms, decode_ms } => {
+            format!(r#"{{"type":"usage","prompt_tokens":{prompt_tokens},"completion_tokens":{completion_tokens},"cache_hit_tokens":{cache_hit_tokens},"cache_miss_tokens":{cache_miss_tokens},"reasoning_tokens":{reasoning_tokens},"ttft_ms":{ttft_ms},"decode_ms":{decode_ms}}}"#)
         }
         LoopEvent::Error { message } => {
             let escaped = escape_json_string(message);
