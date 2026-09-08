@@ -24,6 +24,10 @@ pub struct SessionLog {
     current_turn: u64,
     /// Current step counter within the turn.
     current_step: u64,
+    /// Last model id that drove a turn in this session.
+    /// Used to detect model switches across turns and emit a model-visible
+    /// notice so a newly selected model can interpret earlier assistant turns.
+    last_model: Option<String>,
 }
 
 impl SessionLog {
@@ -35,7 +39,18 @@ impl SessionLog {
             max_in_memory,
             current_turn: 0,
             current_step: 0,
+            last_model: None,
         }
+    }
+
+    /// The model id that last drove a turn, if any.
+    pub fn last_model(&self) -> Option<&str> {
+        self.last_model.as_deref()
+    }
+
+    /// Record the model id that is about to drive the next turn.
+    pub fn set_last_model(&mut self, model: &str) {
+        self.last_model = Some(model.to_string());
     }
 
     /// Append an event and return its sequence number.
@@ -71,6 +86,7 @@ impl SessionLog {
         self.next_seq = 0;
         self.current_turn = 0;
         self.current_step = 0;
+        self.last_model = None;
     }
 
     /// Estimate total token count of the derived messages.
@@ -247,6 +263,7 @@ impl SessionLog {
             events: self.events.iter().cloned().collect(),
             current_turn: self.current_turn,
             current_step: self.current_step,
+            last_model: self.last_model.clone(),
         };
         serde_json::to_vec(&snapshot).unwrap_or_default()
     }
@@ -282,6 +299,7 @@ impl SessionLog {
             max_in_memory,
             current_turn: snapshot.current_turn,
             current_step: snapshot.current_step,
+            last_model: snapshot.last_model,
         };
 
         // Repair interrupted turns (upstream interruptedTurnClosers):
@@ -417,6 +435,9 @@ struct SessionSnapshot {
     events: Vec<SessionEvent>,
     current_turn: u64,
     current_step: u64,
+    /// Last model id (serde default → None for legacy logs).
+    #[serde(default)]
+    last_model: Option<String>,
 }
 
 #[cfg(test)]
@@ -589,5 +610,23 @@ mod tests {
         log.apply_compaction("summary".into(), 5);
         // Should not compact (only 1 event, keep 5).
         assert_eq!(log.len(), 1);
+    }
+
+    #[test]
+    fn last_model_persists_across_serialize_roundtrip() {
+        let mut log = SessionLog::new(128);
+        assert_eq!(log.last_model(), None);
+        log.set_last_model("deepseek-chat");
+        assert_eq!(log.last_model(), Some("deepseek-chat"));
+
+        // Serialize → deserialize roundtrip must retain last_model.
+        let bytes = log.serialize();
+        let restored = SessionLog::deserialize(&bytes, 128).unwrap();
+        assert_eq!(restored.last_model(), Some("deepseek-chat"));
+
+        // clear() resets it.
+        let mut cleared = restored;
+        cleared.clear();
+        assert_eq!(cleared.last_model(), None);
     }
 }

@@ -53,11 +53,13 @@ impl Clone for PromptSection {
 ///    -80  tools             — per-tool guidance (semi-fixed: skill + config)
 ///      0  persona           — skill body (dynamic: changes on skill switch)
 ///     10  custom-prompt     — user-defined prompt (dynamic: changes on config edit)
+///     20  environment       — cwd etc. (per-machine facts, kept in the suffix)
 pub const ORDER_IDENTITY: i32 = -100;
 pub const ORDER_RULES: i32 = -90;
 pub const ORDER_TOOLS: i32 = -80;
 pub const ORDER_PERSONA: i32 = 0;
 pub const ORDER_CUSTOM: i32 = 10;
+pub const ORDER_ENVIRONMENT: i32 = 20;
 
 /// Universal behavior rules for all agents (order=10).
 /// Short, high-signal rules that prevent the most common small-model mistakes.
@@ -80,11 +82,14 @@ pub fn build_sections(
 ) -> (Vec<PromptSection>, Vec<ToolDefinition>) {
     let mut sections: Vec<PromptSection> = Vec::new();
 
-    // Layer 1: Harness identity (order=-100, fixed, ~20 tokens).
+    // Layer 1: Harness identity (order=-100, fixed, ~10 tokens).
+    // NOTE: cwd is deliberately NOT here. cwd is a per-machine environment fact
+    // that would diverge the prompt near its beginning and break the KV cache
+    // reusable prefix. It lives in the `environment` section at the tail instead.
     sections.push(PromptSection {
         name: "harness:identity".into(),
         order: ORDER_IDENTITY,
-        text: "You are an AI agent. Working directory: {{cwd}}.".into(),
+        text: "You are an AI agent.".into(),
     });
 
     // Layer 2: Behavior rules (order=-90, fixed, ~80 tokens).
@@ -137,6 +142,14 @@ pub fn build_sections(
             text: custom_prompt.into(),
         });
     }
+
+    // Layer 6: Environment facts (order=20, per-machine — kept at the tail so
+    // the reusable prefix above stays byte-identical across machines/workspaces).
+    sections.push(PromptSection {
+        name: "environment".into(),
+        order: ORDER_ENVIRONMENT,
+        text: "Working directory: {{cwd}}.".into(),
+    });
 
     (sections, allowed_tools)
 }
@@ -292,6 +305,19 @@ mod tests {
         let prompt = assemble(&skill, &[], "", &extra);
         assert!(prompt.system.contains("/tmp/work"));
         assert!(!prompt.system.contains("{{cwd}}"));
+    }
+
+    #[test]
+    fn cwd_fact_placed_in_tail_suffix() {
+        let skill = make_skill("diag", "You are a diagnostic agent.", vec![]);
+        let mut extra = HashMap::new();
+        extra.insert("cwd".into(), "/tmp/work".into());
+        let prompt = assemble(&skill, &[], "", &extra);
+        // The reusable prefix (identity + rules) must not contain the cwd fact,
+        // so it stays byte-identical across machines/workspaces for KV cache reuse.
+        let persona_pos = prompt.system.find("diagnostic agent").unwrap();
+        let cwd_pos = prompt.system.find("Working directory:").unwrap();
+        assert!(persona_pos < cwd_pos, "cwd must come after persona (in the suffix)");
     }
 
     #[test]
