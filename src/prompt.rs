@@ -61,7 +61,7 @@ pub const ORDER_PERSONA: i32 = 0;
 pub const ORDER_CUSTOM: i32 = 10;
 pub const ORDER_ENVIRONMENT: i32 = 20;
 
-/// Universal behavior rules for all agents (order=10).
+/// Universal behavior rules for all agents (order=-90).
 /// Short, high-signal rules that prevent the most common small-model mistakes.
 const BEHAVIOR_RULES: &str = "## Rules\n\n- Check command exit codes; investigate failures before proceeding.\n- Verify facts with tools; do not guess or fabricate.\n- Be concise; answer the question directly.";
 
@@ -70,11 +70,12 @@ const BEHAVIOR_RULES: &str = "## Rules\n\n- Check command exit codes; investigat
 /// Returns dynamic sections that `assemble()` will sort and join.
 /// The layered design is ordered for KV cache reuse — fixed content at head,
 /// dynamic content at tail:
-///   1. Identity (fixed, ~20 tokens, order=-100)
+///   1. Identity (fixed, ~10 tokens, order=-100)
 ///   2. Behavior rules (fixed, ~80 tokens, order=-90)
 ///   3. Tool guidance (semi-fixed, ~15 tokens/tool, order=-80)
 ///   4. Persona (skill body, dynamic, order=0)
 ///   5. Custom prompt (user-defined, dynamic, order=10)
+///   6. Environment facts (cwd, per-machine, order=20 — suffix)
 pub fn build_sections(
     skill: &Skill,
     all_tools: &[ToolDefinition],

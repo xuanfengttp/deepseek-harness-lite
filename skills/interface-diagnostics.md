@@ -5,7 +5,7 @@ whenToUse: When the user reports interface anomalies, link failures, or port iss
 mode: plan
 think: true
 tools:
-  allow: [shell, file_read, file_write, memory_read, memory_write, todo_write]
+  allow: [shell, file_read, file_write, memory_read, memory_write]
 variables:
   device_model: "unknown"
 ---

@@ -6,9 +6,9 @@ A lightweight, embeddable agent harness rewritten in Rust, derived from the [Dee
 
 ## What is this
 
-DeepSeek Harness Lite (`dsh-lite`) is a from-scratch Rust reimplementation that preserves the core architecture of DeepSeek Harness — turn/step agent loop, append-only session log, capability-based tools, declarative skills — while stripping the heavyweight plugin loader, web frontend, and multi-process orchestration layers.
+DeepSeek Harness Lite (`dsh-lite`) is a from-scratch Rust reimplementation that preserves the core architecture of DeepSeek Harness — turn/step agent loop, append-only session log, capability-based tools, declarative skills — while stripping the heavyweight plugin loader and multi-process orchestration layers.
 
-The result is a single static binary with a ~6 MB runtime memory footprint, designed for resource-constrained environments where a full Node.js runtime is impractical.
+The result is a single static binary with a ~3.6 MB size and ~6 MB runtime memory footprint, designed for resource-constrained environments where a full Node.js runtime is impractical. It ships an embedded single-file web client for interactive chat.
 
 > **Download pre-built binaries:** [Latest Release](https://github.com/xuanfengttp/deepseek-harness-lite/releases) — Windows x86_64, Linux ARM64/ARMv7/x86_64 (static musl, zero dependencies)
 
@@ -105,30 +105,32 @@ Details: [docs/kv-cache-design.md](docs/kv-cache-design.md)
 | `file_read` | Read file contents |
 | `file_write` | Write to files |
 | `file_search` | Glob-pattern file search |
+| `read_image` | Read + preprocess an image file (auto-resize to 1920px, JPEG re-encode) for visual analysis |
 | `ssh_exec` | Execute commands on remote network elements via persistent SSH sessions (connection reuse, interactive queries) |
 | `memory_*` | Long-term memory read / write / recall |
-| `todo_write` | Task tracking for multi-step operations |
-| `subagent` | Delegate a sub-task to a child agent (zero parent context, maxDepth=3) |
+| `subagent` | Delegate a sub-task to a child agent (zero parent context, maxDepth=3, optional model preset override) |
+| `workflow` | Parallel multi-agent orchestration (fan-out task list across subagents) |
 
 Tools are `ToolPlugin` trait implementations registered through `register_builtins()`. Adding a tool means implementing the trait + one registration line — no core code changes. Tools run through a 3-stage pipeline: **check** (permission + validation) → **execute** (with timeout) → **result** (truncation + normalization).
 
 ### Layered system prompt
 
-The system prompt is assembled from 5 ordered sections — each short and high-signal, keeping permanent context cost under ~300 tokens:
+The system prompt is assembled from 6 ordered sections — each short and high-signal, keeping permanent context cost under ~300 tokens:
 
 | Order | Section | Source | Tokens |
 |---|---|---|---|
-| -100 | Identity | Fixed ("You are an AI agent. Working dir: {{cwd}}.") | ~20 |
+| -100 | Identity | Fixed ("You are an AI agent.") | ~10 |
+| -90 | Behavior rules | 3 universal rules (check exit codes, verify facts, be concise) | ~80 |
+| -80 | Tool guidance | One behavior rule per allowed tool | ~15/tool |
 | 0 | Persona | Skill body | variable |
-| 5 | Custom prompt | User-defined from settings panel | variable |
-| 10 | Behavior rules | 3 universal rules (check exit codes, verify facts, be concise) | ~80 |
-| 100 | Tool guidance | One behavior rule per allowed tool | ~15/tool |
+| 10 | Custom prompt | User-defined from settings panel | variable |
+| 20 | Environment | Working directory (`{{cwd}}`) — kept at the tail | ~10 |
 
-Each tool has a `guidance` field (how to use it) separate from `description` (what it does) — only `guidance` goes into the system prompt. Runtime variables `{{cwd}}` and `{{model}}` are auto-interpolated. The custom prompt section is optional (leave empty to omit). See [SKILL-GUIDE.md](SKILL-GUIDE.md) §0 for details.
+Each tool has a `guidance` field (how to use it) separate from `description` (what it does) — only `guidance` goes into the system prompt. Runtime variables `{{cwd}}` and `{{model}}` are auto-interpolated. The custom prompt section is optional (leave empty to omit). The environment facts (cwd) live in the suffix so per-machine values don't diverge the reusable prefix. See [SKILL-GUIDE.md](SKILL-GUIDE.md) §0 for details.
 
 ### Custom system prompt
 
-A user-defined system prompt can be injected via the settings panel (General tab → System Prompt). It sits between the persona and behavior rules, supports `{{cwd}}`/`{{model}}` interpolation, and takes effect immediately (hot-reload, no restart). Stored in `config.yaml` under `prompt.custom`.
+A user-defined system prompt can be injected via the settings panel (General tab → System Prompt). It sits after the persona (order 10), supports `{{cwd}}`/`{{model}}` interpolation, and takes effect immediately (hot-reload, no restart). Stored in `config.yaml` under `prompt.custom`.
 
 ### SSH remote device operations
 
@@ -146,6 +148,14 @@ ssh:
 
 Skills can use `ssh_exec` with `target` name or inline `host`/`user`/`password`. See [SKILL-GUIDE.md](SKILL-GUIDE.md) §9 for the full SSH usage guide (configuration, call modes, persistent sessions, skill examples).
 
+### HTTPS, proxy, and multimodal
+
+- **HTTPS endpoints** — `base_url` supports `https://` (rustls TLS with native root certs, built-in roots fallback).
+- **HTTP/HTTPS proxy** — set `proxy` on any model config (`http://127.0.0.1:7890`). HTTPS targets are tunneled via CONNECT.
+- **Image support** — send images inline (`POST /api/chat` with `images`) or read them with the `read_image` tool. Images are auto-preprocessed (max 1920px, alpha-flatten, JPEG re-encode) before reaching the model.
+- **Model presets** — define multiple providers in `config.yaml` `models:`; each appears as a dropdown in the chat bar for hot-switching. Subagent delegations can target a specific preset by name.
+- **Turn cancellation** — the stop button sends `POST /api/chat/cancel` to abort the active turn mid-stream.
+
 ### Single binary, no runtime dependencies
 
 - Musl static linking — no glibc requirement
@@ -157,7 +167,7 @@ Skills can use `ssh_exec` with `target` name or inline `host`/`user`/`password`.
 | Metric | Value |
 |---|---|
 | Runtime RSS | ~6 MB |
-| Binary size | ~2.6 MB |
+| Binary size | ~3.6 MB |
 | Target | < 10 MB RSS |
 
 ## Architecture
@@ -214,6 +224,8 @@ User input
 | `expr` | Condition expression evaluator + variable interpolation | (new) |
 | `memory` | Long-term KV store (flash-backed, LRU) | (new) |
 | `compaction` | Rolling context summary (independent context, configurable threshold) | (new) |
+| `image_preproc` | Image resize + format conversion (max 1920px, JPEG) | (new) |
+| `read_image` | `read_image` tool — read + preprocess local images for visual analysis | (new) |
 | `dispatcher` | Builds hooks from skill mode + drives AgentLoop | (new, simplified) |
 | `server` | HTTP server + SSE streaming + web client + config hot-reload | (new) |
 
@@ -237,11 +249,11 @@ Supported targets:
 
 | Target | Platform | Binary size |
 |---|---|---|
-| `x86_64-pc-windows-msvc` | Windows x86_64 | ~2.7 MB |
-| `aarch64-unknown-linux-musl` | Linux ARM64 (static) | ~2.7 MB |
-| `armv7-unknown-linux-musleabihf` | Linux ARMv7 hard-float (static) | ~2.9 MB |
-| `armv7-unknown-linux-musleabi` | Linux ARMv7 soft-float (static) | ~2.9 MB |
-| `x86_64-unknown-linux-musl` | Linux x86_64 (static) | ~3.2 MB |
+| `x86_64-pc-windows-msvc` | Windows x86_64 | ~3.6 MB |
+| `aarch64-unknown-linux-musl` | Linux ARM64 (static) | ~3.6 MB |
+| `armv7-unknown-linux-musleabihf` | Linux ARMv7 hard-float (static) | ~3.8 MB |
+| `armv7-unknown-linux-musleabi` | Linux ARMv7 soft-float (static) | ~3.8 MB |
+| `x86_64-unknown-linux-musl` | Linux x86_64 (static) | ~4.0 MB |
 
 All Linux binaries are statically linked (musl) — no runtime dependencies. See [cross/README.md](cross/README.md) for toolchain setup.
 
@@ -250,19 +262,19 @@ All Linux binaries are statically linked (musl) — no runtime dependencies. See
 Push a version tag to trigger automated multi-platform builds and GitHub Release:
 
 ```sh
-git tag v0.1.0-rc.6
-git push origin v0.1.0-rc.6
+git tag v0.1.0-rc.8
+git push origin v0.1.0-rc.8
 ```
 
 The CI workflow (`.github/workflows/release.yml`) builds all 5 targets in parallel, packages each with `config.yaml` + `skills/` + `README.md`, and creates a GitHub Release with downloadable archives.
 
-**Current release:** [v0.1.0-rc.6](https://github.com/xuanfengttp/deepseek-harness-lite/releases/tag/v0.1.0-rc.6)
+**Current release:** [v0.1.0-rc.8](https://github.com/xuanfengttp/deepseek-harness-lite/releases/tag/v0.1.0-rc.8)
 
 For local packaging, use the `packages.ps1` script:
 
 ```pwsh
-pwsh -File packages.ps1 -Version 0.1.0-rc.6
-# → release-packages/dsh-lite-0.1.0-rc.6-{platform}.{zip|tar.gz}
+pwsh -File packages.ps1 -Version 0.1.0-rc.8
+# → release-packages/dsh-lite-0.1.0-rc.8-{platform}.{zip|tar.gz}
 ```
 
 See [RELEASE.md](RELEASE.md) for the full release workflow.
@@ -317,7 +329,7 @@ The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming).
 
 ## Project status
 
-The unified plugin architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**. All extension points are implemented and tested: `StepHook`, `ToolPlugin`, `PromptSection`, `CommandPlugin`, `SubagentTool`. 46 tests pass, 0 compiler warnings.
+The unified plugin architecture (DESIGN-UNIFIED.md, 7 phases) is **complete**. All extension points are implemented and tested: `StepHook`, `ToolPlugin`, `PromptSection`, `CommandPlugin`, `SubagentTool`. 55 tests pass. The upstream v0.1.2-rc.1 sync (22 items across 4 batches) plus the v0.1.3-alpha.2 follow-up (cwd suffix placement + model-switch notice) are landed on `master`.
 
 | Phase | Content | Status |
 |---|---|---|

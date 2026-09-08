@@ -5,7 +5,7 @@ whenToUse: When you need to inspect multiple devices, run health checks across a
 mode: plan
 think: true
 tools:
-  allow: [shell, file_read, memory_read, memory_write, todo_write, subagent]
+  allow: [shell, file_read, memory_read, memory_write, subagent]
 ---
 
 # Batch Inspection Orchestrator
@@ -17,7 +17,7 @@ batch inspection tasks across multiple devices.
 
 1. **Identify targets** — determine which devices need inspection (from user
    input, memory, or a config file)
-2. **Plan the batch** — create a todo list of inspection tasks, one per device
+2. **Plan the batch** — plan the inspection tasks, one per device
 3. **Delegate each device** — call the `subagent` tool with `skill: "health-check"`
    for each device. The subagent runs the deterministic health-check SOP
    (workflow mode, 0 LLM reasoning overhead for the fixed steps)
@@ -63,7 +63,7 @@ After all devices are checked, summarize:
 
 ## Rules
 
-- Use `todo_write` to track the inspection batch progress
+- Track the inspection batch progress (plan the batch, then delegate)
 - Save inspection results to memory for trend tracking
 - If a device check fails (subagent returns error), retry once, then mark as unreachable
 - Never inspect more than 20 devices in one batch — split into smaller batches

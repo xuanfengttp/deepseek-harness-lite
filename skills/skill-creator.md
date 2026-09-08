@@ -86,8 +86,9 @@ steps:
 | memory_read | Read long-term KV store |
 | memory_write | Write long-term KV store |
 | ssh_exec | Persistent SSH session to network devices |
-| todo_write | Task tracking |
+| read_image | Read + preprocess an image file for visual analysis |
 | subagent | Delegate to a sub-agent (for orchestration skills) |
+| workflow | Parallel multi-agent orchestration |
 
 ## Variable Interpolation
 
@@ -201,21 +202,20 @@ description: <description>
 mode: plan
 think: true
 tools:
-  allow: [shell, file_read, memory_read, memory_write, todo_write, subagent]
+  allow: [shell, file_read, memory_read, memory_write, subagent]
 ---
 You are a network operations coordinator.
 
 ## Workflow
 1. Determine target device list
-2. Use todo_write to create a task checklist (one task per device)
-3. For each device, call subagent with the appropriate skill:
+2. For each device, call subagent with the appropriate skill:
    {"tool": "subagent", "arguments": {
      "description": "<task description>",
      "prompt": "<what the sub-agent should do>",
      "skill": "<sub-agent skill name>"
    }}
-4. Collect all sub-agent results
-5. Generate a summary report
+3. Collect all sub-agent results
+4. Generate a summary report
 
 ## Delegation Strategy
 - **Deterministic delegation** (specify skill): Use for known procedures like

@@ -5,7 +5,7 @@ whenToUse: When a user reports a fault and you need to diagnose root cause then 
 mode: plan
 think: true
 tools:
-  allow: [shell, file_read, file_write, file_search, memory_read, memory_write, memory_recall, todo_write, subagent]
+  allow: [shell, file_read, file_write, file_search, memory_read, memory_write, memory_recall, subagent]
 ---
 
 # Fault Triage Orchestrator

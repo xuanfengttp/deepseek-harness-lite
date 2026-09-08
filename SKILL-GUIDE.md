@@ -8,7 +8,7 @@ dsh-lite 的 skill 是 YAML frontmatter + Markdown body 的 `.md` 文件，放�
 ## 0. 系统提示词架构（分层 Section 设计）
 
 dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个巨大的文本块，
-而是由 5 个有序的微型 section 拼接而成，每个 section 极短、高信噪比。
+而是由 6 个有序的微型 section 拼接而成，每个 section 极短、高信噪比。
 
 ### 为什么分层
 
@@ -19,18 +19,20 @@ dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个
 - **按需注入**：workflow 模式的 tool 步不发系统提示词（ForceTool 跳过 LLM 调用）
 - **行为规则 > 描述**：每个工具注入 1 句"怎么用"的行为规则，而非"是什么"的描述
 - **变量插值**：`{{cwd}}`、`{{model}}` 运行时自动注入，不需要 LLM 探索
+- **KV 缓存友好**：固定内容在前、动态/环境内容在后，逐机器差异（cwd）放末尾，不打断可复用前缀
 
-### 5 层 Section（按 order 排序）
+### 6 层 Section（按 order 排序）
 
 | order | name | 内容 | token 成本 | 注入条件 |
 |-------|------|------|-----------|----------|
-| -100 | `harness:identity` | "You are an AI agent. Working directory: {{cwd}}." | ~20 | 始终注入 |
+| -100 | `harness:identity` | "You are an AI agent." | ~10 | 始终注入 |
+| -90 | `behavior-rules` | 3 条通用行为规则 | ~80 | 始终注入 |
+| -80 | `tools` | 每个工具 1 句行为规则（guidance） | ~15/工具 | 有允许工具时 |
 | 0 | `persona` | skill body（角色/方法论） | 可变 | skill body 非空时 |
-| 5 | `custom-prompt` | 用户自定义提示词（设置面板） | 可变 | `config.prompt.custom` 非空时 |
-| 10 | `behavior-rules` | 3 条通用行为规则 | ~80 | 始终注入 |
-| 100 | `tools` | 每个工具 1 句行为规则（guidance） | ~15/工具 | 有允许工具时 |
+| 10 | `custom-prompt` | 用户自定义提示词（设置面板） | 可变 | `config.prompt.custom` 非空时 |
+| 20 | `environment` | "Working directory: {{cwd}}." | ~10 | 始终注入 |
 
-### 通用行为规则（order=10）
+### 通用行为规则（order=-90）
 
 ```
 ## Rules
@@ -60,7 +62,7 @@ dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个
 
 | 变量 | 来源 | 注入位置 |
 |------|------|----------|
-| `{{cwd}}` | `std::env::current_dir()` | identity section |
+| `{{cwd}}` | `std::env::current_dir()` | environment section（order 20，末尾） |
 | `{{model}}` | config.model.model | 可在 skill body 中使用 |
 | `{{自定义}}` | skill variables | args, prompt, input, when, body |
 
@@ -349,7 +351,7 @@ description: 批量巡检编排 — 主 agent 规划检查哪些设备，委托�
 mode: plan
 think: true
 tools:
-  allow: [shell, file_read, memory_read, memory_write, todo_write, subagent]
+  allow: [shell, file_read, memory_read, memory_write, subagent]
 ---
 # 批量巡检编排
 
@@ -357,10 +359,9 @@ tools:
 
 ## 工作流程
 1. 确定巡检目标设备列表
-2. 用 todo_write 创建巡检任务清单（每台设备一个任务）
-3. 对每台设备调用 subagent，指定 skill: "health-check"
-4. 收集所有子 agent 的结果
-5. 汇总生成巡检报告
+2. 对每台设备调用 subagent，指定 skill: "health-check"
+3. 收集所有子 agent 的结果
+4. 汇总生成巡检报告
 
 ## 委托方式
 对每台设备调用：
@@ -684,15 +685,14 @@ description: 批量 SSH 巡检多台网络设备
 mode: plan
 think: true
 tools:
-  allow: [ssh_exec, todo_write, subagent, memory_read, memory_write]
+  allow: [ssh_exec, subagent, memory_read, memory_write]
 ---
 你是网络运维协调员。
 
 ## 工作流程
 1. 确定巡检设备列表
-2. 用 todo_write 创建任务清单（每台设备一个任务）
-3. 对每台设备调用 subagent，指定 skill: "remote-interface-check"
-4. 收集所有子 agent 结果，生成汇总报告
+2. 对每台设备调用 subagent，指定 skill: "remote-interface-check"
+3. 收集所有子 agent 结果，生成汇总报告
 
 ## 委托方式
 {"tool": "subagent", "arguments": {

@@ -6,9 +6,9 @@
 
 ## 这是什么
 
-DeepSeek Harness Lite（`dsh-lite`）是对 DeepSeek Harness 核心架构的全新 Rust 实现——保留了 turn/step agent loop、append-only session log、基于能力的工具系统、声明式 skill——同时去除了重量级的插件加载器、Web 前端和多进程编排层。
+DeepSeek Harness Lite（`dsh-lite`）是对 DeepSeek Harness 核心架构的全新 Rust 实现——保留了 turn/step agent loop、append-only session log、基于能力的工具系统、声明式 skill——同时去除了重量级的插件加载器和多进程编排层。
 
-最终产物是一个单一静态二进制文件，运行时内存占用约 6 MB，适用于无法运行完整 Node.js 运行时的资源受限环境。
+最终产物是一个单一静态二进制文件，大小约 3.6 MB，运行时内存占用约 6 MB，适用于无法运行完整 Node.js 运行时的资源受限环境。内置单文件嵌入式 Web 客户端，用于交互式对话。
 
 > **下载预编译二进制：** [最新 Release](https://github.com/xuanfengttp/deepseek-harness-lite/releases) — Windows x86_64、Linux ARM64/ARMv7/x86_64（musl 静态链接，零依赖）
 
@@ -105,30 +105,32 @@ compaction:
 | `file_read` | 读取文件内容 |
 | `file_write` | 写入文件 |
 | `file_search` | Glob 模式文件搜索 |
+| `read_image` | 读取 + 预处理图片文件（自动缩放到 1920px，JPEG 重编码）用于视觉分析 |
 | `ssh_exec` | 通过持久 SSH 会话在远程网元设备上执行命令（连接复用，交互式查询） |
 | `memory_*` | 长期记忆读取 / 写入 / 回忆 |
-| `todo_write` | 多步操作任务跟踪 |
-| `subagent` | 委托子任务给子 agent（零父上下文，maxDepth=3） |
+| `subagent` | 委托子任务给子 agent（零父上下文，maxDepth=3，可指定模型预设覆盖） |
+| `workflow` | 并行多 agent 编排（任务列表扇出到多个子 agent） |
 
 工具是 `ToolPlugin` trait 实现，通过 `register_builtins()` 注册。新增工具只需实现 trait + 一行注册代码——无需修改核心代码。工具通过 3 阶段管线执行：**check**（权限 + 校验）→ **execute**（带超时）→ **result**（截断 + 归一化）。
 
 ### 分层系统提示词
 
-系统提示词由 5 个有序 section 拼接——每个极短、高信噪比，固定上下文成本控制在 ~300 tokens 以内：
+系统提示词由 6 个有序 section 拼接——每个极短、高信噪比，固定上下文成本控制在 ~300 tokens 以内：
 
 | order | section | 来源 | tokens |
 |---|---|---|---|
-| -100 | 身份 | 固定（"You are an AI agent. Working dir: {{cwd}}."） | ~20 |
+| -100 | 身份 | 固定（"You are an AI agent."） | ~10 |
+| -90 | 行为规则 | 3 条通用规则（检查退出码、验证事实、简洁回答） | ~80 |
+| -80 | 工具引导 | 每个允许工具 1 句行为规则 | ~15/工具 |
 | 0 | 角色 | skill body | 可变 |
-| 5 | 自定义提示词 | 设置面板用户输入 | 可变 |
-| 10 | 行为规则 | 3 条通用规则（检查退出码、验证事实、简洁回答） | ~80 |
-| 100 | 工具引导 | 每个允许工具 1 句行为规则 | ~15/工具 |
+| 10 | 自定义提示词 | 设置面板用户输入 | 可变 |
+| 20 | 环境事实 | 工作目录（`{{cwd}}`）——放在末尾 | ~10 |
 
-每个工具有 `guidance` 字段（怎么用）独立于 `description`（是什么）——只有 `guidance` 进入系统提示词。运行时变量 `{{cwd}}` 和 `{{model}}` 自动插值。自定义提示词 section 可选（留空则不注入）。详见 [SKILL-GUIDE.md](SKILL-GUIDE.md) §0。
+每个工具有 `guidance` 字段（怎么用）独立于 `description`（是什么）——只有 `guidance` 进入系统提示词。运行时变量 `{{cwd}}` 和 `{{model}}` 自动插值。自定义提示词 section 可选（留空则不注入）。环境事实（cwd）放在末尾，避免逐机器差异打散可复用前缀。详见 [SKILL-GUIDE.md](SKILL-GUIDE.md) §0。
 
 ### 自定义系统提示词
 
-用户可通过设置面板（通用页 → 系统提示词）注入自定义提示词，位于角色和行为规则之间，支持 `{{cwd}}`/`{{model}}` 插值，即时生效（热重载，无需重启）。存储在 `config.yaml` 的 `prompt.custom` 段。
+用户可通过设置面板（通用页 → 系统提示词）注入自定义提示词，位于角色之后（order 10），支持 `{{cwd}}`/`{{model}}` 插值，即时生效（热重载，无需重启）。存储在 `config.yaml` 的 `prompt.custom` 段。
 
 ### SSH 远程设备操作
 
@@ -146,6 +148,14 @@ ssh:
 
 Skill 中可用 `ssh_exec` 配合 `target` 名称或内联 `host`/`user`/`password`。完整 SSH 使用指南（配置、调用方式、持久会话、skill 示例）见 [SKILL-GUIDE.md](SKILL-GUIDE.md) §9。
 
+### HTTPS、代理与多模态
+
+- **HTTPS 端点** — `base_url` 支持 `https://`（rustls TLS，加载系统根证书，回退内置根证书）。
+- **HTTP/HTTPS 代理** — 任意模型配置可设 `proxy`（`http://127.0.0.1:7890`）。HTTPS 目标经 CONNECT 隧道。
+- **图片支持** — 通过内联图片（`POST /api/chat` 带 `images`）或用 `read_image` 工具读取。图片自动预处理（最大 1920px、alpha 展平、JPEG 重编码）后再发给模型。
+- **模型预设** — 在 `config.yaml` 的 `models:` 定义多个 provider，每个出现在聊天栏下拉框，支持热切换。子代理委托可按名称指定预设。
+- **Turn 取消** — 停止按钮发送 `POST /api/chat/cancel`，中断流式中的当前 turn。
+
 ### 单二进制，无运行时依赖
 
 - musl 静态链接——不依赖 glibc
@@ -157,7 +167,7 @@ Skill 中可用 `ssh_exec` 配合 `target` 名称或内联 `host`/`user`/`passwo
 | 指标 | 数值 |
 |---|---|
 | 运行时 RSS | ~6 MB |
-| 二进制大小 | ~2.6 MB |
+| 二进制大小 | ~3.6 MB |
 | 目标 | < 10 MB RSS |
 
 ## 架构
@@ -214,6 +224,8 @@ Skill 中可用 `ssh_exec` 配合 `target` 名称或内联 `host`/`user`/`passwo
 | `expr` | 条件表达式求值 + 变量插值 |（新增）|
 | `memory` | 长期 KV store（flash 持久化，LRU） |（新增）|
 | `compaction` | 滚动上下文摘要（独立上下文，阈值可配置） |（新增）|
+| `image_preproc` | 图片缩放 + 格式转换（最大 1920px，JPEG） |（新增）|
+| `read_image` | `read_image` 工具 — 读取 + 预处理本地图片用于视觉分析 |（新增）|
 | `dispatcher` | 根据 skill 模式构建钩子 + 驱动 AgentLoop |（新增，已简化）|
 | `server` | HTTP 服务器 + SSE 流式 + Web 客户端 + 配置热重载 |（新增）|
 
@@ -237,11 +249,11 @@ cargo zigbuild --release --target x86_64-unknown-linux-musl
 
 | 目标 | 平台 | 二进制大小 |
 |---|---|---|
-| `x86_64-pc-windows-msvc` | Windows x86_64 | ~2.7 MB |
-| `aarch64-unknown-linux-musl` | Linux ARM64（静态） | ~2.7 MB |
-| `armv7-unknown-linux-musleabihf` | Linux ARMv7 硬浮点（静态） | ~2.9 MB |
-| `armv7-unknown-linux-musleabi` | Linux ARMv7 软浮点（静态） | ~2.9 MB |
-| `x86_64-unknown-linux-musl` | Linux x86_64（静态） | ~3.2 MB |
+| `x86_64-pc-windows-msvc` | Windows x86_64 | ~3.6 MB |
+| `aarch64-unknown-linux-musl` | Linux ARM64（静态） | ~3.6 MB |
+| `armv7-unknown-linux-musleabihf` | Linux ARMv7 硬浮点（静态） | ~3.8 MB |
+| `armv7-unknown-linux-musleabi` | Linux ARMv7 软浮点（静态） | ~3.8 MB |
+| `x86_64-unknown-linux-musl` | Linux x86_64（静态） | ~4.0 MB |
 
 所有 Linux 二进制均为 musl 静态链接——无运行时依赖，开箱即用。工具链安装见 [cross/README.md](cross/README.md)。
 
@@ -250,19 +262,19 @@ cargo zigbuild --release --target x86_64-unknown-linux-musl
 推送版本标签即可触发自动多平台构建和 GitHub Release：
 
 ```sh
-git tag v0.1.0-rc.6
-git push origin v0.1.0-rc.6
+git tag v0.1.0-rc.8
+git push origin v0.1.0-rc.8
 ```
 
 CI 工作流（`.github/workflows/release.yml`）并行构建全部 5 个目标，每个打包包含 `config.yaml` + `skills/` + `README.md`，并创建 GitHub Release 供下载。
 
-**当前发布版本：** [v0.1.0-rc.6](https://github.com/xuanfengttp/deepseek-harness-lite/releases/tag/v0.1.0-rc.6)
+**当前发布版本：** [v0.1.0-rc.8](https://github.com/xuanfengttp/deepseek-harness-lite/releases/tag/v0.1.0-rc.8)
 
 本地打包用 `packages.ps1` 脚本：
 
 ```pwsh
-pwsh -File packages.ps1 -Version 0.1.0-rc.6
-# → release-packages/dsh-lite-0.1.0-rc.6-{平台}.{zip|tar.gz}
+pwsh -File packages.ps1 -Version 0.1.0-rc.8
+# → release-packages/dsh-lite-0.1.0-rc.8-{平台}.{zip|tar.gz}
 ```
 
 完整发布流程见 [RELEASE.md](RELEASE.md)。
@@ -317,7 +329,7 @@ skill:
 
 ## 项目状态
 
-统一插件化架构（DESIGN-UNIFIED.md，7 个阶段）已**全部完成**。所有扩展点已实现并测试：`StepHook`、`ToolPlugin`、`PromptSection`、`CommandPlugin`、`SubagentTool`。46 个测试通过，0 个编译警告。
+统一插件化架构（DESIGN-UNIFIED.md，7 个阶段）已**全部完成**。所有扩展点已实现并测试：`StepHook`、`ToolPlugin`、`PromptSection`、`CommandPlugin`、`SubagentTool`。55 个测试通过。上游 v0.1.2-rc.1 同步（4 批次 22 项）以及 v0.1.3-alpha.2 跟进（cwd 后置 + 模型切换公告）均已落地到 `master`。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
