@@ -964,7 +964,7 @@ body {
   <div class="main">
     <div class="header">
       <div class="header-left">
-        <div class="header-title"><span data-i18n="skill">技能</span>: <span class="skill-name" id="active-skill-name">—</span></div>
+        <div class="header-title"><span data-i18n="skill">技能</span>: <select id="skill-select" class="skill-select" title="Skill"></select> <span class="skill-name" id="active-skill-name">—</span></div>
       </div>
       <div class="header-controls">
         <div class="view-tabs">
@@ -1459,21 +1459,39 @@ async function loadSkills() {
     const res = await fetch('/api/skills');
     const skills = await res.json();
     const sel = document.getElementById('skill-select');
+    if (!sel) return;
     sel.innerHTML = '';
-    skills.forEach(s => {
+    const autoOpt = document.createElement('option');
+    autoOpt.value = 'auto';
+    autoOpt.textContent = '🤖 auto（' + t('auto_route') + '）';
+    sel.appendChild(autoOpt);
+    let activeName = null;
+    (skills || []).forEach(s => {
       const opt = document.createElement('option');
       opt.value = s.name;
-      opt.textContent = `${s.name} (${s.mode}${s.think?'+think':''})`;
+      opt.textContent = `${s.name}（${s.mode}${s.think && s.think !== 'off' ? '+think' : ''}）`;
       sel.appendChild(opt);
+      if (s.active) activeName = s.name;
     });
-    if (skills.length > 0) {
-      document.getElementById('active-skill-name').textContent = skills[0].name;
-    }
+    sel.value = activeName || 'auto';
+    const el = document.getElementById('active-skill-name');
+    if (el) el.textContent = activeName || 'auto';
   } catch(e) { console.error('loadSkills', e); }
 }
-function switchSkill() {
+async function switchSkill() {
   const sel = document.getElementById('skill-select');
-  document.getElementById('active-skill-name').textContent = sel.value;
+  const name = sel ? sel.value : 'auto';
+  const label = name === 'auto' ? 'auto' : name;
+  const el = document.getElementById('active-skill-name');
+  if (el) el.textContent = label;
+  try {
+    const res = await fetch('/api/skills/active', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    if (!res.ok) console.error('switchSkill failed', res.status);
+  } catch(e) { console.error('switchSkill', e); }
 }
 
 // ─── Slash command popup ─────────────────────────────────────────────
@@ -3222,7 +3240,7 @@ const I18N = {
   zh: {
     new_session:'新建会话', settings:'设置', settings_title:'设置',
     search_sessions:'搜索会话...',
-    skill:'技能', trajectory:'轨迹', chat:'对话', ready:'就绪', send_to_start:'发送消息开始对话。',
+    skill:'技能', auto_route:'自动路由', trajectory:'轨迹', chat:'对话', ready:'就绪', send_to_start:'发送消息开始对话。',
     input_placeholder:'发送消息… 输入 / 查看命令',
     appearance:'外观', model_section:'模型', tools:'工具', config_file:'配置文件', language:'语言',
     general:'通用',
@@ -3255,7 +3273,7 @@ const I18N = {
   en: {
     new_session:'New Session', settings:'Settings', settings_title:'Settings',
     search_sessions:'Search sessions...',
-    skill:'Skill', trajectory:'Trajectory', chat:'Chat', ready:'Ready', send_to_start:'Send a message to start a conversation.',
+    skill:'Skill', auto_route:'Auto', trajectory:'Trajectory', chat:'Chat', ready:'Ready', send_to_start:'Send a message to start a conversation.',
     input_placeholder:'Send a message… type / for commands',
     appearance:'Appearance', model_section:'Model', tools:'Tools', config_file:'Config File', language:'Language',
     general:'General',
@@ -3335,6 +3353,7 @@ const _heroEl = document.getElementById('hero');
 heroTemplate = _heroEl ? _heroEl.outerHTML : '<div class="hero" id="hero"><h2 data-i18n="ready">就绪</h2><p data-i18n="send_to_start">发送消息开始对话。</p></div>';
 loadSessions();
 loadSkills();
+document.getElementById('skill-select')?.addEventListener('change', switchSkill);
 loadModelPresets();
 loadCommands();
 loadConfig().then(() => loadActiveHistory());

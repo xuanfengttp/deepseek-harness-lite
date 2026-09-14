@@ -60,7 +60,7 @@ steps:
 3. 提供修复建议
 ```
 
-同一时间只有一个 skill 激活——其 persona、工具和指令被注入到 prompt 中。工具 schema 按 skill 的白名单过滤。
+Skill 默认**自动路由**：每个请求会与已加载 skill 的 `whenToUse` 描述匹配（输入中显式提到 skill 名可立即命中；否则用一次小规模确定性 LLM 调用选出最匹配者）。命中则应用该 skill 的 persona、工具与执行模式；不命中则回退为直接对话——skill 绝不会被强加到无关输入上。通过头部下拉框或 `--skill <名称>` 可永久锁定某个 skill（关闭路由）。
 
 ### Session 日志与消息派生
 
@@ -290,12 +290,15 @@ dsh-lite
 # 单轮模式（传入 prompt）
 dsh-lite "检查接口状态"
 
-# 选择特定 skill
+# 默认：skill 自动路由（按 whenToUse 匹配）
+dsh-lite
+
+# 锁定到特定 skill（关闭路由）
 dsh-lite --skill interface-diagnostics "eth0 is down"
 ```
 
 agent 从 `config/default.yaml` 加载配置，扫描 `skills/` 目录的 skill 文件，
-通过激活 skill 的模式驱动 AgentLoop 执行请求。
+将每个请求路由到最匹配的 skill（不匹配则直接对话），并通过其声明的模式执行。
 
 配置：
 

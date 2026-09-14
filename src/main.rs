@@ -10,6 +10,7 @@ mod session_manager;
 mod llm;
 mod prompt;
 mod policy;
+mod router;
 mod skill;
 mod agent;
 mod expr;
@@ -146,8 +147,10 @@ async fn async_main() -> ExitCode {
     }
 
     // Determine active skill: CLI `--skill <name>` overrides config `skill.active`.
-    // If neither is set, use the built-in default (general-purpose assistant)
-    // instead of auto-selecting the first skill file (which may be platform-specific).
+    // If neither is set, use "auto" (skill router) — NOT the first skill file.
+    // This is the root-cause fix for "everything runs through one skill": the
+    // previous fallback to `skills.first()` silently locked every request into
+    // the first registered skill even when the user never selected it.
     let cli_skill_name: Option<String> = parse_cli_skill();
     let skill_name = cli_skill_name.as_deref().or(config.skill.active.as_deref());
     let active_skill = if skill_name.is_some() {
@@ -155,7 +158,18 @@ async fn async_main() -> ExitCode {
             .cloned()
             .unwrap_or_else(default_skill)
     } else {
-        default_skill()
+        // No explicit skill — auto routing decides per request.
+        Skill {
+            name: "auto".into(),
+            description: "Auto route per request".into(),
+            when_to_use: None,
+            mode: ExecMode::Plan,
+            think: ThinkLevel::Off,
+            tools_allow: vec![],
+            variables: std::collections::HashMap::new(),
+            body: String::new(),
+            steps: vec![],
+        }
     };
     log::info!("Active skill: {} (mode: {:?}, think: {:?})", active_skill.name, active_skill.mode, active_skill.think);
 

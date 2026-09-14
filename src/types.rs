@@ -303,6 +303,15 @@ pub struct SkillConfig {
     /// Can be overridden by CLI `--skill <name>`.
     #[serde(default)]
     pub active: Option<String>,
+    /// Auto-route user input to a matching skill (default true).
+    /// When true, the system picks a skill per request based on user input;
+    /// when false, the active skill applies to every request (legacy behavior).
+    #[serde(default = "default_auto_route")]
+    pub auto_route: bool,
+}
+
+fn default_auto_route() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Deserialize)]

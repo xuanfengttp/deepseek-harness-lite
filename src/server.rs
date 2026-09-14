@@ -429,16 +429,31 @@ async fn handle_request(
 
         // List skills
         (Method::GET, "/api/skills") => {
+            let active_name = state.active_skill_name.lock().await.clone();
             let skills_json: Vec<serde_json::Value> = state.skills.iter().map(|s| {
                 serde_json::json!({
                     "name": s.name,
                     "description": s.description,
                     "mode": format!("{:?}", s.mode).to_lowercase(),
                     "think": format!("{:?}", s.think).to_lowercase(),
+                    "when_to_use": s.when_to_use.clone().unwrap_or_default(),
+                    "active": s.name == active_name,
                 })
             }).collect();
             let json = serde_json::to_string(&skills_json).unwrap_or_else(|_| "[]".into());
             serve_json(&json)
+        }
+
+        // Switch active skill (POST body: {"name": "health-check"} or {"name": "auto"})
+        (Method::POST, "/api/skills/active") => {
+            let body = req.into_body().collect().await.unwrap_or_default().to_bytes();
+            let parsed = serde_json::from_slice::<serde_json::Value>(&body).ok().unwrap_or(serde_json::json!({}));
+            let name = parsed.get("name").and_then(|n| n.as_str()).map(String::from).unwrap_or_default();
+            let mut cur = state.active_skill_name.lock().await;
+            *cur = name.clone();
+            drop(cur);
+            log::info!("Active skill switched to: {}", name);
+            serve_json(r#"{"ok":true}"#)
         }
 
         // Chat (SSE stream)
@@ -621,6 +636,23 @@ async fn handle_request(
     Ok(response)
 }
 
+/// The neutral fallback skill: a bare general-purpose assistant with no
+/// domain-specific instructions. Used when no skill is selected, or when the
+/// skill router decides the request is a plain conversation.
+fn default_skill() -> Skill {
+    Skill {
+        name: "default".into(),
+        description: "default".into(),
+        when_to_use: None,
+        mode: ExecMode::Plan,
+        think: ThinkLevel::Off,
+        tools_allow: vec![],
+        variables: std::collections::HashMap::new(),
+        body: "You are a helpful assistant.".into(),
+        steps: vec![],
+    }
+}
+
 /// Handle POST /api/chat — starts a turn and streams LoopEvents as SSE.
 async fn handle_chat(
     req: Request<Incoming>,
@@ -689,22 +721,18 @@ async fn handle_chat(
 
     // Find the active skill.
     let skill_name = state.active_skill_name.lock().await.clone();
-    let skill = state.skills.iter()
-        .find(|s| s.name == skill_name)
-        .cloned()
-        .unwrap_or_else(|| state.skills.first().cloned().unwrap_or_else(|| {
-            Skill {
-                name: "default".into(),
-                description: "default".into(),
-                when_to_use: None,
-                mode: ExecMode::Plan,
-                think: ThinkLevel::Off,
-                tools_allow: vec![],
-                variables: std::collections::HashMap::new(),
-                body: "You are a helpful assistant.".into(),
-                steps: vec![],
-            }
-        }));
+    let mut skill = if skill_name == "auto" {
+        // Auto mode: start from a neutral base; the router below picks per request.
+        // Deliberately NOT `skills.first()` — that fallback silently locked every
+        // request into the first registered skill (the reported "everything runs
+        // through one skill" behavior) even when the user never selected it.
+        default_skill()
+    } else {
+        state.skills.iter()
+            .find(|s| s.name == skill_name)
+            .cloned()
+            .unwrap_or_else(default_skill)
+    };
 
     // Take the session out of the manager.
     let session = {
@@ -720,6 +748,29 @@ async fn handle_chat(
     crate::tools::register_workflow(&mut tools, &config);
 
     let llm = crate::llm::LlmClient::new(&config.model);
+
+    // Skill auto-routing: pick a matching skill per request — ONLY in auto mode.
+    // When the user explicitly selected a skill (name != "auto"), respect that
+    // lock and skip routing (the selected skill applies to every request).
+    if config.skill.auto_route && skill_name == "auto" && !state.skills.is_empty() {
+        let recent = session.derive_messages();
+        // Only take the last few messages as routing context (avoid huge histories).
+        let recent_slice: Vec<crate::types::Message> = recent.into_iter().rev().take(6).rev().collect();
+        let decision = crate::router::route_skill(&llm, &config.model, &message, &state.skills, &recent_slice).await;
+        match decision {
+            crate::router::RouteDecision::UseSkill(name) => {
+                if let Some(s) = state.skills.iter().find(|s| s.name == name) {
+                    skill = s.clone();
+                    log::info!("Skill router: using skill `{name}`");
+                }
+            }
+            crate::router::RouteDecision::Direct => {
+                // Plain conversation — reset to a neutral default skill.
+                skill = default_skill();
+                log::info!("Skill router: no match — direct conversation");
+            }
+        }
+    }
 
     // Create cancellation channel for this turn.
     let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);

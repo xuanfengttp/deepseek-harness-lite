@@ -51,6 +51,9 @@ compaction:
 
 skill:
   dir: "skills"
+  # 自动路由：true = 根据用户输入自动选择匹配的 skill，不匹配则直接对话
+  # false = 始终使用 active skill（旧行为）
+  auto_route: true
 
 # Custom system prompt — injected between persona and behavior rules.
 # Supports {{cwd}} and {{model}} interpolation. Leave empty to omit.

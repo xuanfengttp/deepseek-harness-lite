@@ -5,6 +5,34 @@ dsh-lite 的 skill 是 YAML frontmatter + Markdown body 的 `.md` 文件，放�
 
 ---
 
+## Skill 自动路由（按需使用，不再全局强制）
+
+**v0.1.3 起，skill 默认按用户输入自动路由，而不是"激活一个 skill 就全局生效"**：
+
+- **规则快检（零成本）**：用户输入显式提到 skill 名（如"用 health-check"）→ 立即使用该 skill。
+- **LLM 判断（兜底）**：否则用一次小规模确定性调用（max_tokens 16，temperature 0），把每个
+  skill 的 `name` / `description` / `whenToUse` 列给模型，让它选出最匹配者；回复 `none` 或
+  解析失败 → 直接对话（不套用任何 skill）。
+- **手动锁定**：通过 Web 头部下拉框或 `--skill <name>` 选中具体 skill 后，路由关闭，该 skill
+  对每个请求生效（恢复旧行为）。
+- **开关**：`config/default.yaml` → `skill.auto_route: true/false`（默认 true）。
+
+路由逻辑见 `src/router.rs`。**关键收益**：用户的普通问题（寒暄、咨询）不再被强行套进某个
+skill 的流程；只有输入确实匹配 skill 的 `whenToUse` 时才进入该 skill 的 persona/模式/步骤。
+
+> 这也是对"注册 skill 后所有请求都按它跑"的根因修复：此前未显式选择时，请求会静默回退到
+> `skills/` 下**第一个** skill（`skills.first()`），导致用户从未选择却被迫使用某个 skill。
+> 现在未选择时进入 `auto` 模式（按输入路由），显式选择时才锁定。
+
+### 编写建议
+
+- **`whenToUse` 一定要写清楚**：它是自动路由的主要依据，描述越具体，路由越准。
+  例如 `whenToUse: When the user reports interface anomalies, link failures, or port issues`。
+- 通用对话类能力**不要**做成 skill——路由会把不匹配的输入送回直接对话，但做得越窄越准。
+- workflow/todo 模式 skill 的 `whenToUse` 要覆盖所有合法触发场景，否则用户不点名时会漏触发。
+
+---
+
 ## 0. 系统提示词架构（分层 Section 设计）
 
 dsh-lite 借鉴原版 dsh 的分层 section 设计，系统提示词不是一个巨大的文本块，

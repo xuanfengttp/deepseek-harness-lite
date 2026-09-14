@@ -60,7 +60,7 @@ You are a diagnostic assistant. Follow this flow:
 3. Suggest fixes
 ```
 
-One skill active at a time — its persona, tools, and instructions are injected into the prompt. Tool schemas are filtered to the skill's allow-list.
+Skills are auto-routed by default: each request is matched against the loaded skills' `whenToUse` descriptions (an explicit skill-name mention wins instantly; otherwise a tiny deterministic LLM call picks the best fit). Matches apply the skill's persona, tools, and execution mode; non-matches fall back to plain conversation — the skill is never forced onto unrelated input. Switch to a specific skill permanently (locking routing off) via the header dropdown or `--skill <name>`.
 
 ### Session log with message derivation
 
@@ -290,12 +290,17 @@ dsh-lite
 # Single-turn mode (pass a prompt)
 dsh-lite "check interface status"
 
-# Select a specific skill
+```sh
+# Default: skill auto-routing (input matched against whenToUse per request)
+dsh-lite
+
+# Lock to a specific skill (routing off)
 dsh-lite --skill interface-diagnostics "eth0 is down"
 ```
 
 The agent loads config from `config/default.yaml`, scans `skills/` for skill
-files, and drives the agent loop through the active skill's mode.
+files, and routes each request to the best-matching skill (or plain
+conversation) through its declared mode.
 
 Configuration:
 
