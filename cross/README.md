@@ -47,13 +47,22 @@ cargo zigbuild --release --target aarch64-unknown-linux-musl
 cargo zigbuild --release --target armv7-unknown-linux-musleabihf
 
 # Linux ARMv7 soft-float
-cargo zigbuild --release --target armv7-unknown-linux-musleabi
+# NOTE: rustc >= 1.97 breaks this target (undefined symbol: fminimum_num) — use 1.94
+cargo +1.94.0 zigbuild --release --target armv7-unknown-linux-musleabi
 
 # Linux x86_64
 cargo zigbuild --release --target x86_64-unknown-linux-musl
 ```
 
 All dependencies are pure-Rust (no C bindings), so no C cross-toolchain is needed beyond zig.
+
+> **Known toolchain quirk — rustc ≥1.97 breaks `armv7-unknown-linux-musleabi` (soft-float).**
+> Newer rustc/LLVM emit references to the C23 math symbols `fminimum_num` / `fmaximum_numf`
+> when linking soft-float ARMv7 musl, but the musl soft-float `libm` does not provide them:
+> `ld.lld: error: undefined symbol: fminimum_num`. Verified broken on rustc 1.97.1 with
+> zig 0.13/0.14/0.16; **works on rustc 1.94.0** (`cargo +1.94.0 zigbuild ...`).
+> The other four targets (Windows MSVC, aarch64, armv7 hard-float, x86_64 musl) build fine
+> on current stable.
 
 ## Package for release
 

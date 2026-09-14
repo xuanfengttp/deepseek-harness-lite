@@ -43,7 +43,8 @@ cargo zigbuild --release --target aarch64-unknown-linux-musl
 cargo zigbuild --release --target armv7-unknown-linux-musleabihf
 
 # 4. Linux ARMv7 soft-float (musl static)
-cargo zigbuild --release --target armv7-unknown-linux-musleabi
+# NOTE: rustc >= 1.97 breaks this target (undefined symbol: fminimum_num) — use 1.94
+cargo +1.94.0 zigbuild --release --target armv7-unknown-linux-musleabi
 
 # 5. Linux x86_64 (musl static)
 cargo zigbuild --release --target x86_64-unknown-linux-musl
