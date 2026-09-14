@@ -416,13 +416,18 @@ async fn handle_request(
                     "base_url": p.base_url,
                 })
             }).collect();
-            // Always include the default model as the first entry.
-            let default = serde_json::json!({
-                "name": "默认",
-                "model": config.model.model,
-                "base_url": config.model.base_url,
+            // Always include the default model as the first entry (unless already present).
+            let already_present = config.models.iter().any(|p| {
+                p.name == "默认" && p.model == config.model.model
             });
-            let mut all = vec![default];
+            let mut all: Vec<serde_json::Value> = Vec::new();
+            if !already_present {
+                all.push(serde_json::json!({
+                    "name": "默认",
+                    "model": config.model.model,
+                    "base_url": config.model.base_url,
+                }));
+            }
             all.extend(presets);
             serve_json(&serde_json::to_string(&all).unwrap_or_else(|_| "[]".into()))
         }
