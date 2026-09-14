@@ -416,16 +416,20 @@ async fn handle_request(
                     "base_url": p.base_url,
                 })
             }).collect();
+            // The "default" model is whatever was used last (dynamic memory):
+            // prefer the persisted last-used model, fall back to config.model.
+            let last = crate::model_state::load_last_model();
+            let default_cfg = last.as_ref().unwrap_or(&config.model);
             // Always include the default model as the first entry (unless already present).
             let already_present = config.models.iter().any(|p| {
-                p.name == "默认" && p.model == config.model.model
+                p.name == "默认" && p.model == default_cfg.model
             });
             let mut all: Vec<serde_json::Value> = Vec::new();
             if !already_present {
                 all.push(serde_json::json!({
                     "name": "默认",
-                    "model": config.model.model,
-                    "base_url": config.model.base_url,
+                    "model": default_cfg.model,
+                    "base_url": default_cfg.base_url,
                 }));
             }
             all.extend(presets);
@@ -723,6 +727,9 @@ async fn handle_chat(
             }
         }
     }
+
+    // Persist the effective model as the new "default" (last-used memory).
+    crate::model_state::save_last_model(&config.model);
 
     // Find the active skill.
     let skill_name = state.active_skill_name.lock().await.clone();

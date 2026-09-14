@@ -257,7 +257,7 @@ fn default_context_window() -> usize { 8192 }
 fn default_max_tokens() -> usize { 2048 }
 fn default_temperature() -> f32 { 0.0 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelConfig {
     pub base_url: String,
     pub api_key: String,

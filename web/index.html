@@ -3035,7 +3035,6 @@ function renderProviderCards() {
         ${p.isDefault ? '<span style="font-size:11px;color:var(--label-tertiary);border:1px solid var(--border-l3);border-radius:4px;padding:1px 6px">默认</span>' : ''}
         <span class="provider-actions">
           <button class="provider-btn" onclick="toggleProviderEdit(${i})">${isOpen ? '收起' : '编辑'}</button>
-          ${!p.isDefault ? `<button class="provider-btn" onclick="makeDefault(${i})">设为默认</button>` : ''}
           <button class="provider-btn danger" onclick="deleteProvider(${i})">删除</button>
         </span>
       </div>
@@ -3139,47 +3138,18 @@ async function saveProvider(idx) {
   }
 }
 
-async function makeDefault(idx) {
-  const p = providersData[idx];
-  if (p.isDefault) return;
-  // Promote this preset to the default model; demote the current default to a regular preset
-  // so no model data is lost — only "who is default" changes.
-  const oldDefault = providersData.find(x => x.isDefault);
-  const models = [];
-  if (oldDefault) {
-    models.push({name: oldDefault.name, base_url: oldDefault.base_url, api_key: oldDefault.api_key, model: oldDefault.model, context_window: oldDefault.context_window, max_tokens: oldDefault.max_tokens, temperature: oldDefault.temperature});
-  }
-  providersData.filter(x => !x.isDefault && x !== p).forEach(x => {
-    models.push({name: x.name, base_url: x.base_url, api_key: x.api_key, model: x.model, context_window: x.context_window, max_tokens: x.max_tokens, temperature: x.temperature});
-  });
-  const cfg = { model: {base_url: p.base_url, api_key: p.api_key, model: p.model, context_window: p.context_window, max_tokens: p.max_tokens, temperature: p.temperature}, models };
-  try {
-    await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
-    showModelConfigStatus('✓ 已设为默认，即时生效', 'ok');
-    editingProviderIdx = -1;
-    await loadConfig();
-    await loadModelPresets();
-  } catch(e) { showModelConfigStatus('保存失败: ' + e.message, 'err'); }
-}
-
 function deleteProvider(idx) {
   const p = providersData[idx];
   if (p.isDefault) {
-    // Deleting the default model: auto-promote the first remaining preset to default.
-    const others = providersData.filter((x, i) => i !== idx);
-    if (others.length === 0) {
-      showModelConfigStatus('至少保留一个模型', 'err');
-      return;
-    }
-    if (!confirm('确定删除默认模型？将自动把第一个预设设为新的默认模型。')) return;
-    const next = others[0];
+    // Deleting the default model: the default is now "last used model" (dynamic memory),
+    // so just clear the model section — the default follows whatever model was last used.
+    if (!confirm('删除默认模型？删除后默认将跟随上次使用的模型。')) return;
     providersData.splice(idx, 1);
-    next.isDefault = true;
     editingProviderIdx = -1;
     renderProviderCards();
-    // Save: promote next as the model section, keep the rest in models.
-    const models = others.slice(1).map(x => ({name: x.name, base_url: x.base_url, api_key: x.api_key, model: x.model, context_window: x.context_window, max_tokens: x.max_tokens, temperature: x.temperature}));
-    const cfg = { model: {base_url: next.base_url, api_key: next.api_key, model: next.model, context_window: next.context_window, max_tokens: next.max_tokens, temperature: next.temperature}, models };
+    // Save: clear the model section (default = last used), keep the rest of the presets in models.
+    const models = providersData.filter(x => !x.isDefault).map(x => ({name: x.name, base_url: x.base_url, api_key: x.api_key, model: x.model, context_window: x.context_window, max_tokens: x.max_tokens, temperature: x.temperature}));
+    const cfg = { model: {base_url: '', api_key: '', model: '', context_window: 8192, max_tokens: 2048, temperature: 0.0}, models };
     fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)}).then(() => {
       loadConfig();
       loadModelPresets();

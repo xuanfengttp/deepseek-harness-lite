@@ -11,6 +11,7 @@ mod llm;
 mod prompt;
 mod policy;
 mod router;
+mod model_state;
 mod skill;
 mod agent;
 mod expr;
