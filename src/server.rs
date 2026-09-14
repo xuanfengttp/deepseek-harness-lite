@@ -749,14 +749,24 @@ async fn handle_chat(
 
     let llm = crate::llm::LlmClient::new(&config.model);
 
-    // Skill auto-routing: pick a matching skill per request — ONLY in auto mode.
-    // When the user explicitly selected a skill (name != "auto"), respect that
-    // lock and skip routing (the selected skill applies to every request).
-    if config.skill.auto_route && skill_name == "auto" && !state.skills.is_empty() {
+    // Skill routing: the dispatcher is ALWAYS on the line.
+    //  - auto: route over all loaded skills (search the full candidate set)
+    //  - locked: route over exactly that one skill — match it or answer directly
+    // Locking NEVER forces the skill onto unrelated input; it only narrows the
+    // candidate set so a matching request skips the search over all skills.
+    if config.skill.auto_route && !state.skills.is_empty() {
         let recent = session.derive_messages();
         // Only take the last few messages as routing context (avoid huge histories).
         let recent_slice: Vec<crate::types::Message> = recent.into_iter().rev().take(6).rev().collect();
-        let decision = crate::router::route_skill(&llm, &config.model, &message, &state.skills, &recent_slice).await;
+        let decision = if skill_name == "auto" {
+            crate::router::route_skill(&llm, &config.model, &message, &state.skills, &recent_slice).await
+        } else if let Some(locked) = state.skills.iter().find(|s| s.name == skill_name) {
+            // Locked mode: single-skill routing — match this skill or answer directly.
+            let single = [locked.clone()];
+            crate::router::route_skill(&llm, &config.model, &message, &single, &recent_slice).await
+        } else {
+            crate::router::RouteDecision::Direct
+        };
         match decision {
             crate::router::RouteDecision::UseSkill(name) => {
                 if let Some(s) = state.skills.iter().find(|s| s.name == name) {

@@ -1051,7 +1051,7 @@ body {
           <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
             <div>
               <div class="setting-label" data-i18n="skill_route">Skill 路由</div>
-              <div class="setting-hint" data-i18n="skill_route_hint">自动：按输入匹配 skill，不匹配直接对话；锁定某个 skill 后关闭自动选择。</div>
+              <div class="setting-hint" data-i18n="skill_route_hint">自动：按输入匹配 skill，不匹配直接回答；锁定某个 skill 仅收窄候选，不匹配仍直接回答。</div>
             </div>
             <select id="settings-skill-select" style="max-width:220px;padding:6px 10px;border-radius:8px;border:1px solid var(--border-l3);background:var(--bg-l2);color:var(--text-primary);font-size:13px"></select>
           </div>
@@ -3266,7 +3266,7 @@ const I18N = {
     language_hint:'选择界面语言。',
     chat:'对话', delete:'删除', confirm_delete:'确定删除此会话？',
     stats_bar:'统计栏', stats_bar_hint:'在输入框下方显示 token 用量与时长。',
-    skill_route:'Skill 路由', skill_route_hint:'自动：按输入匹配 skill，不匹配直接对话；锁定某个 skill 后关闭自动选择。',
+    skill_route:'Skill 路由', skill_route_hint:'自动：按输入匹配 skill，不匹配直接回答；锁定某个 skill 仅收窄候选，不匹配仍直接回答。',
     compaction:'上下文压缩',
     open_config:'打开配置文件',
     add_provider:'+ 添加提供商',
@@ -3300,7 +3300,7 @@ const I18N = {
     language_hint:'Choose the interface language.',
     chat:'Chat', delete:'Delete', confirm_delete:'Delete this session?',
     stats_bar:'Stats Bar', stats_bar_hint:'Show token usage and duration below the input box.',
-    skill_route:'Skill routing', skill_route_hint:'Auto: match skills by input, plain chat when nothing fits; locking a skill disables auto-selection.',
+    skill_route:'Skill routing', skill_route_hint:'Auto: match skills by input, plain chat when nothing fits; locking a skill only narrows the candidate — non-matches still get a direct answer.',
     model_presets:'LLM Provider Presets', model_presets_hint:'Add multiple LLM providers and switch between them from the input dropdown. Each preset has a name, endpoint, API key, and model name.', add_preset:'+ Add Provider', save_presets:'Save Presets',
   }
 };

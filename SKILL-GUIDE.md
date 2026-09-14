@@ -13,16 +13,18 @@ dsh-lite 的 skill 是 YAML frontmatter + Markdown body 的 `.md` 文件，放�
 - **LLM 判断（兜底）**：否则用一次小规模确定性调用（max_tokens 16，temperature 0），把每个
   skill 的 `name` / `description` / `whenToUse` 列给模型，让它选出最匹配者；回复 `none` 或
   解析失败 → 直接对话（不套用任何 skill）。
-- **手动锁定**：在设置菜单的"Skill 路由"里选中具体 skill，或启动时用 `--skill <name>`，路由即关闭，该 skill
-  对每个请求生效（恢复旧行为）。
-- **开关**：`config/default.yaml` → `skill.auto_route: true/false`（默认 true）。
+- **手动锁定 ≠ 强制**：在设置菜单的"Skill 路由"里选中具体 skill，或启动时用 `--skill <name>`，
+  候选集收窄为该 skill 一个——**匹配判断仍然在线**：输入确实适合该 skill 时直接命中（省去
+  从所有 skill 里搜索），不匹配时照样直接回答，绝不把 skill 强加到无关输入上。
+- **开关**：`config/default.yaml` → `skill.auto_route: true/false`（默认 true；false 时恢复旧
+  行为——不路由，锁定 skill 对每个请求生效）。
 
 路由逻辑见 `src/router.rs`。**关键收益**：用户的普通问题（寒暄、咨询）不再被强行套进某个
 skill 的流程；只有输入确实匹配 skill 的 `whenToUse` 时才进入该 skill 的 persona/模式/步骤。
 
 > 这也是对"注册 skill 后所有请求都按它跑"的根因修复：此前未显式选择时，请求会静默回退到
 > `skills/` 下**第一个** skill（`skills.first()`），导致用户从未选择却被迫使用某个 skill。
-> 现在未选择时进入 `auto` 模式（按输入路由），显式选择时才锁定。
+> 现在未选择时进入 `auto` 模式（按输入路由），显式选择也只是收窄候选集，不匹配仍直接回答。
 
 ### 编写建议
 
