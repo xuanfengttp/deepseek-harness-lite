@@ -231,14 +231,6 @@ body {
 .header-title { font-size: 14px; font-weight: 500; color: var(--label-secondary); }
 .header-title .skill-name { color: var(--label-primary); font-weight: 500; }
 .header-controls { display: flex; align-items: center; gap: 12px; }
-.skill-select {
-  background: var(--bg-platform); color: var(--label-primary); border: 1px solid var(--border-l2);
-  border-radius: 8px; padding: 6px 28px 6px 12px; font-size: 12px; font-family: var(--font);
-  cursor: pointer; outline: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2381858C' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 8px center;
-}
 .toggle-label { font-size: 12px; color: var(--label-tertiary); display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .toggle-label input { accent-color: var(--accent); width: 14px; height: 14px; }
 
@@ -964,7 +956,7 @@ body {
   <div class="main">
     <div class="header">
       <div class="header-left">
-        <div class="header-title"><span data-i18n="skill">技能</span>: <select id="skill-select" class="skill-select" title="Skill"></select> <span class="skill-name" id="active-skill-name">—</span></div>
+        <div class="header-title"><span data-i18n="skill">技能</span>: <span class="skill-name" id="active-skill-name">auto</span></div>
       </div>
       <div class="header-controls">
         <div class="view-tabs">
@@ -1054,6 +1046,14 @@ body {
               <button class="lang-pill selected" data-lang="zh" onclick="setLanguage('zh')">中文</button>
               <button class="lang-pill" data-lang="en" onclick="setLanguage('en')">English</button>
             </div>
+          </div>
+          <!-- Skill routing -->
+          <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="setting-label" data-i18n="skill_route">Skill 路由</div>
+              <div class="setting-hint" data-i18n="skill_route_hint">自动：按输入匹配 skill，不匹配直接对话；锁定某个 skill 后关闭自动选择。</div>
+            </div>
+            <select id="settings-skill-select" style="max-width:220px;padding:6px 10px;border-radius:8px;border:1px solid var(--border-l3);background:var(--bg-l2);color:var(--text-primary);font-size:13px"></select>
           </div>
           <!-- Appearance -->
           <div class="setting-row">
@@ -1458,7 +1458,7 @@ async function loadSkills() {
   try {
     const res = await fetch('/api/skills');
     const skills = await res.json();
-    const sel = document.getElementById('skill-select');
+    const sel = document.getElementById('settings-skill-select');
     if (!sel) return;
     sel.innerHTML = '';
     const autoOpt = document.createElement('option');
@@ -1479,7 +1479,7 @@ async function loadSkills() {
   } catch(e) { console.error('loadSkills', e); }
 }
 async function switchSkill() {
-  const sel = document.getElementById('skill-select');
+  const sel = document.getElementById('settings-skill-select');
   const name = sel ? sel.value : 'auto';
   const label = name === 'auto' ? 'auto' : name;
   const el = document.getElementById('active-skill-name');
@@ -3266,6 +3266,7 @@ const I18N = {
     language_hint:'选择界面语言。',
     chat:'对话', delete:'删除', confirm_delete:'确定删除此会话？',
     stats_bar:'统计栏', stats_bar_hint:'在输入框下方显示 token 用量与时长。',
+    skill_route:'Skill 路由', skill_route_hint:'自动：按输入匹配 skill，不匹配直接对话；锁定某个 skill 后关闭自动选择。',
     compaction:'上下文压缩',
     open_config:'打开配置文件',
     add_provider:'+ 添加提供商',
@@ -3299,6 +3300,7 @@ const I18N = {
     language_hint:'Choose the interface language.',
     chat:'Chat', delete:'Delete', confirm_delete:'Delete this session?',
     stats_bar:'Stats Bar', stats_bar_hint:'Show token usage and duration below the input box.',
+    skill_route:'Skill routing', skill_route_hint:'Auto: match skills by input, plain chat when nothing fits; locking a skill disables auto-selection.',
     model_presets:'LLM Provider Presets', model_presets_hint:'Add multiple LLM providers and switch between them from the input dropdown. Each preset has a name, endpoint, API key, and model name.', add_preset:'+ Add Provider', save_presets:'Save Presets',
   }
 };
@@ -3353,7 +3355,7 @@ const _heroEl = document.getElementById('hero');
 heroTemplate = _heroEl ? _heroEl.outerHTML : '<div class="hero" id="hero"><h2 data-i18n="ready">就绪</h2><p data-i18n="send_to_start">发送消息开始对话。</p></div>';
 loadSessions();
 loadSkills();
-document.getElementById('skill-select')?.addEventListener('change', switchSkill);
+document.getElementById('settings-skill-select')?.addEventListener('change', switchSkill);
 loadModelPresets();
 loadCommands();
 loadConfig().then(() => loadActiveHistory());

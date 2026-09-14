@@ -60,7 +60,7 @@ You are a diagnostic assistant. Follow this flow:
 3. Suggest fixes
 ```
 
-Skills are auto-routed by default: each request is matched against the loaded skills' `whenToUse` descriptions (an explicit skill-name mention wins instantly; otherwise a tiny deterministic LLM call picks the best fit). Matches apply the skill's persona, tools, and execution mode; non-matches fall back to plain conversation — the skill is never forced onto unrelated input. Switch to a specific skill permanently (locking routing off) via the header dropdown or `--skill <name>`.
+Skills are auto-routed by default: each request is matched against the loaded skills' `whenToUse` descriptions (an explicit skill-name mention wins instantly; otherwise a tiny deterministic LLM call picks the best fit). Matches apply the skill's persona, tools, and execution mode; non-matches fall back to plain conversation — the skill is never forced onto unrelated input. To lock one skill permanently (disabling routing, e.g. for a fixed fast workflow), select it in Settings → Skill routing, or start with `--skill <name>`.
 
 ### Session log with message derivation
 

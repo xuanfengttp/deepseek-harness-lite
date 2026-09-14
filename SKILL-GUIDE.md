@@ -13,7 +13,7 @@ dsh-lite 的 skill 是 YAML frontmatter + Markdown body 的 `.md` 文件，放�
 - **LLM 判断（兜底）**：否则用一次小规模确定性调用（max_tokens 16，temperature 0），把每个
   skill 的 `name` / `description` / `whenToUse` 列给模型，让它选出最匹配者；回复 `none` 或
   解析失败 → 直接对话（不套用任何 skill）。
-- **手动锁定**：通过 Web 头部下拉框或 `--skill <name>` 选中具体 skill 后，路由关闭，该 skill
+- **手动锁定**：在设置菜单的"Skill 路由"里选中具体 skill，或启动时用 `--skill <name>`，路由即关闭，该 skill
   对每个请求生效（恢复旧行为）。
 - **开关**：`config/default.yaml` → `skill.auto_route: true/false`（默认 true）。
 
