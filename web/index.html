@@ -659,6 +659,59 @@ body {
   color: var(--accent); visibility: hidden;
 }
 .model-select-option.selected .model-select-check { visibility: visible; }
+.permission-select-root { position: relative; flex-shrink: 0; }
+.permission-trigger {
+  display: flex; align-items: center; gap: 4px;
+  height: 28px; padding: 0 4px 0 8px; border: none; border-radius: 24px;
+  background: transparent; color: var(--label-secondary);
+  font-size: 13px; line-height: 20px; font-weight: 500; font-family: var(--font);
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: background-color var(--dur) var(--ease);
+}
+.permission-trigger:hover:not(:disabled) { background: var(--bg-hover); }
+.permission-trigger:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--border-l3); }
+.permission-trigger svg { flex: none; }
+.permission-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.permission-chevron {
+  flex: none; color: var(--label-caption);
+  transition: transform 120ms var(--ease);
+}
+.permission-chevron.open { transform: rotate(180deg); }
+.permission-menu {
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 20;
+  width: max-content; min-width: 200px; max-width: 260px; padding: 4px;
+  background: var(--bg-platform); border: 1px solid var(--border-l2);
+  border-radius: 20px; box-shadow: var(--shadow-l3);
+}
+.permission-menu-item {
+  display: flex; align-items: center; gap: 8px; box-sizing: border-box;
+  width: 100%; min-height: 38px; padding: 6px 8px; border: none; border-radius: 10px;
+  background: transparent; color: var(--label-primary);
+  font-family: var(--font); text-align: left; cursor: pointer;
+  transition: background-color var(--dur) var(--ease);
+}
+.permission-menu-item:hover, .permission-menu-item:focus-visible { background: var(--bg-hover); outline: none; }
+.permission-menu-icon {
+  flex: none; width: 18px; display: flex; align-items: center; justify-content: center;
+  color: var(--label-secondary);
+}
+.permission-menu-name {
+  flex: 1; min-width: 0; font-size: 14px; line-height: 20px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.permission-menu-check {
+  flex: none; width: 18px; display: flex; align-items: center; justify-content: center;
+  color: var(--accent); visibility: hidden;
+}
+.permission-menu-item.selected .permission-menu-check { visibility: visible; }
+.permission-status {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 21;
+  max-width: 260px; padding: 4px 10px; border-radius: 8px;
+  background: var(--bg-layer-1); border: 1px solid var(--border-l2);
+  box-shadow: var(--shadow-l2); font-size: 12px; line-height: 16px;
+  color: var(--label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.permission-status.err { color: var(--red); border-color: var(--red); }
 .context-ring { color: var(--label-tertiary); display: flex; align-items: center; cursor: default; flex-shrink: 0; }
 .send-btn {
   width: 34px; height: 34px; border: none; border-radius: 999px;
@@ -877,7 +930,7 @@ body {
   width: 8px; height: 8px; border-radius: 50%; display: inline-block;
   transition: background 0.2s;
 }
-.conn-dot.idle { background: var(--label-quaternary); }
+.conn-dot.idle { background: var(--label-caption); }
 .conn-dot.connecting { background: #f0a020; animation: pulse 1s infinite; }
 .conn-dot.streaming { background: #22c55e; animation: pulse 2s infinite; }
 .conn-dot.error { background: #ef4444; }
@@ -1031,6 +1084,15 @@ body {
         <div class="input-row">
           <input type="file" id="image-file-input" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none" onchange="onImageFilesSelected(this)">
           <button class="img-btn" id="img-btn" onclick="document.getElementById('image-file-input').click()" aria-label="上传图片" title="上传图片"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden><path d="M14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-9A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5zM3 11l3-3 2 2 3-3 2 2V3.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5V11zm2-5a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor"/></svg></button>
+          <div class="permission-select-root" id="permission-select-root">
+            <button type="button" id="permission-trigger" class="permission-trigger" aria-haspopup="menu" aria-expanded="false" onclick="togglePermissionMenu()">
+              <svg id="permission-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden></svg>
+              <span class="permission-label" id="permission-label">工作区</span>
+              <svg class="permission-chevron" viewBox="0 0 12 12" width="12" height="12" aria-hidden><path d="M3 4.5L6 7.5L9 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="permission-menu" id="permission-menu" role="menu" hidden></div>
+            <span class="permission-status" id="permission-status" hidden></span>
+          </div>
           <div class="model-select-root hidden" id="model-select-root">
             <button type="button" id="model-preset-trigger" class="model-select-trigger" aria-haspopup="menu" aria-expanded="false" onclick="toggleModelPresetMenu()">
               <span class="model-select-label" id="model-preset-label">默认</span>
@@ -1098,7 +1160,15 @@ body {
               <div class="setting-label" data-i18n="skill_route">Skill 路由</div>
               <div class="setting-hint" data-i18n="skill_route_hint">自动：按输入匹配 skill，不匹配直接回答；锁定某个 skill 仅收窄候选，不匹配仍直接回答。</div>
             </div>
-            <select id="settings-skill-select" style="max-width:220px;padding:6px 10px;border-radius:8px;border:1px solid var(--border-l3);background:var(--bg-l2);color:var(--text-primary);font-size:13px"></select>
+            <select id="settings-skill-select" style="max-width:220px;padding:6px 10px;border-radius:8px;border:1px solid var(--border-l3);background:var(--bg-layer-2);color:var(--label-primary);font-size:13px"></select>
+          </div>
+          <!-- Permission level -->
+          <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div class="setting-label" data-i18n="perm_setting_title">权限等级</div>
+              <div class="setting-hint" data-i18n="perm_setting_hint">仅查看：禁用写类工具；工作区：全部工具；全局完全：全部工具（需风险确认）。</div>
+            </div>
+            <select id="settings-permission-select" style="max-width:220px;padding:6px 10px;border-radius:8px;border:1px solid var(--border-l3);background:var(--bg-layer-2);color:var(--label-primary);font-size:13px" onchange="onSettingsPermissionChange(this.value)"></select>
           </div>
           <!-- Appearance -->
           <div class="setting-row">
@@ -1250,6 +1320,29 @@ body {
           <div class="config-status" id="tools-config-status"></div>
         </div>
 
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Risk confirmation modal (danger-full-access) -->
+<div class="modal-overlay hidden" id="risk-modal">
+  <div class="modal" style="max-width:420px;height:auto">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 data-i18n="perm_risk_title">全局完全权限</h2>
+        <button class="modal-close" onclick="closeRiskModal()" aria-label="✕">✕</button>
+      </div>
+      <div class="modal-body">
+        <p data-i18n="perm_risk_desc" style="margin:4px 0 0">此权限允许代理在设备上执行任意操作，包括修改系统文件与执行命令。仅在你完全信任当前环境时启用。</p>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
+          <input type="checkbox" id="risk-ack" onchange="updateRiskConfirm()">
+          <span data-i18n="perm_risk_ack">我了解风险</span>
+        </label>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border-l3)">
+        <button class="btn btn-secondary" onclick="closeRiskModal()" data-i18n="cancel">取消</button>
+        <button class="btn btn-primary" id="risk-confirm-btn" disabled onclick="confirmFullAccess()" data-i18n="perm_risk_enable">启用全局权限</button>
       </div>
     </div>
   </div>
@@ -2076,6 +2169,224 @@ document.addEventListener('keydown', (e) => {
   else idx = (idx - 1 + opts.length) % opts.length;
   opts[idx].focus();
 });
+
+// ─── Permission level (config.tools.permission) ─────────────────────────
+const PERMISSION_LEVELS = ['read-only', 'workspace-write', 'danger-full-access'];
+const PERMISSION_LABEL_KEYS = { 'read-only':'permReadOnly', 'workspace-write':'permWorkspace', 'danger-full-access':'permFull' };
+const PERM_SHIELD_OUTLINE = '<path d="M8.20554 0.899994L14.7901 3.36857V7.01026C14.7901 12 11.0466 14.2103 8.20554 15.3C5.36446 14.2103 1.62012 12 1.62012 7.01026V3.36857L8.20554 0.899994Z" stroke="currentColor" stroke-width="1.31831" stroke-linejoin="round"/>';
+let currentPermission = 'workspace-write';
+let _permStatusTimer = null;
+
+// Shield glyphs over the ui-primitives shield contour (design set 1556):
+// check = read-only, pencil = workspace write, exclamation = full access.
+function permissionGlyphPaths(level) {
+  if (level === 'read-only') {
+    return PERM_SHIELD_OUTLINE + '<path d="M12.1654 5.7552L8.9447 9.41475C8.73044 9.65816 8.53628 9.8804 8.35774 10.0423C8.1713 10.2114 7.94235 10.3717 7.64016 10.4254C7.48207 10.4535 7.32 10.4552 7.16151 10.4294C6.85843 10.3801 6.62728 10.2223 6.43836 10.0559C6.25752 9.89653 6.06037 9.67732 5.84264 9.43705L4.72925 8.20897L5.63557 7.38707L6.74897 8.61594C6.98603 8.87755 7.12974 9.03533 7.24673 9.13839C7.31033 9.19443 7.34485 9.21476 7.35823 9.22122C7.38068 9.22484 7.40352 9.22515 7.42593 9.22122C7.40522 9.22502 7.42893 9.23294 7.53583 9.136C7.65132 9.03126 7.79316 8.87139 8.02643 8.60638L11.2479 4.94763L12.1654 5.7552Z" fill="currentColor"/>';
+  }
+  if (level === 'workspace-write') {
+    return '<path d="M8.08887 0.251709C8.20479 0.23085 8.32486 0.241168 8.43652 0.282959L15.0215 2.75171C15.2787 2.84819 15.4492 3.09414 15.4492 3.3689V7.0105C15.4492 7.10986 15.4441 7.2081 15.4414 7.30542C15.0285 7.07175 14.5905 6.87695 14.1309 6.73022V3.82495L8.20508 1.60327L2.2793 3.82495V7.0105C2.27936 9.7171 3.4745 11.5379 5.02734 12.7947C5.01025 12.9942 5 13.1962 5 13.4001C5.00001 13.7617 5.02722 14.1169 5.08008 14.4636C2.91555 13.0393 0.961014 10.752 0.960938 7.0105V3.3689C0.960938 3.09417 1.13146 2.84821 1.38867 2.75171L7.97461 0.282959L8.08887 0.251709Z" fill="currentColor"/><path d="M11.3525 5.64688V6.85688H5V5.64688H11.3525Z" fill="currentColor"/><path d="M9.5824 8.29376V9.50376H5V8.29376H9.5824Z" fill="currentColor"/>';
+  }
+  return PERM_SHIELD_OUTLINE + '<path d="M9.10094 4.5V8.75939H7.59888V4.5H9.10094Z" fill="currentColor"/><path d="M9.10094 9.8114V11.5H7.59888V9.8114H9.10094Z" fill="currentColor"/>';
+}
+function permissionIcon(level, size) {
+  const px = size || 14;
+  return '<svg width="' + px + '" height="' + px + '" viewBox="0 0 16 16" fill="none" aria-hidden>' + permissionGlyphPaths(level) + '</svg>';
+}
+
+function buildPermissionMenu() {
+  const menu = document.getElementById('permission-menu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  PERMISSION_LEVELS.forEach(level => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'permission-menu-item';
+    item.setAttribute('role', 'menuitemradio');
+    item.dataset.level = level;
+    const icon = document.createElement('span');
+    icon.className = 'permission-menu-icon';
+    icon.innerHTML = permissionIcon(level, 16);
+    item.appendChild(icon);
+    const name = document.createElement('span');
+    name.className = 'permission-menu-name';
+    name.textContent = t(PERMISSION_LABEL_KEYS[level]);
+    item.appendChild(name);
+    const check = document.createElement('span');
+    check.className = 'permission-menu-check';
+    check.innerHTML = '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden><path d="M2 6.2L4.6 8.8L10 3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    item.appendChild(check);
+    item.onclick = () => onPermissionPick(level);
+    menu.appendChild(item);
+  });
+  syncPermissionMenuState();
+}
+
+function initPermissionSelect() {
+  const sel = document.getElementById('settings-permission-select');
+  if (!sel || sel.options.length > 0) return;
+  PERMISSION_LEVELS.forEach(level => {
+    const opt = document.createElement('option');
+    opt.value = level;
+    opt.textContent = t(PERMISSION_LABEL_KEYS[level]);
+    sel.appendChild(opt);
+  });
+}
+
+function syncPermissionMenuState() {
+  document.querySelectorAll('#permission-menu .permission-menu-item').forEach(item => {
+    const sel = item.dataset.level === currentPermission;
+    item.classList.toggle('selected', sel);
+    if (sel) item.setAttribute('aria-checked', 'true');
+    else item.removeAttribute('aria-checked');
+  });
+}
+
+function renderPermission(level) {
+  currentPermission = level;
+  const iconEl = document.getElementById('permission-icon');
+  if (iconEl) iconEl.innerHTML = permissionGlyphPaths(level);
+  const labelEl = document.getElementById('permission-label');
+  if (labelEl) labelEl.textContent = t(PERMISSION_LABEL_KEYS[level] || level);
+  syncPermissionMenuState();
+  const sel = document.getElementById('settings-permission-select');
+  if (sel) sel.value = level;
+}
+
+function togglePermissionMenu() {
+  const menu = document.getElementById('permission-menu');
+  if (!menu) return;
+  if (menu.hidden) openPermissionMenu();
+  else closePermissionMenu();
+}
+
+function openPermissionMenu() {
+  const menu = document.getElementById('permission-menu');
+  const trigger = document.getElementById('permission-trigger');
+  if (!menu || !menu.hidden) return;
+  menu.hidden = false;
+  if (trigger) {
+    trigger.setAttribute('aria-expanded', 'true');
+    const chevron = trigger.querySelector('.permission-chevron');
+    if (chevron) chevron.classList.add('open');
+  }
+}
+
+function closePermissionMenu() {
+  const menu = document.getElementById('permission-menu');
+  const trigger = document.getElementById('permission-trigger');
+  if (!menu || menu.hidden) return;
+  menu.hidden = true;
+  if (trigger) {
+    trigger.setAttribute('aria-expanded', 'false');
+    const chevron = trigger.querySelector('.permission-chevron');
+    if (chevron) chevron.classList.remove('open');
+  }
+}
+
+function onPermissionPick(level) {
+  closePermissionMenu();
+  if (level === currentPermission) return;
+  if (level === 'danger-full-access') {
+    openRiskModal();
+    return;
+  }
+  savePermission(level);
+}
+
+async function savePermission(level) {
+  const prev = currentPermission;
+  try {
+    const res = await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tools:{permission:level}})});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    renderPermission(level);
+  } catch(e) {
+    console.error('savePermission', e);
+    renderPermission(prev);
+    showPermissionStatus('✗ ' + t('perm_save_failed') + ' ' + e.message, true);
+  }
+}
+
+function showPermissionStatus(msg, isErr) {
+  const el = document.getElementById('permission-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'permission-status' + (isErr ? ' err' : '');
+  el.hidden = false;
+  clearTimeout(_permStatusTimer);
+  _permStatusTimer = setTimeout(() => { el.hidden = true; }, 3000);
+}
+
+function onSettingsPermissionChange(value) {
+  if (value === 'danger-full-access') {
+    openRiskModal();
+    return;
+  }
+  savePermission(value);
+}
+
+function openRiskModal() {
+  const modal = document.getElementById('risk-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  updateRiskConfirm();
+}
+
+function closeRiskModal() {
+  const modal = document.getElementById('risk-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  const ack = document.getElementById('risk-ack');
+  if (ack) ack.checked = false;
+  const btn = document.getElementById('risk-confirm-btn');
+  if (btn) btn.disabled = true;
+  // If opened from the settings select, revert any unconfirmed change
+  const sel = document.getElementById('settings-permission-select');
+  if (sel && sel.value !== currentPermission) sel.value = currentPermission;
+}
+
+function updateRiskConfirm() {
+  const ack = document.getElementById('risk-ack');
+  const btn = document.getElementById('risk-confirm-btn');
+  if (ack && btn) btn.disabled = !ack.checked;
+}
+
+function confirmFullAccess() {
+  savePermission('danger-full-access');
+  closeRiskModal();
+}
+
+// Close the permission menu on outside mousedown or Esc; navigate options with arrows.
+document.addEventListener('mousedown', (e) => {
+  const root = document.getElementById('permission-select-root');
+  const menu = document.getElementById('permission-menu');
+  if (!root || !menu || menu.hidden) return;
+  if (!root.contains(e.target)) closePermissionMenu();
+});
+document.addEventListener('keydown', (e) => {
+  const riskModal = document.getElementById('risk-modal');
+  if (riskModal && !riskModal.classList.contains('hidden') && e.key === 'Escape') {
+    e.preventDefault();
+    closeRiskModal();
+    return;
+  }
+  const menu = document.getElementById('permission-menu');
+  if (!menu || menu.hidden) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closePermissionMenu();
+    return;
+  }
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  const items = Array.from(menu.querySelectorAll('.permission-menu-item'));
+  if (items.length === 0) return;
+  e.preventDefault();
+  let idx = items.indexOf(document.activeElement);
+  if (idx === -1) idx = (e.key === 'ArrowDown') ? 0 : items.length - 1;
+  else if (e.key === 'ArrowDown') idx = (idx + 1) % items.length;
+  else idx = (idx - 1 + items.length) % items.length;
+  items[idx].focus();
+});
+
 function resetSessionStats() {
   sessionStats = { turns: 0, steps: 0, latestInputTokens: 0, totalOutputTokens: 0, totalInputTokens: 0, startTime: 0, llmMs: 0, toolMs: 0, stepStartTime: 0, toolCallStartTime: 0 };
   updateStatsBar();
@@ -2957,6 +3268,10 @@ async function loadConfig() {
       const sshSection = document.getElementById('ssh-devices-section');
       if (sshSection) sshSection.style.display = cfg.tools.ssh_exec ? '' : 'none';
     }
+    // Permission level (default: workspace-write)
+    buildPermissionMenu();
+    initPermissionSelect();
+    renderPermission((cfg.tools && cfg.tools.permission) || 'workspace-write');
     if (cfg.compaction) {
       const thresholdEl = document.getElementById('cfg-compaction-threshold');
       const keepEl = document.getElementById('cfg-compaction-keep');
@@ -3451,6 +3766,10 @@ const I18N = {
     compaction:'上下文压缩',
     open_config:'打开配置文件',
     add_provider:'+ 添加提供商',
+    permReadOnly:'仅查看', permWorkspace:'工作区', permFull:'全局完全',
+    perm_setting_title:'权限等级', perm_setting_hint:'仅查看：禁用写类工具；工作区：全部工具；全局完全：全部工具（需风险确认）。',
+    perm_risk_title:'全局完全权限', perm_risk_desc:'此权限允许代理在设备上执行任意操作，包括修改系统文件与执行命令。仅在你完全信任当前环境时启用。',
+    perm_risk_ack:'我了解风险', perm_risk_enable:'启用全局权限', perm_save_failed:'保存失败：', cancel:'取消',
   },
   en: {
     new_session:'New Session', settings:'Settings', settings_title:'Settings',
@@ -3483,6 +3802,10 @@ const I18N = {
     stats_bar:'Stats Bar', stats_bar_hint:'Show token usage and duration below the input box.',
     skill_route:'Skill routing', skill_route_hint:'Auto: match skills by input, plain chat when nothing fits; locking a skill only narrows the candidate — non-matches still get a direct answer.',
     model_presets:'LLM Provider Presets', model_presets_hint:'Add multiple LLM providers and switch between them from the input dropdown. Each preset has a name, endpoint, API key, and model name.', add_preset:'+ Add Provider', save_presets:'Save Presets',
+    permReadOnly:'Read-only', permWorkspace:'Workspace', permFull:'Full access',
+    perm_setting_title:'Permission level', perm_setting_hint:'Read-only: write tools disabled; Workspace: all tools; Full access: all tools (risk confirmation required).',
+    perm_risk_title:'Full access permission', perm_risk_desc:'This permission allows the agent to perform any action on the device, including modifying system files and executing commands. Enable it only if you fully trust the current environment.',
+    perm_risk_ack:'I understand the risks', perm_risk_enable:'Enable full access', perm_save_failed:'Save failed: ', cancel:'Cancel',
   }
 };
 let currentLang = 'zh';

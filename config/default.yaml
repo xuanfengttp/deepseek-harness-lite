@@ -72,6 +72,8 @@ tools:
   memory: true
   ssh_exec: false
   todo: true
+  # 权限等级：read-only（仅查看）/ workspace-write（工作区）/ danger-full-access（全局完全）
+  permission: "workspace-write"
 
 # SSH device targets — persistent interactive sessions for network elements.
 # Each target stays connected across multiple commands (background session).

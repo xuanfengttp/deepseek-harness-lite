@@ -203,6 +203,7 @@ impl ToolPlugin for SubagentTool {
             ssh_exec: false,
             memory: true,
             todo: false,
+            permission: "workspace-write".into(),
         });
         let mut child_tools = ToolRegistry::new(policy);
         {

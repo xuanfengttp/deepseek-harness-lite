@@ -344,6 +344,7 @@ fn run_single_task(
             ssh_exec: false,
             memory: true,
             todo: false,
+            permission: "workspace-write".into(),
         });
         let mut child_tools = ToolRegistry::new(policy);
         {

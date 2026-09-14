@@ -336,6 +336,14 @@ pub struct ToolsConfig {
     pub ssh_exec: bool,
     pub memory: bool,
     pub todo: bool,
+    /// Permission level preset (mirrors upstream dsh permission presets).
+    /// Values: "read-only" | "workspace-write" | "danger-full-access".
+    #[serde(default = "default_permission_level")]
+    pub permission: String,
+}
+
+fn default_permission_level() -> String {
+    "workspace-write".into()
 }
 
 /// SSH configuration — named device targets for persistent interactive sessions.

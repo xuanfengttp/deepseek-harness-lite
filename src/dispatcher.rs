@@ -117,6 +117,7 @@ impl Dispatcher {
                 ssh_exec: false,
                 memory: false,
                 todo: false,
+                permission: "workspace-write".into(),
             })),
         );
         let llm = self.llm.clone();
