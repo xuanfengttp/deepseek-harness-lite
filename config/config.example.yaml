@@ -1,0 +1,122 @@
+# ============================================================
+# DeepSeek Harness Lite — 配置参考示例
+# ============================================================
+# 使用方法：
+#   1. 把本文件内容复制到你 dsh-lite 可执行文件旁的 config.yaml
+#      （或直接覆盖，然后按需修改）
+#   2. 修改后重启 dsh-lite 生效
+#
+# ⚠️ YAML 格式注意（常见坑，改错会导致整个配置加载失败）：
+#   - 冒号后面必须有一个空格：`listen: "0.0.0.0:3081"` ✓
+#     绝对不能写成 `listen: "0.0.0.0: 3081"`（IP 里的冒号后不能加空格）✗
+#   - 缩进用空格，不要用 Tab
+#   - 字符串值建议加双引号（尤其含冒号、#、中文的值）
+#   - 配置解析失败时，Web 界面顶部会显示红色警告条并提示具体错误
+# ============================================================
+
+# ── 默认模型（必填）────────────────────────────────────────
+# base_url 为 OpenAI 兼容端点（/v1/chat/completions，支持流式）
+model:
+  base_url: "https://api.deepseek.com/v1"
+  api_key: "sk-你的密钥"
+  model: "deepseek-chat"
+  context_window: 8192
+  max_tokens: 2048
+  temperature: 0.0
+  # 代理（可选）：HTTP/HTTPS 代理，如 "http://127.0.0.1:7890"。留空 = 直连
+  proxy: ""
+
+# ── 模型预设（可选）：下拉菜单可切换的模型列表 ─────────────
+# 每个条目一个「- name:」，字段与默认模型相同
+models:
+  - name: "DeepSeek"
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "sk-你的密钥"
+    model: "deepseek-chat"
+    context_window: 8192
+    max_tokens: 2048
+    temperature: 0.0
+    proxy: ""
+  - name: "本地模型"
+    base_url: "http://127.0.0.1:8080/v1"
+    api_key: ""
+    model: "qwen2.5-7b"
+    context_window: 32768
+    max_tokens: 4096
+    temperature: 0.7
+    proxy: ""
+
+# ── 服务监听地址 ───────────────────────────────────────────
+# 格式：IP:端口
+#   "127.0.0.1:3081"   = 仅本机可访问（默认）
+#   "0.0.0.0:3081"     = 所有网卡可访问（局域网/其他设备）
+#   "192.168.1.100:3081" = 只绑定指定网卡 IP
+# ⚠️ 修改后必须重启进程才生效（不支持热重载）
+# ⚠️ IP 和端口之间不要有空格
+server:
+  listen: "0.0.0.0:3081"
+
+# ── 会话持久化 ─────────────────────────────────────────────
+session:
+  persist_dir: ".sessions"
+  checkpoint_events: 50
+  checkpoint_turn_end: true
+
+# ── 记忆（flash 后端：有界、LRU 淘汰）──────────────────────
+memory:
+  backend: "flash"
+  max_entries: 256
+  path: ".sessions/memory.bin"
+
+# ── 上下文压缩 ─────────────────────────────────────────────
+# threshold: 消息量达到 context_window 的 70% 时触发压缩
+# keep_recent_turns: 压缩时保留最近几轮
+compaction:
+  threshold: 0.7
+  keep_recent_turns: 4
+
+# ── Skill 路由 ─────────────────────────────────────────────
+skill:
+  dir: "skills"
+  # true  = 自动路由：按输入匹配 skill，不匹配直接对话（推荐）
+  # false = 始终使用 active skill（旧行为）
+  auto_route: true
+
+# ── 自定义系统提示词（可选）────────────────────────────────
+# 支持 {{cwd}} / {{model}} 插值。留空 = 不注入。
+prompt:
+  custom: ""
+
+# ── 轨迹记录 ───────────────────────────────────────────────
+trajectory:
+  enabled: false
+
+# ── 工具开关 ───────────────────────────────────────────────
+tools:
+  shell: true
+  file_read: true
+  file_write: true
+  file_search: true
+  memory: true
+  ssh_exec: false
+  todo: true
+  # 权限等级：
+  #   read-only            = 仅查看（禁用 shell/file_write/ssh_exec/memory_write/todo_write）
+  #   workspace-write      = 工作区可写（默认）
+  #   danger-full-access   = 全局完全权限（切换时需风险确认）
+  permission: "workspace-write"
+
+# ── SSH 设备目标（可选）────────────────────────────────────
+# 启用 tools.ssh_exec: true 后生效。每个目标保持持久连接。
+ssh:
+  targets:
+    - name: "core-router"
+      host: "192.168.1.1"
+      port: 22
+      user: "admin"
+      password: "admin123"
+    - name: "edge-switch"
+      host: "192.168.1.2"
+      port: 22
+      user: "admin"
+      password: "admin123"
