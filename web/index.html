@@ -68,6 +68,13 @@
 
   --scrollbar-thumb: rgb(229,229,229);
   --scrollbar-hover: rgb(200,200,200);
+
+  /* 像素级复刻新增（ui-spec §8.1）：卡片底 / 横幅底 / 实心 hover / 压暗主文字 / ongoing 蓝 */
+  --bg-code:          rgb(249,250,251);
+  --bg-code-banner:   rgb(249,250,251);
+  --bg-hover-solid:   rgb(241,243,245);
+  --label-primary-dimmed: rgb(21,21,23);
+  --ongoing-blue:     rgb(86,134,254);
 }
 
 /* ─── Dark theme ────────────────────────────────────────────────────── */
@@ -100,6 +107,13 @@ html[data-theme="dark"] {
   --accent-hover: var(--ds-blue-400);
   --info-fill: #679EFE;
   --info-hover: #578EED;
+
+  /* 像素级复刻新增（ui-spec §8.1 / §1.2）：暗色用 400 级红，卡片/横幅/实心 hover 暗色值 */
+  --red: rgb(242,90,90);
+  --bg-code:          rgb(27,27,28);
+  --bg-code-banner:   rgb(44,44,46);
+  --bg-hover-solid:   rgb(53,54,56);
+  --label-primary-dimmed: rgb(235,238,242);
 }
 
 /* System theme: dark when OS prefers dark */
@@ -128,6 +142,11 @@ html[data-theme="dark"] {
     --accent: var(--ds-blue-400);
     --info-fill: #679EFE;
     --info-hover: #578EED;
+    --red: rgb(242,90,90);
+    --bg-code:          rgb(27,27,28);
+    --bg-code-banner:   rgb(44,44,46);
+    --bg-hover-solid:   rgb(53,54,56);
+    --label-primary-dimmed: rgb(235,238,242);
   }
 }
 
@@ -250,17 +269,55 @@ body {
 .traj-inner { max-width: 748px; margin: 0 auto; padding: 8px 16px 100px; }
 
 .message { margin-bottom: 16px; }
-.message.user { text-align: right; }
+/* 用户气泡（ui-spec §5.1 MessageItem：右对齐列、气泡 + 操作行 gap 6、22px 圆角、
+   10/16 内边距、14px/22px、max-width = 70.2% 列宽） */
+.message.user {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+  text-align: right;
+}
 .message.user .bubble {
-  display: inline-block; max-width: 85%; text-align: left;
+  max-width: min(calc(748px * 0.702), 82%);
   background: var(--bg-bubble); color: var(--label-primary);
-  padding: 10px 16px; border-radius: 16px; font-size: 14px; line-height: 1.6;
+  padding: 10px 16px; border-radius: 22px; font-size: 14px; line-height: 22px;
+  text-align: left; white-space: pre-wrap; word-break: break-word;
 }
 .message.assistant .role-tag {
   font-size: 12px; color: var(--label-tertiary); margin-bottom: 4px; font-weight: 500;
 }
+/* assistant 通栏列（默认 stretch，正文不缩窄） */
+.message.assistant { display: flex; flex-direction: column; }
+/* assistant 正文（ui-spec §5.3 AssistantMarkdown：16px/28px 通栏，无气泡底） */
 .message.assistant .bubble {
-  padding: 0; font-size: 15px; line-height: 1.7; color: var(--label-primary);
+  padding: 0; font-size: 16px; line-height: 28px; color: var(--label-primary);
+  min-width: 0;
+}
+/* 操作/时间行（ui-spec §5.4 MessageIconActions：28px 行、时钟 hover 80ms 显现、
+   28px 圆形图标钮） */
+.msg-actions {
+  display: flex; align-items: center; gap: 10px; height: 28px;
+}
+.message.assistant .msg-actions { margin-top: 16px; margin-left: -6px; } /* §5.3 光学对齐 */
+.msg-actions .time-start, .msg-actions .time-end {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 14px; line-height: 24px; color: var(--label-tertiary); white-space: nowrap;
+}
+.msg-actions .time-start { padding-right: 12px; }
+.msg-actions .time-end { padding-left: 12px; }
+.msg-actions .run-time-dot { margin: 0 10px; color: var(--label-caption); }
+.msg-actions .action {
+  width: 28px; height: 28px; padding: 6px; border-radius: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; color: var(--label-tertiary); cursor: pointer;
+}
+.msg-actions .action:hover { background: var(--bg-hover); color: var(--label-secondary); }
+/* 时钟 hover 显现（80ms）：默认隐藏，悬浮/聚焦整行时显现 */
+@media (hover: hover) {
+  [data-time-hover-root] .msg-actions .time-start,
+  [data-time-hover-root] .msg-actions .time-end { opacity: 0; transition: opacity 80ms ease; }
+  [data-time-hover-root]:hover .msg-actions .time-start,
+  [data-time-hover-root]:focus-within .msg-actions .time-start,
+  [data-time-hover-root]:hover .msg-actions .time-end,
+  [data-time-hover-root]:focus-within .msg-actions .time-end { opacity: 1; }
 }
 /* System message (slash command results) — centered, subtle */
 .message.system { text-align: center; }
@@ -273,29 +330,69 @@ body {
 }
 .message.system .bubble pre { background: transparent; border: none; padding: 0; }
 
-/* ── Thinking/reasoning block — inline in assistant bubble (matching DSH original) ── */
+/* ── Thinking/reasoning block（ui-spec §4 ReasoningRow：24px 行、13px/20px 摘要、
+   running = 末行跟随流尾 + 扫光带；折叠 contain:size layout 固定 24px；无打字机/脉冲点）── */
 .think-section {
-  border-left: 2px solid var(--border-l3);
-  margin: 0 0 8px 0; padding-left: 10px;
+  display: flex; flex-direction: column;
+  margin: 0 0 8px 0;
 }
-.think-toggle {
-  display: inline-flex; align-items: center; gap: 3px;
-  height: 20px; cursor: pointer; user-select: none;
-  font-size: 12px; font-weight: 600; color: var(--label-tertiary);
-  background: none; border: none; padding: 0; transition: color 0.12s var(--ease);
+/* 折叠即固定 24px（§4.2），contain:size layout 防展开/收起布局抖动 */
+.think-section:not([data-expanded]) { contain: size layout; height: 24px; }
+.think-section .tr-row {
+  position: relative; overflow: hidden; display: flex; align-items: center;
+  height: 24px; min-width: 0; cursor: pointer; user-select: none; border-radius: 6px;
 }
-.think-toggle:hover { color: var(--label-secondary); }
-.think-chevron {
-  display: inline-block; font-size: 10px; transition: transform 0.12s var(--ease);
-  color: var(--label-caption);
+.think-section .tr-leading {
+  position: relative; flex: none; width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-right: 6px; color: var(--label-tertiary);
 }
-.think-section.expanded .think-chevron { transform: rotate(90deg); }
-.think-body {
-  display: none; margin-top: 4px; font-size: 13px; line-height: 1.6;
-  color: var(--label-tertiary); max-height: 400px; overflow-y: auto;
+.think-section .tr-leading svg { width: 14px; height: 14px; }
+.think-section .tr-icon { display: inline-flex; opacity: 1; transition: opacity 100ms ease; }
+.think-section .tr-chev {
+  position: absolute; inset: 0; margin: auto; opacity: 0;
+  transition: opacity 100ms ease; color: var(--label-secondary);
 }
-.think-section.expanded .think-body { display: block; }
-.think-body p { margin: 6px 0; }
+.think-section .tr-row:hover .tr-icon { opacity: 0; }
+.think-section .tr-row:hover .tr-chev { opacity: 1; }
+.think-section .tr-row.is-open .tr-icon { display: none; }
+.think-section .tr-row.is-open .tr-chev { position: static; opacity: 1; }
+.think-section .tr-title {
+  flex: none; font-size: 13px; line-height: 24px;
+  color: var(--label-secondary); font-weight: 400;
+}
+.think-section .tr-sep {
+  flex: none; width: 2px; height: 2px; border-radius: 1px;
+  margin: 0 8px; background: var(--label-caption);
+}
+/* 摘要走次级字号轴：13px / 20px（§4.2，与 ToolRow 的 24px 轴不同） */
+.think-section .tr-sum {
+  min-width: 0; overflow: hidden; flex: 1 1 auto; white-space: nowrap;
+  font-size: 13px; line-height: 20px; color: var(--label-tertiary);
+}
+.think-section .tr-sum .tr-sum-text { display: block; overflow: hidden; text-overflow: ellipsis; }
+/* running：末行跟随流尾（§4.3）——末行钉在行尾右侧，行首 clip 截断 */
+.think-section .tr-sum[data-follow-end] { display: flex; justify-content: flex-end; }
+.think-section .tr-sum[data-follow-end] .tr-sum-text {
+  flex: 0 0 auto; width: max-content; min-width: 100%;
+  overflow: visible; text-align: start; text-overflow: clip;
+}
+/* 展开体：22px 缩进对齐标题（leading 16 + gap 6），纯文本 pre-wrap */
+.think-section .think-body {
+  display: none;
+  padding: 4px 0 4px 22px;
+  font-size: 13px; line-height: 20px; color: var(--label-tertiary);
+  white-space: pre-wrap; word-break: break-word;
+}
+.think-section[data-expanded] .think-body { display: block; }
+/* 进行中扫光（§4.3 / §7.1）：300px 带、2.6s ease-out、90% 停留 */
+.think-section[data-state='running'] .tr-row::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 300px;
+  background: linear-gradient(90deg, transparent 0%,
+    color-mix(in srgb, var(--bg-base) 60%, transparent) 55%, transparent 100%);
+  animation: reasoning-row-sweep 2.6s ease-out infinite; pointer-events: none;
+}
+@keyframes reasoning-row-sweep { 0% { left: -300px; } 90%, 100% { left: 100%; } }
 
 .bubble pre {
   background: var(--bg-platform); padding: 12px 16px; border-radius: 8px; overflow-x: auto;
@@ -436,36 +533,134 @@ body {
   border-bottom: 1px solid var(--border-l1); letter-spacing: 0.02em;
 }
 
-/* ── Chat tool call: compact collapsible row (matching original dsh style) ── */
+/* ── Chat tool call（ui-spec §2 ToolRow + §2.9 参考 CSS：24px 行、13px sans 标题/摘要、
+   icon↔chevron 字形交换、扫光带、IN/OUT 卡、inspect pill、子调用树）── */
 .chat-tool-call {
-  max-width: 85%; margin: 2px 0; font-size: 12px;
-  list-style: none;
+  display: flex; flex-direction: column; margin: 2px 0 0; list-style: none;
 }
-.chat-tool-call .ctc-header {
-  display: flex; align-items: center; gap: 5px; height: 22px;
-  padding: 0 6px; margin-left: -4px; border-radius: 3px;
-  cursor: pointer; user-select: none; transition: background-color 120ms var(--ease);
+.chat-tool-call .tr-row {
+  position: relative; overflow: hidden; display: flex; align-items: center;
+  height: 24px; min-width: 0; cursor: pointer; user-select: none; border-radius: 6px;
 }
-.chat-tool-call .ctc-header:hover { background: var(--bg-hover); }
-.chat-tool-call .ctc-chevron { flex: none; font-size: 10px; color: var(--label-caption); transition: transform 0.12s; }
-.chat-tool-call.expanded .ctc-chevron { transform: rotate(90deg); }
-.chat-tool-call .ctc-icon { flex: none; color: var(--label-caption); }
-.chat-tool-call .ctc-name { flex: none; font-weight: 500; color: var(--label-secondary); font-family: var(--font-code); font-size: 12px; }
-.chat-tool-call .ctc-args { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--label-tertiary); font-family: var(--font-code); font-size: 12px; }
-.chat-tool-call.error .ctc-name { color: var(--red); }
-.chat-tool-call.error .ctc-args { color: var(--red); }
-.chat-tool-call .ctc-body {
-  display: none; margin: 2px 0 4px 16px; padding: 6px 10px;
-  border-radius: 6px; background: var(--bg-platform); border: 1px solid var(--border-l1);
+/* leading 16×16 图标盒，14px 字形，margin-right 6px（§2.2） */
+.chat-tool-call .tr-leading {
+  position: relative; flex: none; width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-right: 6px; color: var(--label-tertiary);
 }
-.chat-tool-call.expanded .ctc-body { display: block; }
-.chat-tool-call .ctc-body pre {
-  margin: 0; white-space: pre-wrap; font-size: 11px; font-family: var(--font-code);
-  color: var(--label-secondary); max-height: 300px; overflow-y: auto; line-height: 1.5;
+.chat-tool-call .tr-leading svg { width: 14px; height: 14px; }
+/* icon ↔ chevron-down 字形交换（§2.4）：默认工具图标，hover 100ms 交叉淡入淡出；
+   展开态直接显示 chevron-down（无旋转动画） */
+.chat-tool-call .tr-icon { display: inline-flex; opacity: 1; transition: opacity 100ms ease; }
+.chat-tool-call .tr-chev {
+  position: absolute; inset: 0; margin: auto; opacity: 0;
+  transition: opacity 100ms ease; color: var(--label-secondary);
 }
-.chat-tool-call .ctc-body .ctc-result-label { font-size: 10px; color: var(--label-caption); margin-bottom: 2px; }
-.chat-tool-call.error .ctc-body { border-color: rgba(220,50,50,0.2); }
-.chat-tool-call.error .ctc-body pre { color: var(--red); }
+.chat-tool-call .tr-row:hover .tr-icon { opacity: 0; }
+.chat-tool-call .tr-row:hover .tr-chev { opacity: 1; }
+.chat-tool-call .tr-row.is-open .tr-icon { display: none; }
+.chat-tool-call .tr-row.is-open .tr-chev { position: static; opacity: 1; }
+.chat-tool-call .tr-title {
+  flex: none; font-size: 13px; line-height: 24px;
+  color: var(--label-secondary); font-weight: 400;
+}
+/* 2×2 分隔点（§2.2）：margin 0 8px，label-caption */
+.chat-tool-call .tr-sep {
+  flex: none; width: 2px; height: 2px; border-radius: 1px;
+  margin: 0 8px; background: var(--label-caption);
+}
+.chat-tool-call .tr-sum {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 13px; line-height: 24px; color: var(--label-tertiary);
+}
+.chat-tool-call .tr-suffix {
+  flex: none; margin-left: 4px; white-space: nowrap;
+  font-size: 13px; line-height: 24px; color: var(--label-tertiary);
+}
+.chat-tool-call .tr-link {
+  flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; border: none; background: none; font: inherit; text-align: left;
+  padding: 0; font-size: 13px; line-height: 24px; color: var(--label-secondary);
+  text-decoration: underline dotted; text-decoration-color: var(--label-tertiary);
+  text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer;
+}
+.chat-tool-call .tr-link:hover { color: var(--label-primary); text-decoration-color: currentColor; }
+/* 错误态（§2.3）：只红摘要首行，标题不变；leading 由 JS 换成 StateDot error */
+.chat-tool-call[data-state='error'] .tr-sum { color: var(--red); }
+/* cordis_* 工具（§2.3）：leading/标题品牌蓝、标题 500、圆点同色 */
+.chat-tool-call[data-tool^='cordis_'] .tr-leading,
+.chat-tool-call[data-tool^='cordis_'] .tr-title { color: var(--accent); }
+.chat-tool-call[data-tool^='cordis_'] .tr-title { font-weight: 500; }
+.chat-tool-call[data-tool^='cordis_'] .tr-sep { background: var(--accent); }
+/* 进行中扫光（§2.5 / §7.1）：300px 带、2.6s ease-out、90% 停留；leading 保持工具图标 */
+.chat-tool-call[data-state='running'] .tr-row::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 300px;
+  background: linear-gradient(90deg, transparent 0%,
+    color-mix(in srgb, var(--bg-base) 60%, transparent) 55%, transparent 100%);
+  animation: tool-row-sweep 2.6s ease-out infinite; pointer-events: none;
+}
+@keyframes tool-row-sweep { 0% { left: -300px; } 90%, 100% { left: 100%; } }
+/* 展开体（§2.6）：12px 圆角卡、--bg-code 底、IN/OUT 双节 + 0.5px 分隔、
+   12px/18px code 字体、节高 150px 内滚、sticky label */
+.chat-tool-call .tr-body {
+  display: none; flex-direction: column; margin: 4px 0 4px 4px;
+}
+.chat-tool-call .tr-row.is-open ~ .tr-body { display: flex; }
+.chat-tool-call .tr-card {
+  display: flex; flex-direction: column;
+  border: 0.5px solid var(--border-l1); border-radius: 12px;
+  background: var(--bg-code); font-family: var(--font-code);
+  font-size: 12px; line-height: 18px;
+}
+.chat-tool-call .tr-section {
+  display: grid; grid-template-columns: max-content 1fr; column-gap: 14px;
+  align-items: baseline; padding: 12px 16px; max-height: 150px; overflow-y: auto;
+}
+.chat-tool-call .tr-label { position: sticky; top: 0; align-self: start; color: var(--label-caption); }
+.chat-tool-call .tr-divider { flex: none; height: 0.5px; background: var(--border-l2); }
+.chat-tool-call .tr-text { min-width: 0; white-space: pre-wrap; word-break: break-word; color: var(--label-secondary); }
+.chat-tool-call .tr-text[data-error] { color: var(--red); }
+/* Inspect pill（§2.6）：999px 圆角、11px/16px、hover 100ms 显现、真实占行（不 absolute） */
+.chat-tool-call .tr-inspect {
+  display: inline-flex; align-self: flex-start; align-items: center; gap: 4px;
+  margin: 4px 0 2px 4px; padding: 2px 8px;
+  border: 0.5px solid var(--border-l3); border-radius: 999px;
+  background: var(--bg-base); color: var(--label-secondary);
+  font-size: 11px; line-height: 16px; cursor: pointer;
+  opacity: 0; transition: opacity 100ms ease;
+}
+.chat-tool-call:hover .tr-inspect, .tr-inspect:focus-visible { opacity: 1; }
+.chat-tool-call .tr-inspect:hover { background: var(--bg-hover-solid); color: var(--label-primary); }
+/* 子调用树（§3 ToolCallTree）：22px 缩进 + 8px padding + 0.5px 左竖线、gap 4px */
+.chat-tool-call .tr-subcalls {
+  display: flex; flex-direction: column; gap: 4px;
+  margin: 4px 0 2px 22px; padding-left: 8px;
+  border-left: 0.5px solid var(--border-l2);
+}
+/* StateDot 状态点（§6.2）：10px、halo 10% + 6px 实心核 */
+.state-dot { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.state-dot::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: currentColor; opacity: 0.1;
+}
+.state-dot::after {
+  content: ''; position: absolute; inset: 20%; border-radius: 50%;
+  background: currentColor;
+}
+.state-dot[data-state='error'] { color: var(--red); }
+.state-dot[data-state='warning'] { color: var(--amber); }
+.state-dot[data-state='done'] { color: var(--green); }
+.state-dot[data-state='ongoing'] { color: var(--ongoing-blue); }
+/* 无障碍运行状态文本（§2.5 / §4.3）：1×1 clip，屏幕阅读器专用 */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+/* prefers-reduced-motion：全部扫光关闭（§7.2） */
+@media (prefers-reduced-motion: reduce) {
+  .chat-tool-call[data-state='running'] .tr-row::after,
+  .think-section[data-state='running'] .tr-row::after { animation: none; }
+}
 
 /* ── Workflow run panel ── */
 .wf-panel { margin: 4px 0; }
@@ -543,8 +738,6 @@ body {
 .ctx-panel .ctx-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
 .ctx-panel .ctx-swatch.input { background: #818cf8; }
 .ctx-panel .ctx-swatch.output { background: var(--info-fill); }
-.typing { display: inline-block; animation: blink 1s infinite; color: var(--accent); }
-@keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:0} }
 
 /* Empty hero */
 .hero {
@@ -1966,7 +2159,17 @@ async function sendMessage() {
   }
 
   if (currentAssistantEl && currentAssistantText) {
-    currentAssistantEl.querySelector('.bubble').innerHTML = renderMd(currentAssistantText);
+    // 只更新答案输出（think-output），保留已渲染的思考行（§4）
+    const target = currentAssistantEl.querySelector('.think-output') || currentAssistantEl.querySelector('.bubble');
+    target.innerHTML = renderMd(currentAssistantText);
+    // 回填 assistant 消息时长（§5.4 timeEnd：N秒 / N分SS秒）
+    const startedAt = parseInt(currentAssistantEl.dataset.startedAt || '0', 10);
+    const timeEnd = currentAssistantEl.querySelector('.msg-actions .time-end');
+    if (startedAt > 0 && timeEnd) {
+      timeEnd.textContent = formatRunDuration(Date.now() - startedAt);
+      const dot = currentAssistantEl.querySelector('.msg-actions .run-time-dot');
+      if (dot) dot.style.display = '';
+    }
   }
   isStreaming = false;
   chatAbort = null;
@@ -2691,50 +2894,60 @@ function replayTrajectory(events) {
 function handleEvent(event, showTraj) {
   switch (event.type) {
     case 'think_delta':
-      // Create the thinking section inside the assistant bubble (before output text).
-      // Structure: <div class="message assistant"><div class="bubble">
-      //   <div class="think-section expanded"><button class="think-toggle">...</button><div class="think-body">...</div></div>
-      //   <div class="think-output">...actual answer...</div>
-      // </div></div>
+      // §4 ReasoningRow：24px 行（think leading 图标 + 标题 + 2×2 点 + 13/20 摘要），
+      // running 时摘要 = 末行跟随流尾（data-follow-end）+ 整行扫光；展开体纯文本 pre-wrap
       if (!currentAssistantEl) {
         currentAssistantEl = addMessage('assistant', '');
         currentAssistantText = '';
       }
       if (!currentThinkEl) {
         const bubble = currentAssistantEl.querySelector('.bubble');
-        // Create thinking section
         const thinkSection = document.createElement('div');
-        thinkSection.className = 'think-section expanded';
-        thinkSection.innerHTML = '<button class="think-toggle" type="button"><span class="think-chevron">▶</span>思考</button><div class="think-body"></div>';
+        thinkSection.className = 'think-section';
+        thinkSection.dataset.variant = 'think';
+        thinkSection.dataset.state = 'running';
+        thinkSection.innerHTML =
+          '<span class="visually-hidden">' + esc(t('row.running')) + '</span>' +
+          '<div class="tr-row" role="button" tabindex="0" aria-expanded="false">' +
+            '<span class="tr-leading"><span class="tr-icon">' + TOOL_ICONS.think + '</span><span class="tr-chev">' + TOOL_ICONS.chevron + '</span></span>' +
+            '<span class="tr-title">' + esc(t('message.think')) + '</span>' +
+            '<span class="tr-sep" aria-hidden="true"></span>' +
+            '<span class="tr-sum" data-follow-end=""><span class="tr-sum-text"></span></span>' +
+          '</div>' +
+          '<div class="think-body"></div>';
         bubble.appendChild(thinkSection);
         // Create output container (will be filled by delta events)
         const outputDiv = document.createElement('div');
         outputDiv.className = 'think-output';
         bubble.appendChild(outputDiv);
-        // Wire toggle
-        thinkSection.querySelector('.think-toggle').onclick = () => thinkSection.classList.toggle('expanded');
+        wireRowToggle(thinkSection, thinkSection.querySelector('.tr-row'));
         currentThinkEl = thinkSection.querySelector('.think-body');
         currentThinkText = '';
       }
       currentThinkText += event.text;
-      currentThinkEl.innerHTML = renderMd(currentThinkText);
+      currentThinkEl.textContent = currentThinkText;
+      const thinkSummary = currentThinkEl.closest('.think-section').querySelector('.tr-sum');
+      if (thinkSummary) {
+        const thinkSumText = thinkSummary.querySelector('.tr-sum-text');
+        if (thinkSumText) thinkSumText.textContent = latestLine(currentThinkText);
+      }
       document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
       break;
     case 'delta':
-      setConnStatus('streaming', '接收中');
+      setConnStatus('streaming', t('receiving'));
       if (!currentAssistantEl) { currentAssistantEl = addMessage('assistant',''); currentAssistantText=''; }
+      settleThinkSection(currentThinkEl ? currentThinkEl.closest('.think-section') : null);
       currentAssistantText += event.text;
       // If a thinking section exists, write output to the .think-output div.
       // Otherwise write directly to the bubble (no thinking content).
       const outputTarget = currentAssistantEl.querySelector('.think-output') || currentAssistantEl.querySelector('.bubble');
-      // Only show the blinking cursor when there's actual output text.
-      // During thinking-only streaming, think-output is empty — no cursor.
-      const cursor = currentAssistantText ? '<span class="typing">▋</span>' : '';
-      outputTarget.innerHTML = renderMd(currentAssistantText) + cursor;
+      // §5.6：无打字光标/闪烁块，只持续更新 Markdown 文本
+      outputTarget.innerHTML = renderMd(currentAssistantText);
       document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
       break;
     case 'assistant_message':
       if (!currentAssistantEl) currentAssistantEl = addMessage('assistant','');
+      settleThinkSection(currentThinkEl ? currentThinkEl.closest('.think-section') : null);
       if (event.content) {
         currentAssistantText = event.content;
         const outputTarget = currentAssistantEl.querySelector('.think-output') || currentAssistantEl.querySelector('.bubble');
@@ -2769,40 +2982,7 @@ function handleEvent(event, showTraj) {
         ? chatInner.querySelector('.chat-tool-call[data-call-id="' + CSS.escape(event.call_id) + '"]')
         : currentToolCallEl;
       if (targetCard) {
-        const body = targetCard.querySelector('.ctc-body');
-        if (body) {
-          const label = document.createElement('div');
-          label.className = 'ctc-result-label';
-          label.textContent = event.is_error ? '错误' : '结果';
-          body.appendChild(label);
-          // Check if this is a workflow result — render as panel instead of raw pre.
-          const toolName = targetCard.querySelector('.ctc-name');
-          if (toolName && toolName.textContent === 'workflow' && !event.is_error) {
-            const wfHtml = renderWorkflowResult(event.content);
-            if (wfHtml) {
-              const wfDiv = document.createElement('div');
-              wfDiv.innerHTML = wfHtml;
-              body.appendChild(wfDiv);
-              // Wire phase toggle.
-              wfDiv.querySelectorAll('.wf-phase-header').forEach(h => {
-                h.onclick = () => h.parentElement.classList.toggle('expanded');
-              });
-              // Wire member result toggle.
-              wfDiv.querySelectorAll('.wf-member-label').forEach(l => {
-                l.onclick = () => l.parentElement.classList.toggle('collapsed');
-              });
-            } else {
-              const pre = document.createElement('pre');
-              pre.textContent = event.content;
-              body.appendChild(pre);
-            }
-          } else {
-            const pre = document.createElement('pre');
-            pre.textContent = event.content;
-            body.appendChild(pre);
-          }
-        }
-        if (event.is_error) targetCard.classList.add('error');
+        applyToolResult(targetCard, event.content, !!event.is_error);
         if (targetCard === currentToolCallEl) currentToolCallEl = null;
       }
       break;
@@ -2834,7 +3014,12 @@ function handleEvent(event, showTraj) {
       currentThinkEl=null;
       currentThinkText='';
       // Auto-collapse thinking sections when the turn ends (user can re-expand)
-      document.querySelectorAll('.think-section').forEach(s => s.classList.remove('expanded'));
+      document.querySelectorAll('.think-section').forEach(s => {
+        settleThinkSection(s);
+        s.removeAttribute('data-expanded');
+        const row = s.querySelector('.tr-row');
+        if (row) row.classList.remove('is-open');
+      });
       saveSessionStats();
       break;
     case 'usage':
@@ -2868,16 +3053,95 @@ function handleEvent(event, showTraj) {
   }
 }
 
+// 思考结束（delta/assistant_message/turn_end）：状态 ok、摘要回到首行、去掉末行跟随
+function settleThinkSection(thinkSection) {
+  if (!thinkSection || thinkSection.dataset.state !== 'running') return;
+  thinkSection.dataset.state = 'ok';
+  const sum = thinkSection.querySelector('.tr-sum');
+  if (sum) {
+    sum.removeAttribute('data-follow-end');
+    const sumText = sum.querySelector('.tr-sum-text');
+    const body = thinkSection.querySelector('.think-body');
+    if (sumText) sumText.textContent = firstLine(body ? body.textContent : '');
+  }
+  const vh = thinkSection.querySelector('.visually-hidden');
+  if (vh) vh.textContent = '';
+}
+
+// ── 消息操作/时间行（ui-spec §5.4 MessageIconActions）──────────────────
+const ICON_CLOCK = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M8 1.5C4.41015 1.5 1.5 4.41015 1.5 8C1.5 11.5899 4.41015 14.5 8 14.5C11.5899 14.5 14.5 11.5899 14.5 8C14.5 4.41015 11.5899 1.5 8 1.5ZM8 13.25C5.10051 13.25 2.75 10.8995 2.75 8C2.75 5.10051 5.10051 2.75 8 2.75C10.8995 2.75 13.25 5.10051 13.25 8C13.25 10.8995 10.8995 13.25 8 13.25Z"/><path fill="currentColor" d="M8.75 4.5V7.9L11.5 9.7L10.7 10.9L7.25 8.6V4.5H8.75Z"/></svg>';
+const ICON_COPY = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path fill="currentColor" d="M5.5 2.5C5.5 1.67157 6.17157 1 7 1H12C12.8284 1 13.5 1.67157 13.5 2.5V10.5C13.5 11.3284 12.8284 12 12 12H11V10.75H11.9375C12.2167 10.75 12.25 10.6992 12.25 10.5V2.5C12.25 2.30081 12.2167 2.25 12 2.25H7C6.78325 2.25 6.75 2.30081 6.75 2.5V3H5.5V2.5ZM4 5.5C4 4.67157 4.67157 4 5.5 4H10.5C11.3284 4 12 4.67157 12 5.5V13.5C12 14.3284 11.3284 15 10.5 15H5.5C4.67157 15 4 14.3284 4 13.5V5.5ZM5.25 5.5V13.5C5.25 13.6992 5.28325 13.75 5.5 13.75H10.5C10.7167 13.75 10.75 13.6992 10.75 13.5V5.5C10.75 5.30081 10.7167 5.25 10.5 5.25H5.5C5.28325 5.25 5.25 5.30081 5.25 5.5Z"/></svg>';
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+// 时间格式（§5.4 message-chrome.ts）：同一天 HH:mm；同年 M月D日+时间；跨年含年份
+function formatMessageClock(time) {
+  const d = new Date(time);
+  const n = new Date();
+  const clock = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  const sameDay = d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  if (sameDay) return clock;
+  if (d.getFullYear() === n.getFullYear()) return t('clock.md', { m: d.getMonth() + 1, d: d.getDate() }) + ' ' + clock;
+  return t('clock.ymd', { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() }) + ' ' + clock;
+}
+
+// 时长（§5.4）：≥1 分钟 → N分SS秒，否则 N秒
+function formatRunDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return minutes > 0
+    ? t('duration.minutes', { m: minutes, ss: pad2(seconds) })
+    : t('duration.seconds', { s: seconds });
+}
+
+function buildMessageActions(role, messageEl) {
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+  const time = document.createElement('span');
+  time.className = 'time-start';
+  time.innerHTML = ICON_CLOCK + '<span></span>';
+  time.querySelector('span').textContent = formatMessageClock(Date.now());
+  actions.appendChild(time);
+  if (role === 'assistant') {
+    // 时长（timeEnd）在流结束后回填（sendMessage 收尾处）；此前隐藏分隔点
+    const dot = document.createElement('span');
+    dot.className = 'run-time-dot';
+    dot.textContent = '·';
+    dot.style.display = 'none';
+    actions.appendChild(dot);
+    const timeEnd = document.createElement('span');
+    timeEnd.className = 'time-end';
+    actions.appendChild(timeEnd);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'action';
+    btn.title = t('copy');
+    btn.innerHTML = ICON_COPY;
+    btn.onclick = () => {
+      const text = (messageEl.querySelector('.bubble') || messageEl).innerText;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(() => {});
+    };
+    actions.appendChild(btn);
+  }
+  return actions;
+}
+
 function addMessage(role, content) {
   const chat = document.querySelector('.chat-inner');
   const el = document.createElement('div');
   el.className = `message ${role}`;
+  el.setAttribute('data-time-hover-root', '');
   if (role === 'user') {
     el.innerHTML = `<div class="bubble">${esc(content)}</div>`;
   } else if (role === 'system') {
     el.innerHTML = `<div class="bubble">${esc(content)}</div>`;
   } else {
-    el.innerHTML = `<div class="role-tag">Assistant</div><div class="bubble">${renderMd(content)}</div>`;
+    el.innerHTML = `<div class="role-tag">${esc(t('roleAssistant'))}</div><div class="bubble">${renderMd(content)}</div>`;
+    el.dataset.startedAt = String(Date.now()); // §5.4 时长起点（近似：渲染时间）
+  }
+  if (role === 'user' || role === 'assistant') {
+    el.appendChild(buildMessageActions(role, el));
   }
   chat.appendChild(el);
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
@@ -2888,6 +3152,7 @@ function addMessageWithImages(role, content, images) {
   const chat = document.querySelector('.chat-inner');
   const el = document.createElement('div');
   el.className = `message ${role}`;
+  el.setAttribute('data-time-hover-root', '');
   let html = `<div class="bubble">${esc(content)}`;
   if (images && images.length > 0) {
     for (const img of images) {
@@ -2896,6 +3161,9 @@ function addMessageWithImages(role, content, images) {
   }
   html += `</div>`;
   el.innerHTML = html;
+  if (role === 'user' || role === 'assistant') {
+    el.appendChild(buildMessageActions(role, el));
+  }
   chat.appendChild(el);
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
   return el;
@@ -2924,8 +3192,20 @@ function renderChatFromHistory(messages) {
           // Restructure: insert thinking section before the output text
           const thinkSection = document.createElement('div');
           thinkSection.className = 'think-section'; // collapsed by default on reload
-          thinkSection.innerHTML = '<button class="think-toggle" type="button"><span class="think-chevron">▶</span>思考</button><div class="think-body">' + renderMd(msg.thinking) + '</div>';
-          thinkSection.querySelector('.think-toggle').onclick = () => thinkSection.classList.toggle('expanded');
+          thinkSection.dataset.variant = 'think';
+          thinkSection.dataset.state = 'ok';
+          thinkSection.innerHTML =
+            '<span class="visually-hidden"></span>' +
+            '<div class="tr-row" role="button" tabindex="0" aria-expanded="false">' +
+              '<span class="tr-leading"><span class="tr-icon">' + TOOL_ICONS.think + '</span><span class="tr-chev">' + TOOL_ICONS.chevron + '</span></span>' +
+              '<span class="tr-title">' + esc(t('message.think')) + '</span>' +
+              '<span class="tr-sep" aria-hidden="true"></span>' +
+              '<span class="tr-sum"><span class="tr-sum-text">' + esc(firstLine(msg.thinking)) + '</span></span>' +
+            '</div>' +
+            '<div class="think-body"></div>';
+          const thinkBody = thinkSection.querySelector('.think-body');
+          thinkBody.textContent = msg.thinking;
+          wireRowToggle(thinkSection, thinkSection.querySelector('.tr-row'));
           // Insert before the existing text content in the bubble
           bubble.insertBefore(thinkSection, bubble.firstChild);
         }
@@ -2943,42 +3223,12 @@ function renderChatFromHistory(messages) {
         ? chat.querySelector('.chat-tool-call[data-call-id="' + CSS.escape(msg.call_id) + '"]')
         : currentToolCallEl;
       if (targetCard) {
-        const body = targetCard.querySelector('.ctc-body');
-        if (body) {
-          const label = document.createElement('div');
-          label.className = 'ctc-result-label';
-          label.textContent = msg.is_error ? '错误' : '结果';
-          body.appendChild(label);
-          const toolName = targetCard.querySelector('.ctc-name');
-          if (toolName && toolName.textContent === 'workflow' && !msg.is_error) {
-            const wfHtml = renderWorkflowResult(msg.content);
-            if (wfHtml) {
-              const wfDiv = document.createElement('div');
-              wfDiv.innerHTML = wfHtml;
-              body.appendChild(wfDiv);
-              wfDiv.querySelectorAll('.wf-phase-header').forEach(h => {
-                h.onclick = () => h.parentElement.classList.toggle('expanded');
-              });
-              wfDiv.querySelectorAll('.wf-member-label').forEach(l => {
-                l.onclick = () => l.parentElement.classList.toggle('collapsed');
-              });
-            } else {
-              const pre = document.createElement('pre');
-              pre.textContent = msg.content;
-              body.appendChild(pre);
-            }
-          } else {
-            const pre = document.createElement('pre');
-            pre.textContent = msg.content;
-            body.appendChild(pre);
-          }
-        }
-        if (msg.is_error) targetCard.classList.add('error');
+        applyToolResult(targetCard, msg.content, !!msg.is_error);
         // Only clear currentToolCallEl if it was the matched card
         if (targetCard === currentToolCallEl) currentToolCallEl = null;
       } else {
         // No matching tool call card — render as standalone result card
-        addChatToolCall(msg.is_error ? 'Error' : 'Result', msg.content, msg.is_error);
+        addChatToolCall(msg.is_error ? 'Error' : 'Result', msg.content, !!msg.is_error);
       }
     }
   }
@@ -3117,20 +3367,272 @@ function addTrajTurnHeader(turn) {
   list.appendChild(el);
 }
 
-// ── Collapsible tool calls in chat view (matching original dsh style) ──
+// ── 工具行渲染（ui-spec §2 ToolRow + §6.1 图标全表）────────────────────
+// 工具类型图标表：bash/read/search/web/todo/edit/browse/globe/api/code/checklist/think（§6.1）
+const TOOL_ICONS = {
+
+  chevron: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path fill="currentColor" d="M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z"/></svg>',
+  api: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"> <path transform="translate(0.6689 1.073)" fill="currentColor" d="M11.4818 5.57813C11.4818 4.45301 11.4807 3.66237 11.4075 3.05908C11.3359 2.46953 11.2024 2.13852 10.9939 1.89441C10.9247 1.81341 10.8493 1.73801 10.7683 1.66882C10.5242 1.46033 10.1932 1.32686 9.60364 1.25525C9.00034 1.18198 8.20974 1.18091 7.0846 1.18091L5.57813 1.18091C4.45301 1.18091 3.66238 1.18198 3.05908 1.25525C2.46953 1.32686 2.13852 1.46033 1.89441 1.66882C1.81341 1.73801 1.73801 1.81341 1.66882 1.89441C1.46033 2.13852 1.32686 2.46953 1.25525 3.05908C1.18198 3.66238 1.18091 4.45301 1.18091 5.57813L1.18091 6.2771C1.18091 7.40218 1.18197 8.19288 1.25525 8.79614C1.32687 9.38553 1.46036 9.71674 1.66882 9.96082C1.73797 10.0417 1.81347 10.1173 1.89441 10.1864C2.13851 10.3948 2.46965 10.5275 3.05908 10.5991C3.66238 10.6724 4.45298 10.6735 5.57813 10.6735L7.0846 10.6735C8.20977 10.6735 9.00033 10.6724 9.60364 10.5991C10.1931 10.5275 10.5242 10.3948 10.7683 10.1864C10.8493 10.1173 10.9247 10.0417 10.9939 9.96082C11.2024 9.71674 11.3358 9.38553 11.4075 8.79614C11.4808 8.19288 11.4818 7.40218 11.4818 6.2771L11.4818 5.57813ZM12.6627 6.2771C12.6627 7.37222 12.6637 8.247 12.5798 8.93799C12.4942 9.64284 12.3133 10.2359 11.8928 10.7282C11.7834 10.8562 11.6637 10.9751 11.5356 11.0845C11.0434 11.5049 10.4511 11.6867 9.74634 11.7723C9.05525 11.8563 8.17999 11.8552 7.0846 11.8552L5.57813 11.8552C4.48273 11.8552 3.60747 11.8563 2.91638 11.7723C2.21157 11.6867 1.61933 11.5049 1.12708 11.0845C0.99901 10.9751 0.879281 10.8562 0.769898 10.7282C0.349454 10.2359 0.168506 9.64284 0.0828864 8.93799C-0.00101964 8.247 4.88512e-07 7.37222 6.47206e-07 6.2771L6.47206e-07 5.57813C6.47206e-07 4.48273 -0.00106163 3.60747 0.0828864 2.91638C0.168502 2.21168 0.349594 1.61928 0.769898 1.12708C0.879302 0.998981 0.998981 0.879302 1.12708 0.769898C1.61928 0.349594 2.21168 0.168502 2.91638 0.0828864C3.60747 -0.00106163 4.48273 6.47206e-07 5.57813 6.47206e-07L7.0846 6.47206e-07C8.17999 6.47206e-07 9.05525 -0.00106163 9.74634 0.0828864C10.451 0.168505 11.0434 0.349587 11.5356 0.769898C11.6637 0.879302 11.7834 0.998981 11.8928 1.12708C12.3131 1.61928 12.4942 2.21169 12.5798 2.91638C12.6638 3.60747 12.6627 4.48273 12.6627 5.57813L12.6627 6.2771Z"/> <path transform="translate(0.6689 1.073)" fill="currentColor" d="M6.02607 5.50955L6.44306 5.9274L3.84284 8.52762L3.425 8.11063L3.00715 7.69278L4.77253 5.9274L3.00715 4.16202L3.84284 3.32633L6.02607 5.50955Z"/> <path transform="translate(0.6689 1.073)" fill="currentColor" d="M9.23789 7.35397L9.23789 8.53488L6.96238 8.53488L6.96238 7.35397L9.23789 7.35397Z"/> </svg>',
+  code: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M12.3368 1.53569L11.931 4.43172H14.8086V5.79673H11.7404L11.1962 9.67859H14.2839V11.0436H11.0056L10.4994 14.6529L9.14873 14.4643L9.62731 11.0436H5.75876L5.25252 14.6529L3.90186 14.4643L4.38043 11.0436H1.69141V9.67859H4.57104L5.11417 5.79673H2.21609V4.43172H5.30581L5.73724 1.34713L7.08995 1.53569L6.68414 4.43172H10.5527L10.9841 1.34713L12.3368 1.53569ZM5.94937 9.67859H9.81791L10.361 5.79673H6.49353L5.94937 9.67859Z"/></svg>',
+  edit: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path fill="currentColor" d="M9.94076 1.34942C10.7047 0.90231 11.6503 0.902415 12.4143 1.34942C12.7061 1.52015 12.9688 1.79118 13.3104 2.13284C13.6521 2.47448 13.9231 2.73721 14.0939 3.02894C14.5408 3.79294 14.5409 4.73856 14.0939 5.50251C13.9231 5.79415 13.652 6.05704 13.3104 6.39861L6.65932 13.0497C6.28068 13.4284 6.00695 13.7108 5.66543 13.9097C5.32391 14.1085 4.94315 14.2074 4.42705 14.3498L3.24394 14.6761C2.77527 14.8054 2.34538 14.9262 2.00131 14.9684C1.65196 15.0112 1.17964 15.0013 0.810764 14.6325C0.441921 14.2637 0.432107 13.7913 0.47486 13.442C0.517035 13.0979 0.6379 12.668 0.767181 12.1993L1.09352 11.0162C1.23588 10.5001 1.33481 10.1193 1.5336 9.77784C1.7325 9.43632 2.0149 9.1626 2.39355 8.78395L9.04466 2.13284C9.38625 1.79126 9.64911 1.52016 9.94076 1.34942ZM15.5427 14.8398H7.55223L8.96707 13.425H15.5427V14.8398ZM3.39382 9.78422C2.965 10.213 2.84244 10.3436 2.75709 10.49C2.67183 10.6366 2.61862 10.8079 2.45733 11.3925L2.13099 12.5756C2.00183 13.0439 1.92194 13.3419 1.88863 13.5536C2.10041 13.5204 2.39872 13.4416 2.86764 13.3123L4.05075 12.9859C4.63544 12.8246 4.80669 12.7715 4.95323 12.6862C5.09968 12.6008 5.23022 12.4783 5.65905 12.0494L10.721 6.98644L8.45577 4.72121L3.39382 9.78422ZM11.7 2.57079C11.3774 2.38198 10.9777 2.38198 10.6551 2.57079C10.5602 2.62647 10.4487 2.72931 10.0449 3.13311L9.45604 3.72094L11.7213 5.98617L12.3102 5.39833C12.7139 4.99457 12.8168 4.88307 12.8725 4.78818C13.0613 4.46561 13.0612 4.06585 12.8725 3.74326C12.8169 3.64827 12.7146 3.53752 12.3102 3.13311C11.9057 2.72863 11.795 2.6264 11.7 2.57079Z"/></svg>',
+  search: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"> <path fill="currentColor" d="M11.894845 6.647401C11.894845 3.725463 9.534486 1.356779 6.623219 1.35657C3.711786 1.35657 1.351635 3.725338 1.351635 6.647401C1.351843 9.569296 3.711911 11.938273 6.623219 11.938273C9.534361 11.938064 11.894637 9.569171 11.894845 6.647401ZM13.245462 6.647401C13.245254 10.317935 10.280401 13.293613 6.623219 13.293821C2.965871 13.293821 0.000204 10.31806 0 6.647401C0 2.976574 2.965746 0 6.623219 0C10.280526 0.000205 13.245462 2.9767 13.245462 6.647401Z"/> <path fill="currentColor" d="M16.000417 15.041079L15.044449 16.000433L11.530434 12.473588L12.486298 11.514234L16.000417 15.041079Z"/> </svg>',
+  browse: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"> <path fill="currentColor" d="M11.2426 4.80473V6.10551H4.75819V4.80473H11.2426Z"/> <path fill="currentColor" d="M9.40858 7.84478V9.14557H4.75819V7.84478H9.40858Z"/> <path fill="currentColor" d="M9.23438 0.546389C10.1941 0.546389 10.9683 0.544914 11.5859 0.611819C12.2161 0.680096 12.7634 0.825745 13.2393 1.17139C13.5172 1.3733 13.7619 1.61812 13.9639 1.896C14.3096 2.37183 14.4551 2.91922 14.5234 3.54932C14.5903 4.16686 14.5889 4.94133 14.5889 5.90088V10.0981C14.5889 11.0576 14.5903 11.8321 14.5234 12.4497C14.4552 13.0798 14.3094 13.6272 13.9639 14.103C13.7619 14.381 13.5172 14.6257 13.2393 14.8276C12.7633 15.1734 12.2163 15.3189 11.5859 15.3872C10.9683 15.4541 10.1942 15.4536 9.23438 15.4536H6.76563C5.80591 15.4536 5.03168 15.4541 4.41407 15.3872C3.78385 15.3189 3.23665 15.1734 2.76074 14.8276C2.48291 14.6257 2.23802 14.3809 2.03614 14.103C1.69066 13.6272 1.54483 13.0798 1.47657 12.4497C1.40973 11.8321 1.41114 11.0576 1.41114 10.0981V5.90088C1.41113 4.94132 1.40966 4.16686 1.47657 3.54932C1.54488 2.91921 1.69042 2.37184 2.03614 1.896C2.2381 1.61807 2.4828 1.37333 2.76074 1.17139C3.23665 0.825682 3.78386 0.680109 4.41407 0.611819C5.03168 0.544905 5.80591 0.546389 6.76563 0.546389H9.23438ZM6.76563 1.896C5.77586 1.896 5.0876 1.89738 4.55957 1.95459C4.0443 2.01043 3.76214 2.11349 3.55469 2.26416C3.39135 2.38284 3.24761 2.52662 3.12891 2.68994C2.97821 2.89736 2.8752 3.17967 2.81934 3.69483C2.76214 4.22279 2.76075 4.91131 2.76074 5.90088V10.0981C2.76074 11.0876 2.76221 11.7762 2.81934 12.3042C2.87516 12.8194 2.97829 13.1026 3.12891 13.3101C3.24754 13.4733 3.39147 13.6172 3.55469 13.7358C3.76213 13.8865 4.04438 13.9896 4.55957 14.0454C5.0876 14.1026 5.77586 14.103 6.76563 14.103H9.23438C10.2242 14.103 10.9124 14.1026 11.4404 14.0454C11.9556 13.9896 12.2379 13.8865 12.4453 13.7358C12.6086 13.6172 12.7525 13.4733 12.8711 13.3101C13.0217 13.1026 13.1248 12.8195 13.1807 12.3042C13.2378 11.7762 13.2393 11.0876 13.2393 10.0981V5.90088C13.2393 4.91131 13.2379 4.22279 13.1807 3.69483C13.1248 3.17969 13.0218 2.89736 12.8711 2.68994C12.7524 2.52667 12.6086 2.38281 12.4453 2.26416C12.2379 2.11355 11.9556 2.01041 11.4404 1.95459C10.9124 1.8974 10.2241 1.896 9.23438 1.896H6.76563Z"/> </svg>',
+  globe: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M7.00018 0.353516C10.6708 0.353535 13.6468 3.32958 13.6469 7.00018C13.6468 10.6708 10.6708 13.6468 7.00018 13.6469C3.32957 13.6468 0.353535 10.6708 0.353516 7.00018C0.353535 3.32957 3.32957 0.353531 7.00018 0.353516ZM5.44643 7.59661C5.49463 8.97506 5.70762 10.191 6.02136 11.0793C6.20141 11.5891 6.40328 11.9585 6.59898 12.1889C6.79501 12.4196 6.93213 12.454 7.00018 12.454C7.06822 12.454 7.20533 12.4197 7.40138 12.1889C7.59708 11.9585 7.79895 11.589 7.979 11.0793C8.29274 10.191 8.50574 8.97506 8.55394 7.59661H5.44643ZM1.57861 7.59661C1.80785 9.70467 3.2386 11.4509 5.1715 12.1388C5.07135 11.9317 4.97972 11.7098 4.89746 11.477C4.53084 10.4391 4.30224 9.0828 4.25357 7.59661H1.57861ZM9.74679 7.59661C9.69813 9.0828 9.46952 10.4391 9.1029 11.477C9.0206 11.7099 8.92818 11.9316 8.82797 12.1388C10.7613 11.4511 12.1925 9.70496 12.4218 7.59661H9.74679ZM5.1706 1.8616C3.23814 2.54963 1.80876 4.29604 1.5795 6.40376H4.25357C4.30224 4.91756 4.53083 3.56129 4.89746 2.5234C4.97968 2.29066 5.07051 2.0686 5.1706 1.8616ZM7.00018 1.54637C6.93213 1.54638 6.79503 1.5807 6.59898 1.81145C6.40332 2.04177 6.20139 2.41058 6.02136 2.92012C5.70754 3.80851 5.49461 5.02499 5.44643 6.40376H8.55394C8.50575 5.025 8.29282 3.80851 7.979 2.92012C7.79898 2.41059 7.59705 2.04177 7.40138 1.81145C7.20531 1.58067 7.06823 1.54637 7.00018 1.54637ZM8.82887 1.8616C8.92902 2.0687 9.02064 2.29053 9.1029 2.5234C9.46953 3.56129 9.69812 4.91756 9.74679 6.40376H12.4209C12.1916 4.29575 10.7618 2.54943 8.82887 1.8616Z"/></svg>',
+  checklist: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"> <path fill="currentColor" d="M13.3277 9.69629V10.976H7.28086V9.69629H13.3277Z"/> <path fill="currentColor" d="M13.3277 2.97256V4.25225H7.28086V2.97256H13.3277Z"/> <path fill="currentColor" d="M4.64512 10.336C4.64505 9.62755 4.07081 9.05322 3.3623 9.05322C2.65386 9.05329 2.07956 9.62759 2.07949 10.336C2.07949 11.0445 2.65382 11.6188 3.3623 11.6188C4.07085 11.6188 4.64512 11.0446 4.64512 10.336ZM5.92559 10.336C5.92559 11.7515 4.77777 12.8993 3.3623 12.8993C1.94689 12.8993 0.799805 11.7515 0.799805 10.336C0.799871 8.92066 1.94693 7.7736 3.3623 7.77354C4.77773 7.77354 5.92552 8.92062 5.92559 10.336Z"/> <path fill="currentColor" d="M4.64531 3.6123C4.6453 2.90382 4.07098 2.32949 3.3625 2.32949C2.65403 2.32951 2.0797 2.90383 2.07969 3.6123C2.07969 4.32079 2.65402 4.8951 3.3625 4.89512C4.07099 4.89512 4.64531 4.3208 4.64531 3.6123ZM5.925 3.6123C5.925 5.02772 4.77792 6.1748 3.3625 6.1748C1.9471 6.17479 0.8 5.02771 0.8 3.6123C0.800013 2.19691 1.9471 1.04982 3.3625 1.0498C4.77791 1.0498 5.92499 2.1969 5.925 3.6123Z"/> </svg>',
+  think: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"> <path fill="currentColor" d="M7.06431 5.93342C7.68763 5.93342 8.19307 6.43904 8.19322 7.06233C8.19322 7.68573 7.68772 8.19123 7.06431 8.19123C6.44099 8.19113 5.9354 7.68567 5.9354 7.06233C5.93555 6.43911 6.44108 5.93353 7.06431 5.93342Z"/> <path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M8.6815 0.963693C10.1169 0.447019 11.6266 0.374829 12.5633 1.31135C13.5 2.24805 13.4277 3.75776 12.911 5.19319C12.7126 5.74431 12.4386 6.31796 12.0965 6.89729C12.4969 7.54638 12.8141 8.19018 13.036 8.80647C13.5527 10.2419 13.6251 11.7516 12.6883 12.6883C11.7516 13.625 10.242 13.5527 8.8065 13.036C8.19022 12.8141 7.54641 12.4969 6.89732 12.0965C6.31797 12.4386 5.74435 12.7125 5.19322 12.911C3.75777 13.4276 2.2481 13.5 1.31138 12.5633C0.374859 11.6266 0.447049 10.1168 0.963724 8.68147C1.17185 8.10338 1.46321 7.50063 1.82896 6.8924C1.52182 6.35711 1.27235 5.82825 1.08872 5.31819C0.572068 3.88278 0.499714 2.37306 1.43638 1.43635C2.37308 0.499655 3.8828 0.572044 5.31822 1.08869C5.82828 1.27232 6.35715 1.5218 6.89243 1.82893C7.50066 1.46318 8.10341 1.17181 8.6815 0.963693ZM11.3573 8.01154C10.9083 8.62253 10.3901 9.22873 9.80943 9.8094C9.22877 10.3901 8.62255 10.9083 8.01158 11.3572C8.4257 11.5841 8.8287 11.7688 9.21275 11.9071C10.5456 12.3868 11.4246 12.2547 11.8397 11.8397C12.2548 11.4246 12.3869 10.5456 11.9071 9.21272C11.7688 8.82866 11.5841 8.42568 11.3573 8.01154ZM2.56529 8.02912C2.37344 8.39322 2.21495 8.74796 2.09263 9.08772C1.61291 10.4204 1.74512 11.2995 2.16001 11.7147C2.57505 12.1297 3.45415 12.2618 4.78697 11.7821C5.11057 11.6656 5.44786 11.5164 5.7938 11.3367C5.249 10.9223 4.70922 10.4533 4.19029 9.9344C3.57578 9.31987 3.03169 8.67633 2.56529 8.02912ZM6.90708 3.2469C6.24065 3.70479 5.5646 4.26321 4.91392 4.91389C4.26325 5.56456 3.70482 6.24063 3.24693 6.90705C3.72674 7.63325 4.32777 8.37459 5.03892 9.08576C5.64943 9.69627 6.28183 10.2265 6.90806 10.6678C7.59368 10.2025 8.2908 9.63076 8.96079 8.96076C9.6308 8.29075 10.2025 7.59366 10.6678 6.90803C10.2265 6.2818 9.69631 5.6494 9.08579 5.03889C8.37462 4.32773 7.63328 3.72672 6.90708 3.2469ZM11.7147 2.15998C11.2996 1.74509 10.4204 1.61288 9.08775 2.0926C8.74835 2.21479 8.39382 2.37271 8.03013 2.56428C8.67728 3.03065 9.31995 3.5758 9.93443 4.19026C10.4534 4.7092 10.9223 5.24896 11.3368 5.79377C11.5164 5.44785 11.6656 5.11052 11.7821 4.78694C12.2618 3.45416 12.1297 2.57502 11.7147 2.15998ZM4.91197 2.2176C3.57922 1.73788 2.70004 1.86995 2.28501 2.28498C1.87001 2.70003 1.73791 3.5792 2.21763 4.91194C2.31709 5.18822 2.44112 5.47427 2.58677 5.7674C3.01931 5.1887 3.51474 4.6158 4.06529 4.06526C4.61584 3.5147 5.18872 3.01928 5.76743 2.58674C5.47431 2.4411 5.18824 2.31706 4.91197 2.2176Z"/> </svg>',
+  sparkle: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"> <path fill="currentColor" d="M6.1 3.1Q6.6 7.8 11.3 8.3Q6.6 8.8 6.1 13.5Q5.6 8.8 0.9 8.3Q5.6 7.8 6.1 3.1Z"/> <path fill="currentColor" d="M11.9 1Q12.2 3.7 14.9 4Q12.2 4.3 11.9 7Q11.6 4.3 8.9 4Q11.6 3.7 11.9 1Z"/> <path fill="currentColor" d="M12.5 9.4Q12.7 11.4 14.7 11.6Q12.7 11.8 12.5 13.8Q12.3 11.8 10.3 11.6Q12.3 11.4 12.5 9.4Z"/> </svg>',
+  inspect: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path fill="currentColor" d="M16 8L10.8571 12V10.552L14.1383 8L10.8571 5.448V4L16 8ZM5.14286 10.552L1.86171 8L5.14286 5.448V4L0 8L5.14286 12V10.552ZM9.02514 4L5.59657 12H6.84057L10.2691 4H9.02514Z"/></svg>',
+
+};
+
+// 工具类型 → 标题/图标映射（§2.8 variant 表：Search/Read/Bash/Write/Edit/Code/Tool call）
+const TOOL_META = {
+  bash:        { variant: 'bash',   iconKey: 'api',       titleKey: 'tool.bash' },
+  pwsh:        { variant: 'bash',   iconKey: 'api',       titleKey: 'tool.pwsh' },
+  shell:       { variant: 'bash',   iconKey: 'api',       titleKey: 'tool.bash' },
+  read:        { variant: 'read',   iconKey: 'browse',    titleKey: 'tool.read' },
+  read_image:  { variant: 'read',   iconKey: 'browse',    titleKey: 'tool.readImage' },
+  write:       { variant: 'write',  iconKey: 'edit',      titleKey: 'tool.write' },
+  edit:        { variant: 'edit',   iconKey: 'edit',      titleKey: 'tool.edit' },
+  grep:        { variant: 'search', iconKey: 'search',    titleKey: 'tool.grep' },
+  glob:        { variant: 'search', iconKey: 'search',    titleKey: 'tool.glob' },
+  web_search:  { variant: 'search', iconKey: 'globe',     titleKey: 'tool.webSearch' },
+  web_fetch:   { variant: 'web',    iconKey: 'browse',    titleKey: 'tool.webFetch' },
+  run_code:    { variant: 'code',   iconKey: 'code',      titleKey: 'tool.code' },
+  todo_write:  { variant: 'todo',   iconKey: 'checklist', titleKey: 'tool.todo' },
+};
+
+function toolRowMeta(name) {
+  const known = TOOL_META[name];
+  if (known) return { variant: known.variant, iconKey: known.iconKey, title: t(known.titleKey) };
+  // 未知工具（§2.8 others）：标题固定 "Tool call"，真实工具名进摘要
+  const title = (name === 'Error' || name === 'Result') ? name : t('tool.generic');
+  return { variant: 'others', iconKey: 'sparkle', title: title };
+}
+
+function firstLine(s) {
+  if (!s) return '';
+  const i = s.indexOf('\n');
+  return i === -1 ? s : s.slice(0, i);
+}
+
+function latestLine(s) {
+  const visible = (s || '').replace(/\s+$/, '');
+  const i = visible.lastIndexOf('\n');
+  return i === -1 ? visible : visible.slice(i + 1);
+}
+
+// StateDot 状态点（§6.2）：10px、halo 10% + 6px 实心核
+function stateDotHtml(state) {
+  return '<span class="state-dot" data-state="' + state + '" aria-hidden="true"></span>';
+}
+
+// 摘要推导（§2.8）：按工具类型 key 优先级取参数 JSON 首行；路径相对显示
+function toolSummaryKeys(name) {
+  if (name === 'bash' || name === 'pwsh' || name === 'shell' || name === 'run_code') return ['description', 'command'];
+  if (name === 'read' || name === 'read_image' || name === 'write' || name === 'edit') return ['path', 'file_path', 'url'];
+  if (name === 'grep' || name === 'glob' || name === 'web_search') return ['query', 'pattern', 'url'];
+  if (name === 'web_fetch') return ['url'];
+  return [];
+}
+
+function toolSummary(name, args) {
+  if (!args) return { text: '', suffix: null };
+  let obj = null;
+  try { obj = JSON.parse(args); } catch (e) { return { text: firstLine(args), suffix: null }; }
+  if (name === 'todo_write' && obj && Array.isArray(obj.todos)) {
+    // todo 行：`已完成 done/total · 当前任务` + 永不截断的后缀 +n（§2.8 / todo-row.tsx）
+    const todos = obj.todos;
+    const done = todos.filter(i => i && i.status === 'completed').length;
+    const active = todos.filter(i => i && i.status !== 'completed');
+    const head = t('todo.completed') + ' ' + done + '/' + todos.length;
+    const text = active.length ? head + ' · ' + (active[0].content || '') : head;
+    return { text: text, suffix: active.length > 0 ? '+' + active.length : null };
+  }
+  if (!obj || typeof obj !== 'object') return { text: firstLine(args), suffix: null };
+  for (const key of toolSummaryKeys(name)) {
+    const v = obj[key];
+    if (typeof v === 'string') return { text: firstLine(v), suffix: null };
+    if (v !== undefined && v !== null) return { text: firstLine(String(v)), suffix: null };
+  }
+  if (name !== 'Error' && name !== 'Result') {
+    const pretty = Object.values(obj).filter(v => typeof v === 'string').map(firstLine)[0];
+    if (pretty) return { text: name + ' · ' + pretty, suffix: null };
+  }
+  return { text: firstLine(args), suffix: null };
+}
+
+// 折叠/展开行接线（§2.4：整行可点 + Enter/Space 切换；展开体不是行的子元素）
+function wireRowToggle(root, row) {
+  const toggle = () => {
+    const open = row.classList.toggle('is-open');
+    row.setAttribute('aria-expanded', String(open));
+    if (root.classList.contains('think-section')) root.toggleAttribute('data-expanded', open);
+  };
+  row.onclick = toggle;
+  row.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  };
+  return toggle;
+}
+
+// 子调用树（ui-spec §3 ToolCallTree）：22px 缩进 + 0.5px 左竖线 + gap 4px。
+// 当前 SSE 事件流无父子调用数据，仅当调用参数带 subcalls/sub_calls 数组时启用。
+function renderSubCalls(args) {
+  let obj = null;
+  try { obj = JSON.parse(args || ''); } catch (e) { return null; }
+  const list = obj && (Array.isArray(obj.subcalls) ? obj.subcalls : (Array.isArray(obj.sub_calls) ? obj.sub_calls : null));
+  if (!list || list.length === 0) return null;
+  const wrap = document.createElement('div');
+  for (const sub of list) {
+    const name = (sub && sub.name) || 'tool';
+    const subArgs = sub && sub.arguments !== undefined ? JSON.stringify(sub.arguments, null, 2) : '';
+    const meta = toolRowMeta(name);
+    const summary = toolSummary(name, subArgs);
+    const row = document.createElement('div');
+    row.className = 'chat-tool-call';
+    row.dataset.tool = name;
+    row.innerHTML =
+      '<div class="tr-row">' +
+        '<span class="tr-leading"><span class="tr-icon">' + (TOOL_ICONS[meta.iconKey] || TOOL_ICONS.sparkle) + '</span></span>' +
+        '<span class="tr-title">' + esc(meta.title) + '</span>' +
+        (summary.text !== '' ? '<span class="tr-sep" aria-hidden="true"></span><span class="tr-sum">' + esc(summary.text) + '</span>' : '') +
+      '</div>';
+    wrap.appendChild(row);
+  }
+  return wrap;
+}
+
+// ── Collapsible tool calls in chat view（ui-spec §2 ToolRow）──
 let currentToolCallEl = null;
 function addChatToolCall(name, args, isError, callId) {
   const chat = document.querySelector('.chat-inner');
   if (!chat) return;
+  const meta = toolRowMeta(name);
+  const summary = toolSummary(name, args);
+  // 单文件工具（read/write/edit，§2.8）：路径渲染为 fileLink（虚线下划线），点击复制路径
+  const isFileTool = name === 'read' || name === 'read_image' || name === 'write' || name === 'edit';
   const el = document.createElement('div');
-  el.className = 'chat-tool-call' + (isError ? ' error' : '');
+  el.className = 'chat-tool-call';
+  el.dataset.variant = meta.variant;
+  el.dataset.tool = name;
+  el.dataset.state = isError ? 'error' : 'running';
   if (callId) el.dataset.callId = callId;
-  const argsPreview = truncate(args, 60);
-  el.innerHTML = `<div class="ctc-header"><span class="ctc-chevron">▶</span><span class="ctc-name">${esc(name)}</span><span class="ctc-args">${esc(argsPreview)}</span></div><div class="ctc-body">${args ? '<div class="ctc-result-label">参数</div><pre>' + esc(args) + '</pre>' : ''}</div>`;
-  el.querySelector('.ctc-header').onclick = () => el.classList.toggle('expanded');
+  const row = document.createElement('div');
+  row.className = 'tr-row';
+  row.setAttribute('role', 'button');
+  row.tabIndex = 0;
+  row.setAttribute('aria-expanded', 'false');
+  let summaryHtml = '';
+  if (summary.text !== '') {
+    summaryHtml = '<span class="tr-sep" aria-hidden="true"></span>' +
+      (isFileTool
+        ? '<button type="button" class="tr-link">' + esc(summary.text) + '</button>'
+        : '<span class="tr-sum">' + esc(summary.text) + '</span>');
+  }
+  row.innerHTML =
+    '<span class="tr-leading"><span class="tr-icon">' + (isError ? stateDotHtml('error') : TOOL_ICONS[meta.iconKey]) + '</span><span class="tr-chev">' + TOOL_ICONS.chevron + '</span></span>' +
+    '<span class="tr-title">' + esc(meta.title) + '</span>' +
+    summaryHtml +
+    (summary.suffix ? '<span class="tr-suffix">' + esc(summary.suffix) + '</span>' : '') +
+    '<span class="visually-hidden">' + esc(isError ? t('row.failed') : t('row.running')) + '</span>';
+  const link = row.querySelector('.tr-link');
+  if (link) {
+    // §2.4：fileLink stopPropagation，点击不触发行展开；Enter/Space 也不冒泡
+    link.onclick = (e) => {
+      e.stopPropagation();
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(summary.text).catch(() => {});
+    };
+    link.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); };
+  }
+  const body = document.createElement('div');
+  body.className = 'tr-body';
+  if (args) {
+    const card = document.createElement('div');
+    card.className = 'tr-card';
+    const inSection = document.createElement('div');
+    inSection.className = 'tr-section';
+    inSection.dataset.side = 'in';
+    inSection.innerHTML = '<span class="tr-label">' + esc(t('row.input')) + '</span><span class="tr-text"></span>';
+    inSection.querySelector('.tr-text').textContent = args;
+    card.appendChild(inSection);
+    body.appendChild(card);
+  }
+  const subList = renderSubCalls(args);
+  if (subList) {
+    const wrap = document.createElement('div');
+    wrap.className = 'tr-subcalls';
+    wrap.appendChild(subList);
+    body.appendChild(wrap);
+  }
+  const inspect = document.createElement('button');
+  inspect.type = 'button';
+  inspect.className = 'tr-inspect';
+  inspect.innerHTML = TOOL_ICONS.inspect + '<span>' + esc(t('row.inspect')) + '</span>';
+  inspect.onclick = () => setView('trajectory');
+  body.appendChild(inspect);
+  wireRowToggle(el, row);
+  el.appendChild(row);
+  el.appendChild(body);
   chat.appendChild(el);
   currentToolCallEl = el;
   document.getElementById('chat-area').scrollTop = document.getElementById('chat-area').scrollHeight;
+}
+
+// 结果回填（§2.3/§2.6）：状态、错误摘要首行 + leading 红点、OUT 节、workflow 面板
+function applyToolResult(card, content, isError) {
+  card.dataset.state = isError ? 'error' : 'ok';
+  const leadingIcon = card.querySelector('.tr-icon');
+  if (leadingIcon && isError) leadingIcon.innerHTML = stateDotHtml('error');
+  const vh = card.querySelector('.visually-hidden');
+  if (vh) vh.textContent = isError ? t('row.failed') : '';
+  if (isError) {
+    const sum = card.querySelector('.tr-sum');
+    const link = card.querySelector('.tr-link');
+    if (sum) sum.textContent = firstLine(content || '');
+    else if (link) {
+      // 错误行：fileLink 退化为普通摘要（§2.8：failureLine 替换 fileLink）
+      const s = document.createElement('span');
+      s.className = 'tr-sum';
+      s.textContent = firstLine(content || '');
+      link.replaceWith(s);
+    }
+  }
+  let cardEl = card.querySelector('.tr-card');
+  if (!cardEl) {
+    cardEl = document.createElement('div');
+    cardEl.className = 'tr-card';
+    const body = card.querySelector('.tr-body');
+    body.insertBefore(cardEl, card.querySelector('.tr-inspect'));
+  }
+  let outSection = card.querySelector('.tr-section[data-side="out"]');
+  if (!outSection) {
+    outSection = document.createElement('div');
+    outSection.className = 'tr-section';
+    outSection.dataset.side = 'out';
+    outSection.innerHTML = '<span class="tr-label">' + esc(t('row.output')) + '</span><span class="tr-text"></span>';
+    const divider = document.createElement('div');
+    divider.className = 'tr-divider';
+    divider.setAttribute('aria-hidden', 'true');
+    cardEl.appendChild(divider);
+    cardEl.appendChild(outSection);
+  }
+  const outText = outSection.querySelector('.tr-text');
+  if (isError) outText.dataset.error = '';
+  else delete outText.dataset.error;
+  if (card.dataset.tool === 'workflow' && !isError) {
+    const wfHtml = renderWorkflowResult(content);
+    if (wfHtml) {
+      outText.textContent = '';
+      const wfDiv = document.createElement('div');
+      wfDiv.innerHTML = wfHtml;
+      outText.appendChild(wfDiv);
+      wfDiv.querySelectorAll('.wf-phase-header').forEach(h => { h.onclick = () => h.parentElement.classList.toggle('expanded'); });
+      wfDiv.querySelectorAll('.wf-member-label').forEach(l => { l.onclick = () => l.parentElement.classList.toggle('collapsed'); });
+      return;
+    }
+  }
+  outText.textContent = content || '';
 }
 
 // ── Workflow result renderer ───────────────────────────────────────────
@@ -3803,6 +4305,17 @@ const I18N = {
     perm_setting_title:'权限等级', perm_setting_hint:'仅查看：禁用写类工具；工作区：全部工具；全局完全：全部工具（需风险确认）。',
     perm_risk_title:'全局完全权限', perm_risk_desc:'此权限允许代理在设备上执行任意操作，包括修改系统文件与执行命令。仅在你完全信任当前环境时启用。',
     perm_risk_ack:'我了解风险', perm_risk_enable:'启用全局权限', perm_save_failed:'保存失败：', cancel:'取消',
+    /* 像素级复刻新增可见文字（ui-spec §2/§4/§5） */
+    'message.think':'思考', 'row.input':'输入', 'row.output':'输出', 'row.inspect':'检查',
+    'row.running':'运行中', 'row.failed':'失败', 'row.stopped':'已停止',
+    'todo.completed':'已完成',
+    'tool.bash':'Bash', 'tool.pwsh':'Pwsh', 'tool.read':'Read', 'tool.readImage':'Read Image',
+    'tool.write':'Write', 'tool.edit':'Edit', 'tool.grep':'Grep', 'tool.glob':'Glob',
+    'tool.webSearch':'Web Search', 'tool.webFetch':'Web Fetch', 'tool.code':'Code',
+    'tool.todo':'待办', 'tool.generic':'工具调用',
+    roleAssistant:'Assistant', copy:'复制', receiving:'接收中',
+    'clock.md':'{m}月{d}日', 'clock.ymd':'{y}年{m}月{d}日',
+    'duration.seconds':'{s}秒', 'duration.minutes':'{m}分{ss}秒',
   },
   en: {
     new_session:'New Session', settings:'Settings', settings_title:'Settings',
@@ -3839,10 +4352,25 @@ const I18N = {
     perm_setting_title:'Permission level', perm_setting_hint:'Read-only: write tools disabled; Workspace: all tools; Full access: all tools (risk confirmation required).',
     perm_risk_title:'Full access permission', perm_risk_desc:'This permission allows the agent to perform any action on the device, including modifying system files and executing commands. Enable it only if you fully trust the current environment.',
     perm_risk_ack:'I understand the risks', perm_risk_enable:'Enable full access', perm_save_failed:'Save failed: ', cancel:'Cancel',
+    /* 像素级复刻新增可见文字（ui-spec §2/§4/§5） */
+    'message.think':'Thinking', 'row.input':'Input', 'row.output':'Output', 'row.inspect':'Inspect',
+    'row.running':'Running', 'row.failed':'Failed', 'row.stopped':'Stopped',
+    'todo.completed':'Completed',
+    'tool.bash':'Bash', 'tool.pwsh':'Pwsh', 'tool.read':'Read', 'tool.readImage':'Read Image',
+    'tool.write':'Write', 'tool.edit':'Edit', 'tool.grep':'Grep', 'tool.glob':'Glob',
+    'tool.webSearch':'Web Search', 'tool.webFetch':'Web Fetch', 'tool.code':'Code',
+    'tool.todo':'Todo', 'tool.generic':'Tool call',
+    roleAssistant:'Assistant', copy:'Copy', receiving:'Receiving',
+    'clock.md':'{m}/{d}', 'clock.ymd':'{y}/{m}/{d}',
+    'duration.seconds':'{s}s', 'duration.minutes':'{m}m {ss}s',
   }
 };
 let currentLang = 'zh';
-function t(key) { return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key]) || key; }
+function t(key, params) {
+  let s = (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key]) || key;
+  if (params) for (const k in params) s = s.split('{' + k + '}').join(String(params[k]));
+  return s;
+}
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
