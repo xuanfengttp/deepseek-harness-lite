@@ -15,6 +15,7 @@ target/
 
 # Release binaries (built per phase, not tracked in git)
 release/
+release-packages/
 
 # IDE / OS
 .vscode/

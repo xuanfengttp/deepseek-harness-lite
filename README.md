@@ -330,7 +330,22 @@ skill:
   dir: skills
 ```
 
-The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming). All config changes are hot-reloaded on the next chat request — no restart needed. The config file can be opened in system editor via the settings panel.
+The model endpoint is OpenAI-compatible (`/v1/chat/completions` with streaming). Except for the listen address, all config changes are hot-reloaded on the next chat request — no restart needed. The config file can be opened in system editor via the settings panel.
+
+### Changing the listen address (bind IP / port)
+
+By default the server listens on loopback only: `127.0.0.1:3081`. To allow LAN or other devices to connect, edit `server.listen` in the config file:
+
+```yaml
+server:
+  listen: "0.0.0.0:3081"          # bind all interfaces (LAN accessible)
+  # listen: "192.168.1.100:3081"  # or bind a specific NIC IP
+  # listen: "127.0.0.1:3081"      # default: localhost only
+```
+
+> ⚠️ **A listen-address change requires a restart** (the port is bound at startup; it is not hot-reloaded). Save the file, stop the process (`Ctrl+C`), and run `dsh-lite` again.
+>
+> **Note:** the effective `server.listen` is read from the `config.yaml` **next to the running dsh-lite executable** (the path shown in Settings → config file path). If multiple config.yaml copies exist (e.g. `release/` vs `target/release/`), use the one the settings panel reports.
 
 ## Project status
 
