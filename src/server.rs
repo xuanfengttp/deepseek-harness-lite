@@ -549,10 +549,17 @@ async fn handle_request(
                 Ok(content) => {
                     match serde_yaml::from_str::<serde_json::Value>(&content) {
                         Ok(val) => serve_json(&serde_json::to_string(&val).unwrap_or_default()),
-                        Err(_) => serve_json("{}"),
+                        Err(e) => {
+                            // Config YAML is malformed — report the parse error so the
+                            // UI can surface it instead of silently falling back to
+                            // defaults (which made listen/model edits appear "ignored").
+                            serve_json(&format!(r#"{{"config_error":{}}}"#,
+                                serde_json::to_string(&format!("{e}")).unwrap_or_else(|_| "\"parse error\"".into())))
+                        }
                     }
                 }
-                Err(_) => serve_json("{}"),
+                Err(e) => serve_json(&format!(r#"{{"config_error":{}}}"#,
+                    serde_json::to_string(&format!("read {config_path}: {e}")).unwrap_or_else(|_| "\"read error\"".into()))),
             }
         }
 

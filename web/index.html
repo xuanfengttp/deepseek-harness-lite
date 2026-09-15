@@ -224,6 +224,16 @@ body {
 
 /* ─── Main area ─────────────────────────────────────────────────────── */
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg-base); }
+.config-error-banner {
+  display: flex; align-items: center; gap: 8px; padding: 8px 16px;
+  background: #7a2e2e; color: #ffd7d7; font-size: 12px; line-height: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+.config-error-banner .config-error-close {
+  margin-left: auto; flex: none; background: transparent; border: none;
+  color: inherit; cursor: pointer; font-size: 12px; padding: 2px 4px; border-radius: 4px;
+}
+.config-error-banner .config-error-close:hover { background: rgba(255,255,255,0.12); }
 .header {
   height: 54px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between;
   border-bottom: 1px solid var(--border-l1);
@@ -1046,6 +1056,11 @@ body {
 
   <!-- Main -->
   <div class="main">
+    <div class="config-error-banner hidden" id="config-error-banner" role="alert">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden" style="flex:none"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM7.25 4.5h1.5v5h-1.5v-5zm0 6.5h1.5v1.5h-1.5V11z" fill="currentColor"/></svg>
+      <span id="config-error-text">配置文件格式错误</span>
+      <button class="config-error-close" onclick="hideConfigError()" aria-label="关闭">✕</button>
+    </div>
     <div class="header">
       <div class="header-left">
         <div class="header-title"><span data-i18n="skill">技能</span>: <span class="skill-name" id="active-skill-name">auto</span></div>
@@ -3250,11 +3265,29 @@ function switchSection(name) {
 }
 
 // ─── Config API ────────────────────────────────────────────────────────
+function showConfigError(msg) {
+  const banner = document.getElementById('config-error-banner');
+  const text = document.getElementById('config-error-text');
+  if (!banner || !text) return;
+  text.textContent = '⚠ 配置文件格式错误，正在使用默认配置：' + msg;
+  banner.classList.remove('hidden');
+}
+function hideConfigError() {
+  const banner = document.getElementById('config-error-banner');
+  if (banner) banner.classList.add('hidden');
+}
 async function loadConfig() {
   try {
     const res = await fetch('/api/config');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const cfg = await res.json();
+    // Config YAML is malformed (or unreadable) — surface it instead of
+    // silently running on defaults, which made listen/model edits look ignored.
+    if (cfg.config_error) {
+      showConfigError(cfg.config_error);
+      return;
+    }
+    hideConfigError();
     configContextWindow = (cfg.model && cfg.model.context_window) || 8192;
     updateContextRing();
     // Render providers (default model + presets)
