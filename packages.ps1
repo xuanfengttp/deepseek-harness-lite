@@ -23,7 +23,7 @@ $targets = @(
     @{ name = "windows-x86_64";   bin = "target\x86_64-pc-windows-msvc\release\dsh-lite.exe";    ext = "zip";    cmd = "cargo build --release --target x86_64-pc-windows-msvc" },
     @{ name = "linux-arm64";      bin = "target\aarch64-unknown-linux-musl\release\dsh-lite";     ext = "tar.gz"; cmd = "cargo zigbuild --release --target aarch64-unknown-linux-musl" },
     @{ name = "linux-armv7hf";    bin = "target\armv7-unknown-linux-musleabihf\release\dsh-lite"; ext = "tar.gz"; cmd = "cargo zigbuild --release --target armv7-unknown-linux-musleabihf" },
-    @{ name = "linux-armv7sf";    bin = "target\armv7-unknown-linux-musleabi\release\dsh-lite";   ext = "tar.gz"; cmd = "cargo zigbuild --release --target armv7-unknown-linux-musleabi" },
+    @{ name = "linux-armv7sf";    bin = "target\armv7-unknown-linux-musleabi\release\dsh-lite";   ext = "tar.gz"; cmd = "cargo +1.94.0 zigbuild --release --target armv7-unknown-linux-musleabi" },
     @{ name = "linux-x86_64";     bin = "target\x86_64-unknown-linux-musl\release\dsh-lite";      ext = "tar.gz"; cmd = "cargo zigbuild --release --target x86_64-unknown-linux-musl" }
 )
 
